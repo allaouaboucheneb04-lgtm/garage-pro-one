@@ -206,7 +206,13 @@ document.querySelectorAll("[data-go]").forEach(btn=>{
    Firestore paths (per user)
 =========== */
 let currentUid = null;
-let DATA_MODE = "user"; // "user" | "root" | "nested"
+// IMPORTANT:
+// - "root"   => /customers, /vehicles, /workorders, /appointments, /meta
+// - "user"   => /users/{uid}/customers, /users/{uid}/vehicles, /users/{uid}/workorders, /users/{uid}/appointments, /users/{uid}/meta
+// - "nested" => /customers/customers/customers (ancien test)
+// Beaucoup de bugs venaient du fait que Firestore était en mode "root" mais l'app écrivait en mode "user".
+// On met donc "root" par défaut et on auto-détecte si des données existent ailleurs.
+let DATA_MODE = "root"; // "user" | "root" | "nested"
 
 function colCustomers(){
   if(DATA_MODE==="root") return collection(db, "customers");
@@ -251,7 +257,8 @@ async function detectDataMode(){
   if(await _hasAnyDocs(collection(db, "customers"))) return "root";
   // Then nested customers/customers/customers
   if(await _hasAnyDocs(collection(db, "customers", "customers", "customers"))) return "nested";
-  return "user";
+  // If empty everywhere, default to root (matches our rules + your current DB structure)
+  return "root";
 }
 
 /* ============
@@ -365,17 +372,25 @@ async function nextInvoiceNo(){
 }
 
 function subscribeAll(){
-  onSnapshot(docSettings(), (snap)=>{
-    if(snap.exists()){
-      const d = snap.data();
-      settings = {
-        tpsRate: Number(d.tpsRate ?? 0.05),
-        tvqRate: Number(d.tvqRate ?? 0.09975),
-      };
-      renderSettings();
-      if(currentRole === "admin") renderDashboard();
-    }
-  });
+  // Settings are stored in /meta/settings. Mechanics usually shouldn't access meta.
+  // If we subscribe as a mechanic, Firestore rules can block and the UI looks broken.
+  if(currentRole === "admin"){
+    onSnapshot(docSettings(), (snap)=>{
+      if(snap.exists()){
+        const d = snap.data();
+        settings = {
+          tpsRate: Number(d.tpsRate ?? 0.05),
+          tvqRate: Number(d.tvqRate ?? 0.09975),
+        };
+        renderSettings();
+        renderDashboard();
+      }
+    }, (err)=>console.warn("settings snapshot error", err));
+  }else{
+    // Defaults for invoice calculations
+    settings = { tpsRate: 0.05, tvqRate: 0.09975 };
+    renderSettings();
+  }
 
   unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
     customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -1454,8 +1469,12 @@ onAuthStateChanged(auth, async (user)=>{
       }
     });
 
-    await ensureSettingsDoc();
-    await loadMechanics();
+    // Admin only: settings/meta + mechanics list. If a mechanic account hits these,
+    // Firestore rules will block and the app looked like it "doesn't log in".
+    if(currentRole === "admin"){
+      try{ await ensureSettingsDoc(); }catch(e){ console.warn("ensureSettingsDoc failed", e); }
+      try{ await loadMechanics(); }catch(e){ console.warn("loadMechanics failed", e); }
+    }
     unsubscribeAll();
     subscribeAll();
 
