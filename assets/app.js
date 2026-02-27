@@ -24,6 +24,42 @@ const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// ============ Helpers: support 2 Firestore layouts ============
+// Layout A (recommended): customers/{id}, vehicles/{id}, workorders/{id}, appointments/{id}, meta/{doc}
+// Layout B (legacy): customers/customers/{id}, vehicles/vehicles/{id}, workorders/workorders/{id}, appointments/appointments/{id}
+async function resolveCollection(name){
+  // try root collection first
+  const rootRef = collection(db, name);
+  const q1 = query(rootRef, limit(1));
+  const snap1 = await getDocs(q1);
+  if (!snap1.empty) return rootRef;
+
+  // try legacy nested collection: name/name
+  const legacyRef = collection(db, name, name);
+  const q2 = query(legacyRef, limit(1));
+  const snap2 = await getDocs(q2);
+  if (!snap2.empty) return legacyRef;
+
+  // if both empty, default to root (new empty database)
+  return rootRef;
+}
+
+async function resolveMetaDoc(docId){
+  // try meta/{docId}
+  const d1 = doc(db, "meta", docId);
+  const s1 = await getDoc(d1);
+  if (s1.exists()) return d1;
+
+  // try meta/meta/{docId} (rare)
+  const d2 = doc(db, "meta", "meta", docId);
+  const s2 = await getDoc(d2);
+  if (s2.exists()) return d2;
+
+  return d1;
+}
+
+
+
 /* ============
    UI helpers
 =========== */
