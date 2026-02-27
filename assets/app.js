@@ -6,7 +6,7 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, query, where, orderBy, limit, getDocs,
-  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
+  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 /* ============
@@ -175,6 +175,7 @@ function colVehicles(){ return collection(db, "users", currentUid, "vehicles"); 
 function colWorkorders(){ return collection(db, "users", currentUid, "workorders"); }
 function docSettings(){ return doc(db, "users", currentUid, "meta", "settings"); }
 function docCounters(){ return doc(db, "users", currentUid, "meta", "counters"); }
+function docUser(){ return doc(db, "users", currentUid); }
 
 /* ============
    Live cache
@@ -262,12 +263,48 @@ $("btnLogout").onclick = async ()=>{ await signOut(auth); };
 /* ============
    Snapshot subscriptions
 =========== */
-async function ensureSettingsDoc(){
-  const ref = docSettings();
-  const snap = await getDoc(ref);
-  if(!snap.exists()){
-    await setDoc(ref, { tpsRate: 0.05, tvqRate: 0.09975, updatedAt: serverTimestamp() });
+async function ensureMetaDocs(){
+  const sref = docSettings();
+  const ssnap = await getDoc(sref);
+  if(!ssnap.exists()){
+    await setDoc(sref, { tpsRate: 0.05, tvqRate: 0.09975, updatedAt: serverTimestamp() });
   }
+  const cref = docCounters();
+  const csnap = await getDoc(cref);
+  if(!csnap.exists()){
+    await setDoc(cref, { invoiceNext: 1, updatedAt: serverTimestamp() });
+  }
+}
+
+async function migrateLegacyUserDocCustomer(){
+  // If a "client" was saved directly on users/{uid} (wrong place), migrate it to users/{uid}/customers
+  const uref = docUser();
+  const usnap = await getDoc(uref);
+  if(!usnap.exists()) return;
+  const d = usnap.data() || {};
+  if(d.__legacyCustomerMigrated) return;
+
+  const hasLegacy = typeof d.fullName === "string" && d.fullName.trim().length > 0;
+  if(!hasLegacy) return;
+
+  await addDoc(colCustomers(), {
+    fullName: d.fullName || "",
+    phone: d.phone || "",
+    email: d.email || "",
+    notes: d.notes || "",
+    createdAt: d.createdAt || isoNow(),
+    createdAtTs: d.createdAtTs || serverTimestamp()
+  });
+
+  await setDoc(uref, {
+    __legacyCustomerMigrated: true,
+    fullName: deleteField(),
+    phone: deleteField(),
+    email: deleteField(),
+    notes: deleteField()
+  }, { merge: true });
+}
+
 }
 
 function subscribeAll(){
@@ -1035,7 +1072,7 @@ async function createWorkorder(data){
   const woCol = colWorkorders();
   const woRef = doc(woCol); // pre-generate id
 
-  const result = await runTransaction(db, async (tx)=>{
+  const result = await runTransaction, deleteField(db, async (tx)=>{
     const csnap = await tx.get(countersRef);
     let next = 1;
     if(csnap.exists()){
@@ -1408,6 +1445,7 @@ onAuthStateChanged(auth, async (user)=>{
     $("viewApp").style.display = "";
     $("navAuthed").style.display = "";
     await ensureMetaDocs();
+    await migrateLegacyUserDocCustomer();
     unsubscribeAll();
     subscribeAll();
     go("dashboard");
