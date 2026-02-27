@@ -1,1462 +1,664 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, signOut
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, query, where, orderBy, limit, getDocs,
-  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction, deleteField
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+  getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, orderBy, onSnapshot,
+  serverTimestamp, runTransaction, limit
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/* ============
-   Firebase init
-=========== */
-if (!window.FIREBASE_CONFIG) {
-  document.getElementById("viewAuth").style.display = "";
-  const err = document.getElementById("authError");
-  err.style.display = "";
-  err.textContent = "Configuration Firebase manquante. Ouvre assets/firebase-config.js et colle la config (voir README).";
-  throw new Error("Missing FIREBASE_CONFIG");
-}
-
-const app = initializeApp(window.FIREBASE_CONFIG);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-/* ============
-   UI helpers
-=========== */
-const $ = (id)=>document.getElementById(id);
-const views = {
-  dashboard: $("viewDashboard"),
-  clients: $("viewClients"),
-  repairs: $("viewRepairs"),
-  settings: $("viewSettings"),
-};
-const pageTitle = $("pageTitle");
-
-function safe(s){ return String(s??"").replace(/[&<>"]/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
-function money(n){
-  const x = Number(n||0);
-  return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2}) + " $";
-}
-function pct(n){
-  return (Number(n)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'') + "%";
-}
-
-function formatInvoiceNo(n){
-  const num = Number(n||0);
-  const pad = String(num).padStart(4,'0');
-  return "GP-" + pad;
-}
-
-function toISODateTimeLocal(d){
-  const pad = (x)=> String(x).padStart(2,'0');
-  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());
-}
-
-function downloadICS({title, description, location, start, durationMin=60}){
-  const dt = new Date(start);
-  const end = new Date(dt.getTime() + durationMin*60000);
-  const fmt = (x)=>{
-    const pad=(n)=>String(n).padStart(2,'0');
-    return x.getUTCFullYear()+pad(x.getUTCMonth()+1)+pad(x.getUTCDate())+"T"+pad(x.getUTCHours())+pad(x.getUTCMinutes())+"00Z";
-  };
-  const uid = (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now())) + "@garage-pro-one";
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Garage Pro One//FR",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    "BEGIN:VEVENT",
-    "UID:"+uid,
-    "DTSTAMP:"+fmt(new Date()),
-    "DTSTART:"+fmt(dt),
-    "DTEND:"+fmt(end),
-    "SUMMARY:"+String(title||"Rendez-vous Garage").replace(/\n/g," "),
-    "DESCRIPTION:"+String(description||"").replace(/\n/g,"\\n"),
-    "LOCATION:"+String(location||"").replace(/\n/g," "),
-    "END:VEVENT",
-    "END:VCALENDAR"
-  ];
-  const blob = new Blob([lines.join("\r\n")], {type:"text/calendar;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "rendez-vous.ics";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function byCreatedDesc(a,b){
-  return (String(b.createdAt||"")).localeCompare(String(a.createdAt||""));
-}
-function isoNow(){
-  const d = new Date();
-  const pad = (n)=> String(n).padStart(2,'0');
-  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes());
-}
-
-
-
-/* ============
-   Garage info (modifiable)
-=========== */
 const GARAGE = {
   name: "Garage Pro One",
   phone: "(514) 727-0522",
   email: "garageproone@gmail.com",
-  address1: "7880 Boul PIE-IX",
-  address2: "Montréal (QC) H1Z 3T3",
-  country: "Canada",
+  address: "7880 Boul PIE-IX, Montréal (QC) H1Z 3T3, Canada",
   tps: "73259 0344",
   tvq: "1230268666",
-  tagline: "Vérification / Diagnostic / Réparation"
 };
 
-// Simple inline logo (SVG) — tu peux le remplacer par une image plus tard
-const GARAGE_LOGO_SVG = `
-<svg width="44" height="44" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="Garage Pro One">
-  <defs>
-    <linearGradient id="g" x1="0" x2="1">
-      <stop offset="0" stop-color="#2563eb"/>
-      <stop offset="1" stop-color="#1d4ed8"/>
-    </linearGradient>
-  </defs>
-  <rect x="6" y="6" width="52" height="52" rx="14" fill="url(#g)" opacity="0.12"/>
-  <path d="M22 40l10-10m0 0l6-6m-6 6l6 6" stroke="#1d4ed8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M40 22c-3 0-5 2-5 5 0 1 .3 2 .9 2.9L24 42c-1.5.5-3.2.2-4.4-1-1.7-1.7-1.8-4.5-.2-6.3l3.2 3.2 4-4-3.2-3.2c1.8-1.6 4.6-1.5 6.3.2 1.2 1.2 1.5 2.9 1 4.4l12-12c-.9-.6-1.9-.9-2.9-.9z" fill="#2563eb"/>
-</svg>`;
+const $ = (q)=>document.querySelector(q);
+const $$ = (q)=>Array.from(document.querySelectorAll(q));
+const safe = (s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+const money = (n)=>Number(n||0).toLocaleString("fr-CA",{style:"currency",currency:"CAD"});
+const isoNow = ()=>{
+  const d=new Date(); const p=(x)=>String(x).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+};
+const formatInvoiceNo = (n)=>"GP-"+String(Number(n||0)).padStart(4,"0");
+const pill = (status)=> status==="TERMINE" ? '<span class="pill ok">Terminé</span>' : '<span class="pill warn">'+safe(status||"OUVERT")+'</span>';
 
-/* ============
-   Modal
-=========== */
-const modalBackdrop = $("modalBackdrop");
-const modalTitle = $("modalTitle");
-const modalBody = $("modalBody");
-$("btnModalClose").onclick = closeModal;
-modalBackdrop.addEventListener("click", (e)=>{ if(e.target===modalBackdrop) closeModal(); });
+if(!window.firebaseConfig) alert("firebase-config.js manquant.");
+const app = initializeApp(window.firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let uid=null;
+let customers=[], vehicles=[], workorders=[];
+let settings={tpsRate:0.05, tvqRate:0.09975};
+
+let unsubC=null, unsubV=null, unsubW=null, unsubS=null;
+
+const colCustomers = ()=>collection(db,"users",uid,"customers");
+const colVehicles  = ()=>collection(db,"users",uid,"vehicles");
+const colWorkorders= ()=>collection(db,"users",uid,"workorders");
+const docSettings  = ()=>doc(db,"users",uid,"meta","settings");
+const docCounters  = ()=>doc(db,"users",uid,"meta","counters");
+const docUser      = ()=>doc(db,"users",uid);
+
+function showTab(name){
+  $("#dashboardTab").classList.toggle("hidden", name!=="dashboard");
+  $("#clientsTab").classList.toggle("hidden", name!=="clients");
+  $("#repairsTab").classList.toggle("hidden", name!=="repairs");
+  $("#settingsTab").classList.toggle("hidden", name!=="settings");
+  $$(".nav .btn[data-tab]").forEach(b=>b.classList.toggle("primary", b.getAttribute("data-tab")===name));
+}
+$$(".nav .btn[data-tab]").forEach(b=>b.addEventListener("click", ()=>showTab(b.getAttribute("data-tab"))));
 
 function openModal(title, html){
-  modalTitle.textContent = title;
-  modalBody.innerHTML = html;
-  modalBackdrop.style.display = "flex";
-  modalBackdrop.setAttribute("aria-hidden","false");
+  $("#modalTitle").textContent=title;
+  $("#modalBody").innerHTML=html;
+  $("#modalBack").classList.add("show");
 }
-function closeModal(){
-  modalBackdrop.style.display = "none";
-  modalBackdrop.setAttribute("aria-hidden","true");
-  modalBody.innerHTML = "";
-}
+function closeModal(){ $("#modalBack").classList.remove("show"); }
+$("#closeModalBtn").addEventListener("click", closeModal);
+$("#modalBack").addEventListener("click",(e)=>{ if(e.target.id==="modalBack") closeModal(); });
 
-/* ============
-   Navigation
-=========== */
-function go(view){
-  for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", settings:"Paramètres"};
-  pageTitle.textContent = titles[view] || "Garage Pro One";
-}
-document.querySelectorAll("[data-go]").forEach(btn=>{
-  btn.addEventListener("click", ()=>go(btn.getAttribute("data-go")));
-});
-
-/* ============
-   Firestore paths (per user)
-=========== */
-let currentUid = null;
-
-function colCustomers(){ return collection(db, "users", currentUid, "customers"); }
-function colVehicles(){ return collection(db, "users", currentUid, "vehicles"); }
-function colWorkorders(){ return collection(db, "users", currentUid, "workorders"); }
-function docSettings(){ return doc(db, "users", currentUid, "meta", "settings"); }
-function docCounters(){ return doc(db, "users", currentUid, "meta", "counters"); }
-function docUser(){ return doc(db, "users", currentUid); }
-
-/* ============
-   Live cache
-=========== */
-let customers = [];
-let vehicles = [];
-let workorders = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 };
-
-let unsubCustomers = null;
-let unsubVehicles = null;
-let unsubWorkorders = null;
-
-/* ============
-   Auth UI
-=========== */
-$("year").textContent = new Date().getFullYear();
-
-const tabLogin = $("tabLogin");
-const tabRegister = $("tabRegister");
-const formLogin = $("formLogin");
-const formRegister = $("formRegister");
-const authError = $("authError");
-const authOk = $("authOk");
-
-function showAuthMessage(kind, msg){
-  authError.style.display = kind==="error" ? "" : "none";
-  authOk.style.display = kind==="ok" ? "" : "none";
-  if(kind==="error") authError.textContent = msg;
-  if(kind==="ok") authOk.textContent = msg;
+async function ensureMeta(){
+  const sref=docSettings(); const ss=await getDoc(sref);
+  if(!ss.exists()) await setDoc(sref,{tpsRate:0.05,tvqRate:0.09975,updatedAt:serverTimestamp()});
+  const cref=docCounters(); const cs=await getDoc(cref);
+  if(!cs.exists()) await setDoc(cref,{invoiceNext:1,updatedAt:serverTimestamp()});
 }
 
-tabLogin.onclick = ()=>{
-  tabLogin.classList.add("active"); tabRegister.classList.remove("active");
-  formLogin.style.display = ""; formRegister.style.display = "none";
-  showAuthMessage("", "");
-};
-tabRegister.onclick = ()=>{
-  tabRegister.classList.add("active"); tabLogin.classList.remove("active");
-  formRegister.style.display = ""; formLogin.style.display = "none";
-  showAuthMessage("", "");
-};
-
-formLogin.onsubmit = async (e)=>{
-  e.preventDefault();
-  showAuthMessage("", "");
-  const fd = new FormData(formLogin);
-  const email = String(fd.get("email")||"").trim();
-  const password = String(fd.get("password")||"");
-  try{
-    await signInWithEmailAndPassword(auth, email, password);
-  }catch(err){
-    showAuthMessage("error", err?.message || "Connexion impossible.");
-  }
-};
-
-formRegister.onsubmit = async (e)=>{
-  e.preventDefault();
-  showAuthMessage("", "");
-  const fd = new FormData(formRegister);
-  const email = String(fd.get("email")||"").trim();
-  const password = String(fd.get("password")||"");
-  try{
-    await createUserWithEmailAndPassword(auth, email, password);
-    showAuthMessage("ok", "Compte créé. Tu es connecté.");
-  }catch(err){
-    showAuthMessage("error", err?.message || "Création impossible.");
-  }
-};
-
-$("btnForgot").onclick = async ()=>{
-  showAuthMessage("", "");
-  const email = prompt("Entre ton email pour recevoir le lien de réinitialisation :");
-  if(!email) return;
-  try{
-    await sendPasswordResetEmail(auth, email.trim());
-    showAuthMessage("ok", "Email envoyé. Vérifie ta boîte de réception.");
-  }catch(err){
-    showAuthMessage("error", err?.message || "Impossible d'envoyer l'email.");
-  }
-};
-
-$("btnLogout").onclick = async ()=>{ await signOut(auth); };
-
-/* ============
-   Snapshot subscriptions
-=========== */
-async function ensureMetaDocs(){
-  const sref = docSettings();
-  const ssnap = await getDoc(sref);
-  if(!ssnap.exists()){
-    await setDoc(sref, { tpsRate: 0.05, tvqRate: 0.09975, updatedAt: serverTimestamp() });
-  }
-  const cref = docCounters();
-  const csnap = await getDoc(cref);
-  if(!csnap.exists()){
-    await setDoc(cref, { invoiceNext: 1, updatedAt: serverTimestamp() });
-  }
-}
-
-async function migrateLegacyUserDocCustomer(){
-  // If a "client" was saved directly on users/{uid} (wrong place), migrate it to users/{uid}/customers
-  const uref = docUser();
-  const usnap = await getDoc(uref);
-  if(!usnap.exists()) return;
-  const d = usnap.data() || {};
-  if(d.__legacyCustomerMigrated) return;
-
-  const hasLegacy = typeof d.fullName === "string" && d.fullName.trim().length > 0;
+// migrate legacy "fullName" on users/{uid} to customers (your screenshot case)
+async function migrateLegacyClient(){
+  const uref=docUser(); const us=await getDoc(uref);
+  if(!us.exists()) return;
+  const d=us.data()||{};
+  const hasLegacy=(d.fullName||d.phone||d.email) && !d.legacyMigrated;
   if(!hasLegacy) return;
-
-  await addDoc(colCustomers(), {
-    fullName: d.fullName || "",
-    phone: d.phone || "",
-    email: d.email || "",
-    notes: d.notes || "",
-    createdAt: d.createdAt || isoNow(),
-    createdAtTs: d.createdAtTs || serverTimestamp()
+  await addDoc(colCustomers(),{
+    fullName:d.fullName||"Client",
+    phone:d.phone||"",
+    email:d.email||"",
+    notes:d.notes||"",
+    createdAt:d.createdAt||isoNow(),
+    createdAtTs:serverTimestamp()
   });
-
-  await setDoc(uref, {
-    __legacyCustomerMigrated: true,
-    fullName: deleteField(),
-    phone: deleteField(),
-    email: deleteField(),
-    notes: deleteField()
-  }, { merge: true });
+  await updateDoc(uref,{legacyMigrated:true,updatedAt:serverTimestamp()});
 }
 
+function getCustomer(id){ return customers.find(c=>c.id===id)||null; }
+function getVehicle(id){ return vehicles.find(v=>v.id===id)||null; }
+
+function unsubscribeAll(){
+  if(unsubC) unsubC(); if(unsubV) unsubV(); if(unsubW) unsubW(); if(unsubS) unsubS();
+  unsubC=unsubV=unsubW=unsubS=null;
 }
 
 function subscribeAll(){
-  onSnapshot(docSettings(), (snap)=>{
+  unsubS = onSnapshot(docSettings(), (snap)=>{
     if(snap.exists()){
-      const d = snap.data();
-      settings = {
-        tpsRate: Number(d.tpsRate ?? 0.05),
-        tvqRate: Number(d.tvqRate ?? 0.09975),
-      };
-      renderSettings();
-      renderDashboard();
+      settings={...settings,...snap.data()};
+      $("#tpsRate").value=String(settings.tpsRate??0.05);
+      $("#tvqRate").value=String(settings.tvqRate??0.09975);
     }
   });
 
-  unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
-    customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderDashboard();
-    renderClients();
+  unsubC = onSnapshot(query(colCustomers(), orderBy("fullName","asc")), (snap)=>{
+    customers=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderAll();
   });
-
-  unsubVehicles = onSnapshot(query(colVehicles(), orderBy("createdAt", "desc")), (snap)=>{
-    vehicles = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderDashboard();
-    renderClients();
+  unsubV = onSnapshot(query(colVehicles(), orderBy("createdAt","desc")), (snap)=>{
+    vehicles=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderAll();
   });
-
-  unsubWorkorders = onSnapshot(query(colWorkorders(), orderBy("createdAt", "desc"), limit(400)), (snap)=>{
-    workorders = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderDashboard();
-    renderRepairs();
+  unsubW = onSnapshot(query(colWorkorders(), orderBy("createdAt","desc"), limit(400)), (snap)=>{
+    workorders=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderAll();
   });
 }
 
-function unsubscribeAll(){
-  if(unsubCustomers) unsubCustomers();
-  if(unsubVehicles) unsubVehicles();
-  if(unsubWorkorders) unsubWorkorders();
-  unsubCustomers = unsubVehicles = unsubWorkorders = null;
+function renderAll(){
+  renderDashboard();
+  renderClients();
+  renderRepairs();
 }
 
-/* ============
-   Renderers
-=========== */
-const kpiEl = $("kpi");
-const openRepairsTbody = $("openRepairsTbody");
-function getCustomer(id){ return customers.find(c=>c.id===id); }
-function getVehicle(id){ return vehicles.find(v=>v.id===id); }
+// ===== Auth =====
+$("#loginBtn").addEventListener("click", async ()=>{
+  const e=$("#email").value.trim(); const p=$("#pass").value;
+  $("#authMsg").textContent="Connexion...";
+  try{
+    await signInWithEmailAndPassword(auth,e,p);
+    $("#authMsg").textContent="OK";
+  }catch(err){
+    console.error(err);
+    $("#authMsg").textContent="Erreur: "+(err.code||err.message||"");
+    alert("Erreur connexion: "+(err.message||err));
+  }
+});
+
+$("#logoutBtn").addEventListener("click", ()=>signOut(auth));
+
+onAuthStateChanged(auth, async (user)=>{
+  unsubscribeAll();
+  if(!user){
+    uid=null;
+    $("#authView").classList.remove("hidden");
+    $("#appView").classList.add("hidden");
+    return;
+  }
+  uid=user.uid;
+  $("#authView").classList.add("hidden");
+  $("#appView").classList.remove("hidden");
+  showTab("dashboard");
+  await ensureMeta();
+  await migrateLegacyClient();
+  subscribeAll();
+});
+
+// ===== Dashboard =====
+$("#search").addEventListener("input", ()=>renderSearch());
+$("#newClientBtn").addEventListener("click", ()=>openClientForm());
+$("#newClientBtn2").addEventListener("click", ()=>openClientForm());
+$("#newRepairBtn").addEventListener("click", ()=>openRepairWizard());
+$("#newRepairBtn2").addEventListener("click", ()=>openRepairWizard());
 
 function renderDashboard(){
-  const totalCustomers = customers.length;
-  const totalVehicles = vehicles.length;
-  const openCount = workorders.filter(w=>w.status==="OUVERT").length;
-  const monthKey = new Date().toISOString().slice(0,7);
-  const monthTotal = workorders
-    .filter(w=>String(w.createdAt||"").startsWith(monthKey))
-    .reduce((sum,w)=>sum+Number(w.total||0),0);
-
-  kpiEl.innerHTML = `
-    <div class="box"><div class="muted">Clients</div><div class="val">${totalCustomers}</div></div>
-    <div class="box"><div class="muted">Véhicules</div><div class="val">${totalVehicles}</div></div>
-    <div class="box"><div class="muted">Réparations ouvertes</div><div class="val">${openCount}</div></div>
-    <div class="box"><div class="muted">Total (${monthKey})</div><div class="val">${money(monthTotal)}</div></div>
+  const monthKey=new Date().toISOString().slice(0,7);
+  const monthTotal=workorders.filter(w=>String(w.createdAt||"").slice(0,7)===monthKey).reduce((a,w)=>a+Number(w.total||0),0);
+  const open=workorders.filter(w=>w.status!=="TERMINE").length;
+  $("#kpis").innerHTML=`
+    <div class="card" style="box-shadow:none;flex:1"><div class="muted">Clients</div><div style="font-size:22px;font-weight:900">${customers.length}</div></div>
+    <div class="card" style="box-shadow:none;flex:1"><div class="muted">Véhicules</div><div style="font-size:22px;font-weight:900">${vehicles.length}</div></div>
+    <div class="card" style="box-shadow:none;flex:1"><div class="muted">Ouvert</div><div style="font-size:22px;font-weight:900">${open}</div></div>
+    <div class="card" style="box-shadow:none;flex:1"><div class="muted">Total (${monthKey})</div><div style="font-size:22px;font-weight:900">${money(monthTotal)}</div></div>
   `;
-
-  const open = [...workorders].filter(w=>w.status==="OUVERT").sort(byCreatedDesc).slice(0,20);
-  if(open.length===0){
-    openRepairsTbody.innerHTML = '<tr><td colspan="5" class="muted">Aucune réparation ouverte.</td></tr>';
-  }else{
-    openRepairsTbody.innerHTML = open.map(w=>{
-      const v = getVehicle(w.vehicleId);
-      const c = v ? getCustomer(v.customerId) : null;
-      const client = c ? c.fullName : "—";
-      const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-      const d = String(w.createdAt||"").slice(0,10);
-      return `
-        <tr>
-          <td>${safe(d)}</td>
-          <td>${safe(client)}</td>
-          <td>${safe(veh)}</td>
-          <td>${money(w.total)}</td>
-          <td class="nowrap">
-            <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
-          </td>
-        </tr>
-      `;
-    }).join("");
-  }
-
-
-// Last 6 months revenue
-const monthsEl = document.getElementById("monthsStats");
-if(monthsEl){
-  const now = new Date();
-  const keys = [];
-  for(let i=5;i>=0;i--){
-    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-    keys.push(d.toISOString().slice(0,7));
-  }
-  const totals = Object.fromEntries(keys.map(k=>[k,0]));
-  for(const w of workorders){
-    const k = String(w.createdAt||"").slice(0,7);
-    if(totals[k] != null) totals[k] += Number(w.total||0);
-  }
-  const rows = keys.map(k=>`<tr><td>${safe(k)}</td><td style="text-align:right"><strong>${money(totals[k])}</strong></td></tr>`).join("");
-  monthsEl.innerHTML = `
-    <div class="table-wrap">
-      <table style="min-width:0">
-        <thead><tr><th>Mois</th><th style="text-align:right">Total</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
+  renderSearch();
 }
 
-// Upcoming appointments (next 14 days)
-const apptEl = document.getElementById("upcomingAppts");
-if(apptEl){
-  const now = new Date();
-  const max = new Date(now.getTime() + 14*24*60*60*1000);
-  const list = workorders
-    .filter(w=>w.appointmentAt)
-    .map(w=>({w, dt:new Date(w.appointmentAt)}))
-    .filter(x=>!isNaN(x.dt) && x.dt>=now && x.dt<=max)
-    .sort((a,b)=>a.dt-b.dt)
-    .slice(0,20);
-
-  if(list.length===0){
-    apptEl.innerHTML = '<div class="muted">Aucun rendez-vous dans les 14 prochains jours.</div>';
-  }else{
-    apptEl.innerHTML = `
-      <div class="table-wrap">
-        <table style="min-width:0">
-          <thead><tr><th>Date</th><th>Client</th><th>Véhicule</th><th></th></tr></thead>
-          <tbody>
-            ${list.map(x=>{
-              const v = getVehicle(x.w.vehicleId);
-              const c = v ? getCustomer(v.customerId) : null;
-              const veh = v ? [v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-              return `
-                <tr>
-                  <td class="nowrap">${safe(String(x.w.appointmentAt).replace("T"," "))}</td>
-                  <td>${safe(c?.fullName||"—")}</td>
-                  <td>${safe(veh)}</td>
-                  <td class="nowrap">
-                    <button class="btn btn-small" onclick="window.__openWorkorderView('${x.w.id}')">Ouvrir</button>
-                  </td>
-                </tr>
-              `;
-            }).join("")}
-          </tbody>
-        </table>
+function renderSearch(){
+  const q=$("#search").value.trim().toLowerCase();
+  if(!q){ $("#searchResults").textContent="Tape une recherche."; return; }
+  const hitsC = customers.filter(c=> (c.fullName||"").toLowerCase().includes(q) || (c.phone||"").includes(q) || (c.email||"").toLowerCase().includes(q));
+  const hitsV = vehicles.filter(v=> (v.plate||"").toLowerCase().includes(q) || (v.vin||"").toLowerCase().includes(q));
+  const out=[];
+  hitsC.forEach(c=>{
+    out.push(`<div class="card" style="box-shadow:none">
+      <b>${safe(c.fullName||"")}</b> <span class="muted">${safe(c.phone||"")}</span><br/>
+      <span class="muted">${safe(c.email||"")}</span><div class="row" style="margin-top:8px">
+        <button class="btn small" onclick="window.__openClient('${c.id}')">Ouvrir</button>
+        <button class="btn small primary" onclick="window.__newVehicle('${c.id}')">+ Véhicule</button>
       </div>
-    `;
-  }
-}
-}
-
-
-/* Quick search */
-$("btnQuickSearch").onclick = ()=>runQuickSearch();
-$("btnClearSearch").onclick = ()=>{ $("quickSearch").value=""; $("searchResults").innerHTML = '<span class="muted">Tape une recherche pour afficher les résultats.</span>'; };
-$("quickSearch").addEventListener("keydown", (e)=>{ if(e.key==="Enter") runQuickSearch(); });
-
-function runQuickSearch(){
-  const q = ($("quickSearch").value||"").trim().toLowerCase();
-  if(!q){
-    $("searchResults").innerHTML = '<span class="muted">Tape une recherche pour afficher les résultats.</span>';
-    return;
-  }
-  const matches = [];
-  for(const c of customers){
-    const cHit = (c.fullName||"").toLowerCase().includes(q) ||
-                 (c.phone||"").toLowerCase().includes(q) ||
-                 (c.email||"").toLowerCase().includes(q);
-    const vs = vehicles.filter(v=>v.customerId===c.id);
-    const vHits = vs.filter(v =>
-      (v.plate||"").toLowerCase().includes(q) ||
-      (v.vin||"").toLowerCase().includes(q) ||
-      (v.make||"").toLowerCase().includes(q) ||
-      (v.model||"").toLowerCase().includes(q)
-    );
-    if(cHit || vHits.length){
-      matches.push({c, vehicles: vHits.length ? vHits : vs.slice(0,1)});
-    }
-  }
-  if(matches.length===0){
-    $("searchResults").innerHTML = '<div class="muted">Aucun résultat.</div>';
-    return;
-  }
-  const rows = matches.slice(0,50).map(m=>{
-    const c = m.c;
-    const v = (m.vehicles && m.vehicles[0]) ? m.vehicles[0] : null;
-    const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "";
-    const plate = v?.plate || "";
-    return `
-      <tr>
-        <td>${safe(c.fullName)}</td>
-        <td>${safe(c.phone||"")}</td>
-        <td>${safe(vehTxt)}</td>
-        <td>${safe(plate)}</td>
-        <td class="nowrap">
-          <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
-          ${v ? `<button class="btn btn-small btn-ghost" onclick="window.__openWorkorderForm('${v.id}')">+ Réparation</button>` : ""}
-        </td>
-      </tr>
-    `;
-  }).join("");
-  $("searchResults").innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Client</th><th>Tél</th><th>Véhicule</th><th>Plaque</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
+    </div>`);
+  });
+  hitsV.forEach(v=>{
+    const c=getCustomer(v.customerId);
+    const txt=[v.year,v.make,v.model].filter(Boolean).join(" ");
+    out.push(`<div class="card" style="box-shadow:none">
+      <b>${safe(txt||"Véhicule")}</b> <span class="muted">${safe(v.plate||"")}</span><br/>
+      <span class="muted">Client: ${safe(c?.fullName||"—")} • VIN: ${safe(v.vin||"")}</span>
+      <div class="row" style="margin-top:8px"><button class="btn small primary" onclick="window.__newRepair('${v.id}')">+ Réparation</button></div>
+    </div>`);
+  });
+  $("#searchResults").innerHTML=out.length?out.join(""):"<div class='muted'>Aucun résultat.</div>";
 }
 
-/* Clients view */
-const clientsTbody = $("clientsTbody");
-const clientsCount = $("clientsCount");
-$("btnClientsSearch").onclick = ()=>renderClients();
-$("btnClientsClear").onclick = ()=>{ $("clientsSearch").value=""; renderClients(); };
-
+// ===== Clients CRUD =====
 function renderClients(){
-  const q = ($("clientsSearch").value||"").trim().toLowerCase();
-  let list = [...customers].sort((a,b)=> String(a.fullName||"").localeCompare(String(b.fullName||""), 'fr'));
-  if(q){
-    list = list.filter(c =>
-      (c.fullName||"").toLowerCase().includes(q) ||
-      (c.phone||"").toLowerCase().includes(q) ||
-      (c.email||"").toLowerCase().includes(q)
-    );
-  }
-  clientsCount.textContent = `${list.length} client(s)`;
-  if(list.length===0){
-    clientsTbody.innerHTML = '<tr><td colspan="4" class="muted">Aucun client.</td></tr>';
-    return;
-  }
-  clientsTbody.innerHTML = list.map(c=>`
+  $("#clientsCount").textContent = customers.length ? `${customers.length} client(s)` : "Aucun client";
+  $("#clientsBody").innerHTML = customers.map(c=>`
     <tr>
-      <td>${safe(c.fullName)}</td>
+      <td><b>${safe(c.fullName||"")}</b></td>
       <td>${safe(c.phone||"")}</td>
       <td>${safe(c.email||"")}</td>
       <td class="nowrap">
-        <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
-        <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
+        <button class="btn small" onclick="window.__openClient('${c.id}')">Ouvrir</button>
+        <button class="btn small primary" onclick="window.__newVehicle('${c.id}')">+ Véhicule</button>
       </td>
     </tr>
   `).join("");
 }
 
-/* Repairs view */
-const repairsTbody = $("repairsTbody");
-const repairsCount = $("repairsCount");
-$("btnRepairsFilter").onclick = ()=>renderRepairs();
-$("btnRepairsClear").onclick = ()=>{ $("repairsSearch").value=""; $("repairsStatus").value=""; renderRepairs(); };
+function openClientForm(existing=null){
+  const c=existing;
+  openModal(c?"Modifier client":"Nouveau client", `
+    <div class="row">
+      <div class="field"><label>Nom complet *</label><input id="cName" value="${safe(c?.fullName||"")}" /></div>
+      <div class="field"><label>Téléphone</label><input id="cPhone" value="${safe(c?.phone||"")}" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Email</label><input id="cEmail" type="email" value="${safe(c?.email||"")}" /></div>
+      <div class="field"><label>Notes</label><input id="cNotes" value="${safe(c?.notes||"")}" /></div>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button class="btn primary" id="saveClientBtn">Enregistrer</button>
+    </div>
+  `);
+  $("#saveClientBtn").addEventListener("click", async ()=>{
+    const fullName=$("#cName").value.trim();
+    if(!fullName) return alert("Nom requis.");
+    const phone=$("#cPhone").value.trim();
+    const email=$("#cEmail").value.trim();
+    const notes=$("#cNotes").value.trim();
+    if(c?.id){
+      await updateDoc(doc(db,"users",uid,"customers",c.id),{fullName,phone,email,notes,updatedAt:serverTimestamp()});
+    }else{
+      await addDoc(colCustomers(),{fullName,phone,email,notes,createdAt:isoNow(),createdAtTs:serverTimestamp()});
+    }
+    closeModal();
+  },{once:true});
+}
 
-function renderRepairs(){
-  const q = ($("repairsSearch").value||"").trim().toLowerCase();
-  const st = $("repairsStatus").value;
-  let list = [...workorders].sort(byCreatedDesc);
-  if(st) list = list.filter(w=>w.status===st);
-  if(q){
-    list = list.filter(w=>{
-      const v = getVehicle(w.vehicleId) || {};
-      const c = v.customerId ? (getCustomer(v.customerId) || {}) : {};
-      return (c.fullName||"").toLowerCase().includes(q) ||
-             (c.phone||"").toLowerCase().includes(q) ||
-             (v.plate||"").toLowerCase().includes(q);
+window.__openClient = (id)=>{
+  const c=getCustomer(id);
+  const vlist=vehicles.filter(v=>v.customerId===id);
+  openModal("Client", `
+    <div class="row" style="align-items:flex-start">
+      <div style="flex:1">
+        <b>${safe(c?.fullName||"")}</b><br/>
+        <span class="muted">${safe(c?.phone||"")} • ${safe(c?.email||"")}</span><br/>
+        <span class="muted">${safe(c?.notes||"")}</span>
+      </div>
+      <div class="row">
+        <button class="btn small" id="editClientBtn">Modifier</button>
+        <button class="btn small primary" id="addVehicleBtn">+ Véhicule</button>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <h2>Véhicules</h2>
+    <div class="table">
+      <table style="min-width:0">
+        <thead><tr><th>Véhicule</th><th>Plaque</th><th>VIN</th><th>KM</th><th></th></tr></thead>
+        <tbody>
+          ${vlist.map(v=>{
+            const txt=[v.year,v.make,v.model].filter(Boolean).join(" ");
+            return `<tr>
+              <td><b>${safe(txt||"")}</b></td>
+              <td>${safe(v.plate||"")}</td>
+              <td class="muted">${safe(v.vin||"")}</td>
+              <td>${safe(v.currentKm||"")}</td>
+              <td class="nowrap"><button class="btn small primary" onclick="window.__newRepair('${v.id}')">+ Réparation</button></td>
+            </tr>`;
+          }).join("") || `<tr><td colspan="5" class="muted">Aucun véhicule.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `);
+  $("#editClientBtn").addEventListener("click", ()=>openClientForm(c), {once:true});
+  $("#addVehicleBtn").addEventListener("click", ()=>openVehicleForm(id), {once:true});
+};
+
+window.__newVehicle = (customerId)=>openVehicleForm(customerId);
+
+function openVehicleForm(customerId){
+  openModal("Nouveau véhicule", `
+    <div class="row">
+      <div class="field"><label>Année</label><input id="vYear" inputmode="numeric" placeholder="2022"/></div>
+      <div class="field"><label>Marque</label><input id="vMake" placeholder="Toyota"/></div>
+      <div class="field"><label>Modèle</label><input id="vModel" placeholder="Corolla"/></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Plaque</label><input id="vPlate" placeholder="ABC123"/></div>
+      <div class="field"><label>VIN</label><input id="vVin" placeholder=""/></div>
+      <div class="field"><label>KM</label><input id="vKm" inputmode="numeric" placeholder=""/></div>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button class="btn primary" id="saveVehicleBtn">Enregistrer</button>
+    </div>
+  `);
+  $("#saveVehicleBtn").addEventListener("click", async ()=>{
+    const year=$("#vYear").value.trim();
+    const make=$("#vMake").value.trim();
+    const model=$("#vModel").value.trim();
+    const plate=$("#vPlate").value.trim();
+    const vin=$("#vVin").value.trim();
+    const km=$("#vKm").value.trim();
+    await addDoc(colVehicles(),{
+      customerId, year, make, model, plate, vin,
+      currentKm: km || "",
+      createdAt: isoNow(),
+      createdAtTs: serverTimestamp()
     });
-  }
-  repairsCount.textContent = `${list.length} réparation(s)`;
-  if(list.length===0){
-    repairsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucune réparation.</td></tr>';
-    return;
-  }
-  repairsTbody.innerHTML = list.map(w=>{
-    const v = getVehicle(w.vehicleId);
-    const c = v ? getCustomer(v.customerId) : null;
-    const client = c ? c.fullName : "—";
-    const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-    const d = String(w.createdAt||"").slice(0,10);
-    const pill = w.status==="TERMINE" ? "pill-ok" : "pill-warn";
+    closeModal();
+  },{once:true});
+}
+
+// ===== Repairs CRUD + invoice =====
+function renderRepairs(){
+  $("#repairsCount").textContent = workorders.length ? `${workorders.length} réparation(s)` : "Aucune réparation";
+  $("#repairsBody").innerHTML = workorders.map(w=>{
+    const v=getVehicle(w.vehicleId);
+    const c=v?getCustomer(v.customerId):null;
+    const veh=v?[v.year,v.make,v.model].filter(Boolean).join(" "):"—";
     return `
       <tr>
-        <td>${safe(d)}</td>
-        <td>${safe(client)}</td>
-        <td>${safe(veh)}</td>
-        <td><span class="pill ${pill}">${safe(w.status)}</span></td>
-        <td>${money(w.total)}</td>
-        <td class="nowrap">
-          <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
-        </td>
+        <td class="nowrap">${safe(String(w.createdAt||"").slice(0,16))}</td>
+        <td class="nowrap"><b>${safe(w.invoiceNo||"")}</b></td>
+        <td>${safe(c?.fullName||"—")}</td>
+        <td>${safe(veh)} <span class="muted">${safe(v?.plate||"")}</span></td>
+        <td>${pill(w.status||"OUVERT")}</td>
+        <td class="nowrap">${money(w.total||0)}</td>
+        <td class="nowrap"><button class="btn small" onclick="window.__openRepair('${w.id}')">Ouvrir</button></td>
       </tr>
     `;
   }).join("");
 }
 
-/* Settings */
-$("btnSaveSettings").onclick = async ()=>{
-  const tps = parseFloat(String($("setTps").value).replace(',','.'))/100;
-  const tvq = parseFloat(String($("setTvq").value).replace(',','.'))/100;
-  if(!isFinite(tps) || !isFinite(tvq) || tps<0 || tvq<0){
-    alert("TPS/TVQ invalides.");
-    return;
-  }
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, updatedAt: serverTimestamp() }, { merge:true });
-  alert("Paramètres enregistrés.");
-};
-function renderSettings(){
-  $("setTps").value = (settings.tpsRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
-  $("setTvq").value = (settings.tvqRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
-}
+window.__newRepair = (vehicleId)=>openWorkorderForm(vehicleId);
 
-/* Export / Import */
-$("btnExport").onclick = ()=>{
-  const payload = { settings, customers, vehicles, workorders };
-  const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "garage-pro-one-export.json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-};
-
-$("importFile").addEventListener("change", async (e)=>{
-  const file = e.target.files?.[0];
-  if(!file) return;
-  try{
-    const txt = await file.text();
-    const obj = JSON.parse(txt);
-    if(!obj || typeof obj!=="object") throw new Error("format");
-    if(!confirm("Importer ce JSON dans le cloud ? (écrase tout)")) return;
-    await wipeCloudData();
-    const batch = writeBatch(db);
-
-    const tpsRate = Number(obj.settings?.tpsRate ?? 0.05);
-    const tvqRate = Number(obj.settings?.tvqRate ?? 0.09975);
-    batch.set(docSettings(), { tpsRate, tvqRate, updatedAt: serverTimestamp() }, { merge:true });
-
-    for(const c of (obj.customers||[])){
-      batch.set(doc(colCustomers()), { fullName:c.fullName||"", phone:c.phone||"", email:c.email||"", notes:c.notes||"", createdAt:c.createdAt||isoNow(), createdAtTs: serverTimestamp() });
-    }
-    for(const v of (obj.vehicles||[])){
-      batch.set(doc(colVehicles()), {
-        customerId: v.customerId||"",
-        make:v.make||"", model:v.model||"", year:v.year||"",
-        plate:v.plate||"", vin:v.vin||"", currentKm:v.currentKm||"",
-        notes:v.notes||"", createdAt:v.createdAt||isoNow(),
-        createdAtTs: serverTimestamp()
-      });
-    }
-    for(const w of (obj.workorders||[])){
-      batch.set(doc(colWorkorders()), {
-        vehicleId: w.vehicleId||"",
-        status: w.status||"OUVERT",
-        km: w.km||"",
-        reportedIssue: w.reportedIssue||"",
-        diagnostic: w.diagnostic||"",
-        workDone: w.workDone||"",
-        notes: w.notes||"",
-        items: Array.isArray(w.items)?w.items:[],
-        subtotal: Number(w.subtotal||0),
-        tpsRate: Number(w.tpsRate||tpsRate),
-        tvqRate: Number(w.tvqRate||tvqRate),
-        tpsAmount: Number(w.tpsAmount||0),
-        tvqAmount: Number(w.tvqAmount||0),
-        total: Number(w.total||0),
-        createdAt: w.createdAt||isoNow(),
-        createdAtTs: serverTimestamp()
-      });
-    }
-    await batch.commit();
-    alert("Import terminé.");
-    go("dashboard");
-  }catch(err){
-    alert("Import impossible. Vérifie le JSON.");
-  }finally{
-    e.target.value="";
-  }
-});
-
-$("btnResetCloud").onclick = async ()=>{
-  if(!confirm("Tout supprimer dans le cloud ? (clients, véhicules, réparations)")) return;
-  await wipeCloudData();
-  alert("Cloud vidé.");
-};
-
-async function wipeCloudData(){
-  const deletions = [];
-  for(const c of (await getDocs(query(colCustomers(), limit(500)))).docs) deletions.push(deleteDoc(c.ref));
-  for(const v of (await getDocs(query(colVehicles(), limit(1000)))).docs) deletions.push(deleteDoc(v.ref));
-  for(const w of (await getDocs(query(colWorkorders(), limit(2000)))).docs) deletions.push(deleteDoc(w.ref));
-  await Promise.all(deletions);
-}
-
-/* ============
-   Entities & forms
-=========== */
-$("btnNewClient").onclick = ()=>openClientForm();
-$("btnNewClient2").onclick = ()=>openClientForm();
-$("btnNewRepair").onclick = ()=>openNewRepairChooser();
-$("btnNewRepair2").onclick = ()=>openNewRepairChooser();
-
-window.__openClientForm = openClientForm;
-window.__openClientView = openClientView;
-window.__openWorkorderForm = openWorkorderForm;
-window.__openWorkorderView = openWorkorderView;
-window.__openVehicleForm = openVehicleForm;
-window.__openVehicleView = openVehicleView;
-
-async function createCustomer(data){
-  await addDoc(colCustomers(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
-}
-async function updateCustomer(id, data){
-  await updateDoc(doc(db, "users", currentUid, "customers", id), { ...data, updatedAt: serverTimestamp() });
-}
-async function deleteCustomer(id){
-  const vdocs = (await getDocs(query(colVehicles(), where("customerId","==", id), limit(2000)))).docs;
-  const batch = writeBatch(db);
-  for(const v of vdocs){
-    const wdocs = (await getDocs(query(colWorkorders(), where("vehicleId","==", v.id), limit(2000)))).docs;
-    wdocs.forEach(w=>batch.delete(w.ref));
-    batch.delete(v.ref);
-  }
-  batch.delete(doc(db, "users", currentUid, "customers", id));
-  await batch.commit();
-}
-
-function openClientForm(customerId=null){
-  const editing = !!customerId;
-  const c = editing ? customers.find(x=>x.id===customerId) : {fullName:"",phone:"",email:"",notes:""};
-  if(editing && !c){ alert("Client introuvable."); return; }
-
-  openModal(editing ? "Modifier client" : "Nouveau client", `
-    <form class="form" id="clientForm">
-      <div id="clientError" class="alert" style="display:none"></div>
-      <label>Nom complet *</label>
-      <input name="fullName" value="${safe(c.fullName||"")}" required />
-      <label>Téléphone *</label>
-      <input name="phone" value="${safe(c.phone||"")}" required />
-      <label>Email</label>
-      <input name="email" type="email" value="${safe(c.email||"")}" />
-      <label>Notes</label>
-      <textarea name="notes" rows="4">${safe(c.notes||"")}</textarea>
-      <div class="row-between">
-        <button class="btn btn-primary" type="submit">Enregistrer</button>
-        <button class="btn btn-ghost" type="button" onclick="window.__closeModal()">Annuler</button>
-      </div>
-    </form>
-  `);
-  window.__closeModal = closeModal;
-
-  $("clientForm").onsubmit = async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const fullName = String(fd.get("fullName")||"").trim();
-    const phone = String(fd.get("phone")||"").trim();
-    const email = String(fd.get("email")||"").trim();
-    const notes = String(fd.get("notes")||"").trim();
-    const err = $("clientError");
-    if(!fullName || !phone){
-      err.style.display="";
-      err.textContent = "Nom et téléphone sont obligatoires.";
-      return;
-    }
-    try{
-      if(editing) await updateCustomer(customerId, {fullName, phone, email, notes});
-      else await createCustomer({fullName, phone, email, notes});
-      closeModal();
-    }catch(ex){
-      alert("Erreur sauvegarde client.");
-    }
-  };
-}
-
-function openClientView(customerId){
-  const c = customers.find(x=>x.id===customerId);
-  if(!c){ alert("Client introuvable."); return; }
-  const vs = vehicles.filter(v=>v.customerId===c.id).sort(byCreatedDesc);
-  const wos = workorders.filter(w=>{
-    const v = getVehicle(w.vehicleId);
-    return v && v.customerId===c.id;
-  }).sort(byCreatedDesc);
-
-  const vehRows = vs.length ? vs.map(v=>{
-    const veh = [v.year,v.make,v.model].filter(Boolean).join(" ");
-    return `
-      <tr>
-        <td>${safe(veh)}</td>
-        <td>${safe(v.plate||"")}</td>
-        <td class="muted">${safe(v.vin||"")}</td>
-        <td class="nowrap">
-          <button class="btn btn-small" onclick="window.__openVehicleView('${v.id}')">Ouvrir</button>
-          <button class="btn btn-small btn-ghost" onclick="window.__openWorkorderForm('${v.id}')">+ Réparation</button>
-        </td>
-      </tr>
-    `;
-  }).join("") : `<tr><td colspan="4" class="muted">Aucun véhicule. Ajoute-en un.</td></tr>`;
-
-  const woRows = wos.length ? wos.map(w=>{
-    const v = getVehicle(w.vehicleId);
-    const veh = v ? [v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-    const pill = w.status==="TERMINE" ? "pill-ok" : "pill-warn";
-    return `
-      <tr>
-        <td>${safe(String(w.createdAt||"").slice(0,10))}</td>
-        <td>${safe(veh)}</td>
-        <td>${safe(w.km||"")}</td>
-        <td><span class="pill ${pill}">${safe(w.status)}</span></td>
-        <td>${money(w.total)}</td>
-        <td class="nowrap"><button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button></td>
-      </tr>
-    `;
-  }).join("") : `<tr><td colspan="6" class="muted">Aucune réparation.</td></tr>`;
-
-  openModal("Fiche client", `
-    <div class="row-between">
-      <div>
-        <h2 style="margin:0">${safe(c.fullName)}</h2>
-        <div class="muted" style="margin-top:6px">
-          <strong>Tél:</strong> ${safe(c.phone||"")} &nbsp; • &nbsp;
-          <strong>Email:</strong> ${safe(c.email||"")}
-        </div>
-      </div>
-      <div class="row">
-        <button class="btn btn-small" onclick="window.__openClientForm('${c.id}')">Modifier</button>
-        <button class="btn btn-small btn-ghost" onclick="window.__openVehicleForm(null, '${c.id}')">+ Véhicule</button>
-        <button class="btn btn-small btn-danger" onclick="window.__deleteCustomer('${c.id}')">Supprimer</button>
-      </div>
+function openRepairWizard(){
+  // select vehicle
+  const options = vehicles.map(v=>{
+    const c=getCustomer(v.customerId);
+    const txt=[v.year,v.make,v.model].filter(Boolean).join(" ");
+    return `<option value="${v.id}">${safe(txt)} — ${safe(v.plate||"")} — ${safe(c?.fullName||"")}</option>`;
+  }).join("");
+  openModal("Nouvelle réparation", `
+    <div class="field"><label>Véhicule</label>
+      <select id="rwVehicle">${options || "<option value=''>Aucun véhicule</option>"}</select>
     </div>
-    ${c.notes ? `<div class="note" style="margin-top:12px">${safe(c.notes).replace(/\n/g,'<br>')}</div>` : ""}
-    <div class="divider"></div>
-    <h3>Véhicules</h3>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Véhicule</th><th>Plaque</th><th>VIN</th><th></th></tr></thead>
-        <tbody>${vehRows}</tbody>
-      </table>
-    </div>
-    <div class="divider"></div>
-    <h3>Historique des réparations</h3>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Date</th><th>Véhicule</th><th>KM</th><th>Statut</th><th>Total</th><th></th></tr></thead>
-        <tbody>${woRows}</tbody>
-      </table>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button class="btn primary" id="rwNextBtn" ${vehicles.length? "":"disabled"}>Continuer</button>
     </div>
   `);
-}
-window.__deleteCustomer = async (id)=>{
-  if(!confirm("Supprimer ce client (et ses véhicules/réparations) ?")) return;
-  await deleteCustomer(id);
-  closeModal();
-};
-
-/* Vehicles */
-async function createVehicle(customerId, data){
-  await addDoc(colVehicles(), { customerId, ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
-}
-async function updateVehicle(id, data){
-  await updateDoc(doc(db, "users", currentUid, "vehicles", id), { ...data, updatedAt: serverTimestamp() });
-}
-async function deleteVehicle(id){
-  const wdocs = (await getDocs(query(colWorkorders(), where("vehicleId","==", id), limit(2000)))).docs;
-  const batch = writeBatch(db);
-  wdocs.forEach(w=>batch.delete(w.ref));
-  batch.delete(doc(db, "users", currentUid, "vehicles", id));
-  await batch.commit();
+  $("#rwNextBtn").addEventListener("click", ()=>{
+    const vid=$("#rwVehicle").value;
+    if(!vid) return;
+    closeModal();
+    openWorkorderForm(vid);
+  },{once:true});
 }
 
-function openVehicleForm(vehicleId=null, customerId=null){
-  const editing = !!vehicleId;
-  const v = editing ? vehicles.find(x=>x.id===vehicleId) : {make:"",model:"",year:"",plate:"",vin:"",currentKm:"",notes:"",customerId};
-  if(editing && !v){ alert("Véhicule introuvable."); return; }
-  const c = customers.find(x=>x.id===customerId);
-  if(!c){ alert("Client introuvable."); return; }
-
-  openModal(editing ? "Modifier véhicule" : "Nouveau véhicule", `
-    <div class="muted">Client: <strong>${safe(c.fullName)}</strong></div>
-    <div class="divider"></div>
-    <form class="form" id="vehicleForm">
-      <div id="vehicleError" class="alert" style="display:none"></div>
-      <label>Marque *</label>
-      <input name="make" value="${safe(v.make||"")}" required />
-      <label>Modèle *</label>
-      <input name="model" value="${safe(v.model||"")}" required />
-      <label>Année</label>
-      <input name="year" inputmode="numeric" value="${safe(v.year||"")}" />
-      <label>Plaque (recherche)</label>
-      <input name="plate" value="${safe(v.plate||"")}" />
-      <label>VIN</label>
-      <input name="vin" value="${safe(v.vin||"")}" />
-      <label>Kilométrage actuel</label>
-      <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
-      <label>Notes</label>
-      <textarea name="notes" rows="4">${safe(v.notes||"")}</textarea>
-      <div class="row-between">
-        <button class="btn btn-primary" type="submit">Enregistrer</button>
-        <button class="btn btn-ghost" type="button" onclick="window.__closeModal()">Annuler</button>
-      </div>
-    </form>
-  `);
-
-  $("vehicleForm").onsubmit = async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const make = String(fd.get("make")||"").trim();
-    const model = String(fd.get("model")||"").trim();
-    const year = String(fd.get("year")||"").trim();
-    const plate = String(fd.get("plate")||"").trim();
-    const vin = String(fd.get("vin")||"").trim();
-    const currentKm = String(fd.get("currentKm")||"").trim();
-    const notes = String(fd.get("notes")||"").trim();
-    const err = $("vehicleError");
-    if(!make || !model){
-      err.style.display="";
-      err.textContent = "Marque et modèle sont obligatoires.";
-      return;
-    }
-    try{
-      if(editing) await updateVehicle(vehicleId, {make,model,year,plate,vin,currentKm,notes});
-      else await createVehicle(customerId, {make,model,year,plate,vin,currentKm,notes});
-      closeModal();
-    }catch(ex){
-      alert("Erreur sauvegarde véhicule.");
-    }
-  };
-}
-
-function openVehicleView(vehicleId){
-  const v = vehicles.find(x=>x.id===vehicleId);
-  if(!v){ alert("Véhicule introuvable."); return; }
-  const c = customers.find(x=>x.id===v.customerId);
-  const wos = workorders.filter(w=>w.vehicleId===v.id).sort(byCreatedDesc);
-
-  const woRows = wos.length ? wos.map(w=>{
-    const pill = w.status==="TERMINE" ? "pill-ok" : "pill-warn";
-    return `
-      <tr>
-        <td>${safe(String(w.createdAt||"").slice(0,10))}</td>
-        <td>${safe(w.km||"")}</td>
-        <td><span class="pill ${pill}">${safe(w.status)}</span></td>
-        <td>${money(w.total)}</td>
-        <td class="nowrap"><button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button></td>
-      </tr>
-    `;
-  }).join("") : `<tr><td colspan="5" class="muted">Aucune réparation.</td></tr>`;
-
-  const vehTxt = [v.year,v.make,v.model].filter(Boolean).join(" ");
-  openModal("Fiche véhicule", `
-    <div class="row-between">
-      <div>
-        <h2 style="margin:0">${safe(vehTxt)}</h2>
-        <div class="muted" style="margin-top:6px">
-          Client: <a href="#" onclick="window.__openClientView('${v.customerId}'); return false;">${safe(c?.fullName||"—")}</a><br/>
-          Plaque: <strong>${safe(v.plate||"")}</strong> &nbsp; • &nbsp; VIN: ${safe(v.vin||"")}<br/>
-          KM: ${safe(v.currentKm||"")}
-        </div>
-      </div>
-      <div class="row">
-        <button class="btn btn-small" onclick="window.__openVehicleForm('${v.id}', '${v.customerId}')">Modifier</button>
-        <button class="btn btn-small btn-ghost" onclick="window.__openWorkorderForm('${v.id}')">+ Réparation</button>
-        <button class="btn btn-small btn-danger" onclick="window.__deleteVehicle('${v.id}')">Supprimer</button>
-      </div>
-    </div>
-    ${v.notes ? `<div class="note" style="margin-top:12px">${safe(v.notes).replace(/\n/g,'<br>')}</div>` : ""}
-    <div class="divider"></div>
-    <h3>Historique des réparations</h3>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Date</th><th>KM</th><th>Statut</th><th>Total</th><th></th></tr></thead>
-        <tbody>${woRows}</tbody>
-      </table>
-    </div>
-  `);
-}
-window.__deleteVehicle = async (id)=>{
-  if(!confirm("Supprimer ce véhicule (et ses réparations) ?")) return;
-  await deleteVehicle(id);
-  closeModal();
-};
-
-/* Workorders */
-function calcTotals(items, tpsRate, tvqRate){
-  let subtotal = 0;
-  const clean = [];
-  for(const it of items){
-    const desc = String(it.desc||"").trim();
-    if(!desc) continue;
-    const type = (it.type==="MO") ? "MO" : "PIECE";
-    const qty  = Math.max(0.000001, Number(String(it.qty||1).replace(',','.')) || 1);
-    const unit = Math.max(0, Number(String(it.unit||0).replace(',','.')) || 0);
-    const line = qty * unit;
-    subtotal += line;
-    clean.push({type, desc, qty, unit, line});
-  }
+function calcTotals(items){
+  const subtotal = items.reduce((a,it)=>a + Number(it.total||0), 0);
+  const tpsRate = Number(settings.tpsRate||0.05);
+  const tvqRate = Number(settings.tvqRate||0.09975);
   const tpsAmount = subtotal * tpsRate;
   const tvqAmount = subtotal * tvqRate;
   const total = subtotal + tpsAmount + tvqAmount;
-  return {items: clean, subtotal, tpsAmount, tvqAmount, total};
-}
-
-function openNewRepairChooser(){
-  if(customers.length===0){
-    alert("Ajoute d'abord un client.");
-    openClientForm();
-    return;
-  }
-  openModal("Nouvelle réparation", `
-    <p class="muted">Choisis un véhicule (recherche par nom client / plaque / VIN), puis crée la réparation.</p>
-    <form class="form form-inline" onsubmit="return false;">
-      <input id="chooseVehQ" placeholder="Nom / Téléphone / Plaque / VIN" />
-      <button class="btn btn-primary" id="btnChooseVeh">Rechercher</button>
-    </form>
-    <div class="divider"></div>
-    <div id="chooseVehRes" class="muted">Tape une recherche.</div>
-  `);
-  const qEl = $("chooseVehQ");
-  const resEl = $("chooseVehRes");
-  $("btnChooseVeh").onclick = ()=>{
-    const q = (qEl.value||"").trim().toLowerCase();
-    if(!q){ resEl.innerHTML = '<span class="muted">Tape une recherche.</span>'; return; }
-    const rows = [];
-    for(const v of vehicles){
-      const c = getCustomer(v.customerId);
-      const hit = (c?.fullName||"").toLowerCase().includes(q) ||
-                  (c?.phone||"").toLowerCase().includes(q) ||
-                  (v.plate||"").toLowerCase().includes(q) ||
-                  (v.vin||"").toLowerCase().includes(q);
-      if(hit) rows.push({v,c});
-    }
-    if(rows.length===0){ resEl.innerHTML = '<div class="muted">Aucun véhicule.</div>'; return; }
-    resEl.innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Client</th><th>Véhicule</th><th>Plaque</th><th></th></tr></thead>
-          <tbody>
-            ${rows.slice(0,50).map(r=>{
-              const veh = [r.v.year,r.v.make,r.v.model].filter(Boolean).join(" ");
-              return `
-                <tr>
-                  <td>${safe(r.c?.fullName||"—")}</td>
-                  <td>${safe(veh)}</td>
-                  <td>${safe(r.v.plate||"")}</td>
-                  <td class="nowrap"><button class="btn btn-small" onclick="window.__openWorkorderForm('${r.v.id}')">Choisir</button></td>
-                </tr>
-              `;
-            }).join("")}
-          </tbody>
-        </table>
-      </div>
-    `;
-  };
-  qEl.addEventListener("keydown", (e)=>{ if(e.key==="Enter") $("btnChooseVeh").click(); });
-}
-
-async function createWorkorder(data){
-  // Invoice numbering (atomic) + save workorder in one transaction
-  const countersRef = docCounters();
-  const woCol = colWorkorders();
-  const woRef = doc(woCol); // pre-generate id
-
-  const result = await runTransaction, deleteField(db, async (tx)=>{
-    const csnap = await tx.get(countersRef);
-    let next = 1;
-    if(csnap.exists()){
-      next = Number(csnap.data().invoiceNext || 1);
-    }
-    const invoiceNo = formatInvoiceNo(next);
-    tx.set(woRef, { ...data, invoiceNo, createdAt: isoNow(), createdAtTs: serverTimestamp() });
-    tx.set(countersRef, { invoiceNext: next + 1, updatedAt: serverTimestamp() }, { merge: true });
-    return { invoiceNo };
-  });
-
-  if(data.km){
-    await updateDoc(doc(db, "users", currentUid, "vehicles", data.vehicleId), { currentKm: data.km, updatedAt: serverTimestamp() });
-  }
-  return result.invoiceNo;
+  return {subtotal,tpsRate,tvqRate,tpsAmount,tvqAmount,total};
 }
 
 function openWorkorderForm(vehicleId){
-  const v = getVehicle(vehicleId);
-  if(!v){ alert("Véhicule introuvable."); return; }
-  const c = getCustomer(v.customerId);
-  const vehTxt = [v.year,v.make,v.model].filter(Boolean).join(" ");
-
-  openModal("Nouvelle réparation", `
-    <div class="muted">
-      Client: <strong>${safe(c?.fullName||"—")}</strong><br/>
-      Véhicule: <strong>${safe(vehTxt)}</strong> ${v.plate?`— Plaque: <strong>${safe(v.plate)}</strong>`:""}
+  openModal("Réparation", `
+    <div class="row">
+      <div class="field"><label>Statut</label>
+        <select id="wStatus">
+          <option value="OUVERT">Ouvert</option>
+          <option value="EN_COURS">En cours</option>
+          <option value="TERMINE">Terminé</option>
+        </select>
+      </div>
+      <div class="field"><label>KM (visite)</label><input id="wKm" inputmode="numeric" placeholder=""/></div>
+      <div class="field"><label>Rendez-vous (optionnel)</label><input id="wAppt" type="datetime-local"/></div>
     </div>
-    <div class="divider"></div>
-    <form class="form" id="woForm">
-      <div id="woError" class="alert" style="display:none"></div>
-      <div class="row" style="gap:12px">
-        <div style="flex:1; min-width:220px">
-          <label>Statut</label>
-          <select name="status">
-            <option value="OUVERT">Ouvert</option>
-            <option value="EN_COURS">En cours</option>
-            <option value="TERMINE">Terminé</option>
-          </select>
-        </div>
-        <div style="flex:1; min-width:220px">
-          <label>KM (visite)</label>
-          <input name="km" inputmode="numeric" placeholder="ex: 123456" />
-        </div>
-      </div>
 
-      <div class="row" style="gap:12px">
-        <div style="flex:1; min-width:220px">
-          <label>Rendez-vous (optionnel)</label>
-          <input name="appointmentAt" type="datetime-local" />
-        </div>
-        <div style="flex:1; min-width:220px">
-          <label>Paiement</label>
-          <select name="paymentMethod">
-            <option value="">Non défini</option>
-            <option value="CASH">Cash</option>
-            <option value="CARTE">Carte</option>
-            <option value="VIREMENT">Virement</option>
-            <option value="AUTRE">Autre</option>
-          </select>
-        </div>
-        <div style="flex:1; min-width:220px">
-          <label>Statut paiement</label>
-          <select name="paymentStatus">
-            <option value="NON_PAYE">Non payé</option>
-            <option value="PAYE">Payé</option>
-          </select>
-        </div>
+    <div class="row">
+      <div class="field"><label>Paiement</label>
+        <select id="wPayMethod">
+          <option value="">Non défini</option>
+          <option value="CASH">Cash</option>
+          <option value="CARTE">Carte</option>
+          <option value="VIREMENT">Virement</option>
+          <option value="AUTRE">Autre</option>
+        </select>
       </div>
-
-      <label>Problème rapporté (client)</label>
-      <textarea name="reportedIssue" rows="3" placeholder="ex: bruit avant gauche..."></textarea>
-      <label>Diagnostic</label>
-      <textarea name="diagnostic" rows="3"></textarea>
-      <label>Travaux effectués</label>
-      <textarea name="workDone" rows="3"></textarea>
-
-      <h3>Lignes (pièces / main d’œuvre)</h3>
-      <div class="table-wrap">
-        <table id="itemsTable">
-          <thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th></th></tr></thead>
-          <tbody></tbody>
-        </table>
+      <div class="field"><label>Statut paiement</label>
+        <select id="wPayStatus">
+          <option value="NON_PAYE">Non payé</option>
+          <option value="PAYE">Payé</option>
+        </select>
       </div>
-      <div class="row">
-        <button class="btn btn-ghost" type="button" id="btnAddLine">+ Ajouter une ligne</button>
-        <span class="muted">Total TTC calculé automatiquement.</span>
-      </div>
-      <div class="note" id="totalsBox"></div>
+    </div>
 
-      <label>Notes</label>
-      <textarea name="notes" rows="3"></textarea>
+    <div class="field"><label>Problème rapporté</label><textarea id="wIssue"></textarea></div>
 
-      <div class="row-between">
-        <button class="btn btn-primary" type="submit">Enregistrer</button>
-        <button class="btn btn-ghost" type="button" onclick="window.__closeModal()">Annuler</button>
-      </div>
-    </form>
+    <div class="hr"></div>
+    <h2>Main d'œuvre / Pièces</h2>
+    <div id="items"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn small" id="addLaborBtn">+ Main d'œuvre</button>
+      <button class="btn small" id="addPartBtn">+ Pièce</button>
+      <span class="muted" id="totalsTxt" style="margin-left:auto"></span>
+    </div>
+
+    <div class="row" style="justify-content:flex-end;margin-top:12px">
+      <button class="btn primary" id="saveWorkBtn">Enregistrer</button>
+    </div>
   `);
 
-  const tbody = modalBody.querySelector("#itemsTable tbody");
-  const totalsBox = modalBody.querySelector("#totalsBox");
+  const items=[];
+  const itemsEl = $("#items");
+  const totalsEl = $("#totalsTxt");
 
-  function addLine(def={}){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>
-        <select class="itType">
-          <option value="PIECE">Pièce</option>
-          <option value="MO">Main d’œuvre</option>
-        </select>
-      </td>
-      <td><input class="itDesc" placeholder="ex: Plaquettes de frein" /></td>
-      <td><input class="itQty" inputmode="decimal" value="1" /></td>
-      <td><input class="itUnit" inputmode="decimal" placeholder="0.00" /></td>
-      <td class="nowrap"><button class="btn btn-small btn-ghost" type="button">-</button></td>
-    `;
-    tbody.appendChild(tr);
-    tr.querySelector(".itType").value = def.type || "PIECE";
-    tr.querySelector(".itDesc").value = def.desc || "";
-    tr.querySelector(".itQty").value  = (def.qty ?? 1);
-    tr.querySelector(".itUnit").value = (def.unit ?? "");
-    tr.querySelector("button").onclick = ()=>{ tr.remove(); recalc(); };
-    ["input","change"].forEach(evt=>{
-      tr.querySelector(".itType").addEventListener(evt, recalc);
-      tr.querySelector(".itDesc").addEventListener(evt, recalc);
-      tr.querySelector(".itQty").addEventListener(evt, recalc);
-      tr.querySelector(".itUnit").addEventListener(evt, recalc);
+  const renderItems = ()=>{
+    itemsEl.innerHTML = items.map((it,idx)=>`
+      <div class="card" style="box-shadow:none;margin-bottom:10px">
+        <div class="row">
+          <div class="field"><label>Type</label><input value="${safe(it.type)}" disabled/></div>
+          <div class="field"><label>Description</label><input data-i="${idx}" data-k="desc" value="${safe(it.desc)}"/></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Qté</label><input data-i="${idx}" data-k="qty" inputmode="decimal" value="${safe(it.qty)}"/></div>
+          <div class="field"><label>Prix</label><input data-i="${idx}" data-k="price" inputmode="decimal" value="${safe(it.price)}"/></div>
+          <div class="field"><label>Total</label><input value="${money(it.total)}" disabled/></div>
+          <button class="btn small danger" data-del="${idx}">Supprimer</button>
+        </div>
+      </div>
+    `).join("");
+    itemsEl.querySelectorAll("input[data-i]").forEach(inp=>{
+      inp.addEventListener("input", ()=>{
+        const i=Number(inp.getAttribute("data-i"));
+        const k=inp.getAttribute("data-k");
+        items[i][k]=inp.value;
+        const qty=Number(items[i].qty||0);
+        const price=Number(items[i].price||0);
+        items[i].total=qty*price;
+        updateTotals();
+        renderItems();
+      });
     });
-    recalc();
-  }
+    itemsEl.querySelectorAll("button[data-del]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        const i=Number(b.getAttribute("data-del"));
+        items.splice(i,1);
+        updateTotals();
+        renderItems();
+      });
+    });
+  };
 
-  function collectItems(){
-    const rows = [...tbody.querySelectorAll("tr")];
-    return rows.map(r=>({
-      type: r.querySelector(".itType").value,
-      desc: r.querySelector(".itDesc").value,
-      qty:  r.querySelector(".itQty").value,
-      unit: r.querySelector(".itUnit").value
-    }));
-  }
+  const updateTotals = ()=>{
+    const t = calcTotals(items);
+    totalsEl.textContent = `Sous-total ${money(t.subtotal)} • TPS ${money(t.tpsAmount)} • TVQ ${money(t.tvqAmount)} • Total ${money(t.total)}`;
+  };
 
-  function recalc(){
-    const items = collectItems();
-    const t = calcTotals(items, settings.tpsRate, settings.tvqRate);
-    totalsBox.innerHTML = `
-      <div class="row-between"><span>Sous-total</span><strong>${money(t.subtotal)}</strong></div>
-      <div class="row-between"><span>TPS (${pct(settings.tpsRate)})</span><strong>${money(t.tpsAmount)}</strong></div>
-      <div class="row-between"><span>TVQ (${pct(settings.tvqRate)})</span><strong>${money(t.tvqAmount)}</strong></div>
-      <div class="divider"></div>
-      <div class="row-between" style="font-size:16px"><span><strong>Total TTC</strong></span><strong>${money(t.total)}</strong></div>
-    `;
-  }
+  $("#addLaborBtn").addEventListener("click", ()=>{
+    items.push({type:"LABOR", desc:"", qty:"1", price:"0", total:0});
+    renderItems(); updateTotals();
+  });
+  $("#addPartBtn").addEventListener("click", ()=>{
+    items.push({type:"PART", desc:"", qty:"1", price:"0", total:0});
+    renderItems(); updateTotals();
+  });
 
-  $("btnAddLine").onclick = ()=>addLine({});
-  for(let i=0;i<5;i++) addLine({type:"PIECE", qty:1});
+  renderItems(); updateTotals();
 
-  $("woForm").onsubmit = async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const status = String(fd.get("status")||"OUVERT");
-    const km = String(fd.get("km")||"").trim();
-    const appointmentAt = String(fd.get("appointmentAt")||"").trim();
-    const paymentMethod = String(fd.get("paymentMethod")||"").trim();
-    const paymentStatus = String(fd.get("paymentStatus")||"NON_PAYE").trim();
-    const reportedIssue = String(fd.get("reportedIssue")||"").trim();
-    const diagnostic = String(fd.get("diagnostic")||"").trim();
-    const workDone = String(fd.get("workDone")||"").trim();
-    const notes = String(fd.get("notes")||"").trim();
+  $("#saveWorkBtn").addEventListener("click", async ()=>{
+    const status=$("#wStatus").value;
+    const km=$("#wKm").value.trim();
+    const appointmentAt=$("#wAppt").value.trim();
+    const paymentMethod=$("#wPayMethod").value.trim();
+    const paymentStatus=$("#wPayStatus").value.trim();
+    const reportedIssue=$("#wIssue").value.trim();
+    const totals=calcTotals(items);
 
-    const items = collectItems();
-    const t = calcTotals(items, settings.tpsRate, settings.tvqRate);
+    const countersRef = docCounters();
+    const woRef = doc(colWorkorders());
 
-    const err = $("woError");
-    if(!reportedIssue && !workDone && t.items.length===0){
-      err.style.display="";
-      err.textContent = "Ajoute au moins un problème, un travail, ou une ligne de facture.";
-      return;
-    }
-    try{
-      await createWorkorder({
+    const invoiceNo = await runTransaction(db, async (tx)=>{
+      const csnap = await tx.get(countersRef);
+      const next = csnap.exists() ? Number(csnap.data().invoiceNext||1) : 1;
+      const inv = formatInvoiceNo(next);
+      tx.set(woRef, {
         vehicleId,
-        status: (status==="TERMINE" ? "TERMINE" : (status==="EN_COURS" ? "EN_COURS" : "OUVERT")),
+        status,
+        km,
         appointmentAt: appointmentAt || "",
         paymentMethod: paymentMethod || "",
         paymentStatus: (paymentStatus==="PAYE" ? "PAYE" : "NON_PAYE"),
-        km, reportedIssue, diagnostic, workDone, notes,
-        items: t.items,
-        subtotal: t.subtotal,
-        tpsRate: settings.tpsRate,
-        tvqRate: settings.tvqRate,
-        tpsAmount: t.tpsAmount,
-        tvqAmount: t.tvqAmount,
-        total: t.total
+        reportedIssue,
+        items,
+        ...totals,
+        invoiceNo: inv,
+        createdAt: isoNow(),
+        createdAtTs: serverTimestamp()
       });
-      closeModal();
-    }catch(ex){
-      alert("Erreur sauvegarde réparation.");
+      tx.set(countersRef, { invoiceNext: next+1, updatedAt: serverTimestamp() }, { merge:true });
+      return inv;
+    });
+
+    // update vehicle km
+    if(km){
+      await updateDoc(doc(db,"users",uid,"vehicles",vehicleId), { currentKm: km, updatedAt: serverTimestamp() });
     }
-  };
-}
 
-async function toggleWorkorderStatus(id, next){
-  await updateDoc(doc(db, "users", currentUid, "workorders", id), { status: next, updatedAt: serverTimestamp() });
-}
-async function deleteWorkorder(id){
-  await deleteDoc(doc(db, "users", currentUid, "workorders", id));
-}
+    closeModal();
+    alert("Réparation enregistrée: " + invoiceNo);
+  },{once:true});
+});
 
-function openWorkorderView(workorderId){
-  const wo = workorders.find(w=>w.id===workorderId);
-  if(!wo){ alert("Réparation introuvable."); return; }
-  const v = getVehicle(wo.vehicleId);
-  const c = v ? getCustomer(v.customerId) : null;
-  const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "—";
-  const pill = wo.status==="TERMINE" ? "pill-ok" : "pill-warn";
-
-  const itemsRows = (wo.items && wo.items.length) ? wo.items.map(it=>`
-    <tr>
-      <td>${it.type==="MO" ? "Main d’œuvre" : "Pièce"}</td>
-      <td>${safe(it.desc)}</td>
-      <td>${safe(it.qty)}</td>
-      <td>${money(it.unit)}</td>
-      <td>${money(it.line)}</td>
-    </tr>
-  `).join("") : `<tr><td colspan="5" class="muted">Aucune ligne.</td></tr>`;
-
+window.__openRepair = (workorderId)=>{
+  const w = workorders.find(x=>x.id===workorderId);
+  if(!w) return;
+  const v=getVehicle(w.vehicleId);
+  const c=v?getCustomer(v.customerId):null;
+  const veh=[v?.year,v?.make,v?.model].filter(Boolean).join(" ");
   openModal("Réparation", `
-    <div class="row-between">
-      <div>
-        <h2 style="margin:0">Réparation</h2>
-        <div class="muted" style="margin-top:6px">
-          Date: ${safe(String(wo.createdAt||"").slice(0,16))} —
-          Statut: <span class="pill ${pill}">${safe(wo.status)}</span>
-          ${wo.invoiceNo ? ` — <strong>Facture:</strong> ${safe(wo.invoiceNo)}` : ""}
-        </div>
+    <div class="row" style="align-items:flex-start">
+      <div style="flex:1">
+        <b>${safe(w.invoiceNo||"")}</b> — ${safe(String(w.createdAt||"").slice(0,16))}<br/>
+        <span class="muted">Client: ${safe(c?.fullName||"—")} • Véhicule: ${safe(veh)} ${safe(v?.plate||"")}</span><br/>
+        <span class="muted">Paiement: <b>${safe(w.paymentMethod||"")}</b> — <b>${safe(w.paymentStatus||"")}</b></span><br/>
+        ${w.appointmentAt ? `<span class="muted">Rendez-vous: ${safe(w.appointmentAt)}</span><br/>` : ""}
+        <span class="muted">Statut: ${safe(w.status||"")}</span>
       </div>
       <div class="row">
-        <button class="btn btn-small" onclick="window.__printWorkorder('${wo.id}')">Imprimer / PDF</button>
-        <button class="btn btn-small btn-ghost" onclick="window.__addToCalendar('${wo.id}')">Ajouter au calendrier</button>
-        <button class="btn btn-small btn-ghost" onclick="window.__toggleWo('${wo.id}', '${wo.status==="OUVERT" ? "TERMINE":"OUVERT"}')">${wo.status==="OUVERT" ? "Marquer Terminé" : "Rouvrir"}</button>
-        <button class="btn btn-small btn-danger" onclick="window.__deleteWo('${wo.id}')">Supprimer</button>
+        <button class="btn small" onclick="window.__printInvoice('${w.id}')">Imprimer / PDF</button>
       </div>
     </div>
-    <div class="divider"></div>
-    <div class="grid" style="grid-template-columns:1fr; gap:12px">
-      <div class="note">
-        <strong>Client</strong><br/>
-        ${safe(c?.fullName||"—")}<br/>
-        ${safe(c?.phone||"")}<br/>
-        ${safe(c?.email||"")}
-      </div>
-      <div class="note">
-        <strong>Véhicule</strong><br/>
-        ${safe(vehTxt)}<br/>
-        Plaque: ${safe(v?.plate||"")}<br/>
-        VIN: ${safe(v?.vin||"")}<br/>
-        KM (visite): ${safe(wo.km||"")}<br/>
-        Paiement: <strong>${safe(wo.paymentMethod||"")}</strong> — <strong>${safe(wo.paymentStatus||"")}</strong><br/>
-        Rendez-vous: ${safe(wo.appointmentAt||"")}
-      </div>
-    </div>
-    ${wo.reportedIssue ? `<h3>Problème rapporté</h3><div class="note">${safe(wo.reportedIssue).replace(/\n/g,'<br>')}</div>` : ""}
-    ${wo.diagnostic ? `<h3>Diagnostic</h3><div class="note">${safe(wo.diagnostic).replace(/\n/g,'<br>')}</div>` : ""}
-    ${wo.workDone ? `<h3>Travaux effectués</h3><div class="note">${safe(wo.workDone).replace(/\n/g,'<br>')}</div>` : ""}
-    <h3>Détails</h3>
-    <div class="table-wrap">
-      <table>
+    <div class="hr"></div>
+    <div><b>Problème</b><div class="muted">${safe(w.reportedIssue||"")}</div></div>
+    <div class="hr"></div>
+    <div class="table">
+      <table style="min-width:0">
         <thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th>Total</th></tr></thead>
-        <tbody>${itemsRows}</tbody>
+        <tbody>
+          ${(w.items||[]).map(it=>`
+            <tr>
+              <td>${safe(it.type||"")}</td>
+              <td>${safe(it.desc||"")}</td>
+              <td>${safe(it.qty||"")}</td>
+              <td>${money(it.price||0)}</td>
+              <td>${money(it.total||0)}</td>
+            </tr>
+          `).join("") || `<tr><td colspan="5" class="muted">Aucun item</td></tr>`}
+        </tbody>
       </table>
     </div>
-    <div class="divider"></div>
-    <div class="note">
-      <div class="row-between"><span>Sous-total</span><strong>${money(wo.subtotal)}</strong></div>
-      <div class="row-between"><span>TPS (${pct(wo.tpsRate)})</span><strong>${money(wo.tpsAmount)}</strong></div>
-      <div class="row-between"><span>TVQ (${pct(wo.tvqRate)})</span><strong>${money(wo.tvqAmount)}</strong></div>
-      <div class="divider"></div>
-      <div class="row-between" style="font-size:16px"><span><strong>Total TTC</strong></span><strong>${money(wo.total)}</strong></div>
+    <div class="hr"></div>
+    <div class="row" style="justify-content:flex-end">
+      <div><b>Sous-total:</b> ${money(w.subtotal||0)}</div>
+      <div><b>TPS:</b> ${money(w.tpsAmount||0)}</div>
+      <div><b>TVQ:</b> ${money(w.tvqAmount||0)}</div>
+      <div><b>Total:</b> ${money(w.total||0)}</div>
     </div>
-    ${wo.notes ? `<h3>Notes</h3><div class="note">${safe(wo.notes).replace(/\n/g,'<br>')}</div>` : ""}
   `);
-}
-window.__toggleWo = async (id, next)=>{ await toggleWorkorderStatus(id, next); closeModal(); };
-window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
-
-/* Print */
-window.__printWorkorder = (workorderId)=>{
-  const wo = workorders.find(w=>w.id===workorderId);
-  if(!wo) return;
-  const v = getVehicle(wo.vehicleId);
-  const c = v ? getCustomer(v.customerId) : null;
-  const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "—";
-  const rows = (wo.items||[]).map(it=>`
-    <tr>
-      <td>${it.type==="MO"?"Main d'œuvre":"Pièce"}</td>
-      <td>${safe(it.desc)}</td>
-      <td>${safe(it.qty)}</td>
-      <td>${money(it.unit)}</td>
-      <td>${money(it.line)}</td>
-    </tr>
-  `).join("") || `<tr><td colspan="5">Aucune ligne</td></tr>`;
-
-    const html = `
-  <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Réparation — ${safe(GARAGE.name)}</title>
-  <style>
-  body{font-family:Arial,sans-serif;margin:24px;color:#111;}
-  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
-  h1{margin:0 0 6px 0;font-size:20px;}
-  h2{margin:0 0 2px 0;font-size:16px;}
-  .muted{color:#555;font-size:12px;}
-  .small{font-size:11px;color:#555;}
-  .box{border:1px solid #ddd;padding:12px;border-radius:10px;}
-  .headerCard{border:1px solid #ddd;border-radius:12px;padding:14px;}
-  .brandRow{display:flex;gap:12px;align-items:center;}
-  table{width:100%;border-collapse:collapse;margin-top:12px;}
-  th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px;}
-  th{background:#fafafa;}
-  .tot{margin-top:12px;max-width:360px;margin-left:auto;}
-  .tot div{display:flex;justify-content:space-between;padding:4px 0;}
-  .grand{font-weight:bold;font-size:16px;border-top:1px solid #ddd;padding-top:8px;}
-  @media print{.no-print{display:none;}body{margin:0;}}
-  </style></head><body>
-  <div class="no-print" style="margin-bottom:12px;"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
-  
-  <div class="headerCard">
-    <div class="top">
-      <div class="brandRow">
-        <div>${GARAGE_LOGO_SVG}</div>
-        <div>
-          <h1>${safe(GARAGE.name)}</h1>
-          <div class="muted">${safe(GARAGE.address1)} — ${safe(GARAGE.address2)} — ${safe(GARAGE.country)}</div>
-          <div class="muted">${safe(GARAGE.email)} • ${safe(GARAGE.phone)}</div>
-          <div class="small">${safe(GARAGE.tagline)}</div>
-        </div>
-      </div>
-      <div class="muted" style="text-align:right">
-        <div><strong>Date:</strong> ${safe(String(wo.createdAt||"").slice(0,16))}</div>
-        <div><strong>Statut:</strong> ${safe(wo.status)}</div>
-        <div class="small" style="margin-top:6px">TPS/TVH: ${safe(GARAGE.tps)}<br/>TVQ: ${safe(GARAGE.tvq)}</div>
-      </div>
-    </div>
-  </div>
-  
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
-    <div class="box"><strong>Client</strong><br>${safe(c?.fullName||"—")}<br>${safe(c?.phone||"")}<br>${safe(c?.email||"")}</div>
-    <div class="box"><strong>Véhicule</strong><br>${safe(vehTxt)}<br>Plaque: ${safe(v?.plate||"")}<br>VIN: ${safe(v?.vin||"")}<br>KM (visite): ${safe(wo.km||"")}<br/>
-        Paiement: <strong>${safe(wo.paymentMethod||"")}</strong> — <strong>${safe(wo.paymentStatus||"")}</strong><br/>
-        Rendez-vous: ${safe(wo.appointmentAt||"")}</div>
-  </div>
-  <h2 style="margin-top:14px;">Détails</h2>
-  <table><thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="tot">
-    <div><span>Sous-total</span><span>${money(wo.subtotal)}</span></div>
-    <div><span>TPS (${pct(wo.tpsRate)})</span><span>${money(wo.tpsAmount)}</span></div>
-    <div><span>TVQ (${pct(wo.tvqRate)})</span><span>${money(wo.tvqAmount)}</span></div>
-    <div class="grand"><span>Total TTC</span><span>${money(wo.total)}</span></div>
-  </div>
-  </body></html>`;
-  const w = window.open("", "_blank");
-  w.document.open(); w.document.write(html); w.document.close();
 };
 
-/* Auth boot */
-onAuthStateChanged(auth, async (user)=>{
-  if(user){
-    currentUid = user.uid;
-    $("viewAuth").style.display = "none";
-    $("viewApp").style.display = "";
-    $("navAuthed").style.display = "";
-    await ensureMetaDocs();
-    await migrateLegacyUserDocCustomer();
-    unsubscribeAll();
-    subscribeAll();
-    go("dashboard");
-    renderSettings();
-  }else{
-    currentUid = null;
-    unsubscribeAll();
-    customers = []; vehicles = []; workorders = [];
-    $("viewApp").style.display = "none";
-    $("navAuthed").style.display = "none";
-    $("viewAuth").style.display = "";
-    showAuthMessage("", "");
+window.__printInvoice = (workorderId)=>{
+  const w = workorders.find(x=>x.id===workorderId);
+  if(!w) return;
+  const v=getVehicle(w.vehicleId);
+  const c=v?getCustomer(v.customerId):null;
+  const veh=[v?.year,v?.make,v?.model].filter(Boolean).join(" ");
+  const rows=(w.items||[]).map(it=>`
+    <tr>
+      <td>${safe(it.type||"")}</td>
+      <td>${safe(it.desc||"")}</td>
+      <td>${safe(it.qty||"")}</td>
+      <td>${money(it.price||0)}</td>
+      <td>${money(it.total||0)}</td>
+    </tr>
+  `).join("");
+
+  const html = `
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facture ${safe(w.invoiceNo||"")}</title>
+<style>
+body{font-family:Arial,sans-serif;margin:24px;color:#111}
+.top{display:flex;justify-content:space-between;gap:14px}
+.h1{font-size:20px;font-weight:800;margin:0}
+.muted{color:#555;font-size:12px}
+.box{border:1px solid #ddd;border-radius:12px;padding:12px}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px}
+th{background:#fafafa}
+.tot{margin-top:12px;max-width:360px;margin-left:auto}
+.tot div{display:flex;justify-content:space-between;padding:4px 0}
+.grand{font-weight:800;border-top:1px solid #ddd;padding-top:8px}
+@media print{.no-print{display:none}body{margin:0}}
+</style></head><body>
+<div class="no-print" style="margin-bottom:12px"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
+<div class="top">
+  <div class="box" style="flex:1">
+    <div class="h1">${safe(GARAGE.name)}</div>
+    <div class="muted">${safe(GARAGE.address)}</div>
+    <div class="muted">${safe(GARAGE.email)} • ${safe(GARAGE.phone)}</div>
+    <div class="muted">TPS/TVH: ${safe(GARAGE.tps)} • TVQ: ${safe(GARAGE.tvq)}</div>
+  </div>
+  <div class="box" style="width:320px">
+    <div><b>Facture:</b> ${safe(w.invoiceNo||"")}</div>
+    <div><b>Date:</b> ${safe(String(w.createdAt||"").slice(0,16))}</div>
+    <div><b>Statut:</b> ${safe(w.status||"")}</div>
+    <div class="muted" style="margin-top:6px"><b>Paiement:</b> ${safe(w.paymentMethod||"")} — ${safe(w.paymentStatus||"")}</div>
+    ${w.appointmentAt ? `<div class="muted"><b>Rendez-vous:</b> ${safe(w.appointmentAt)}</div>` : ""}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+  <div class="box"><b>Client</b><br/>${safe(c?.fullName||"—")}<br/>${safe(c?.phone||"")}<br/>${safe(c?.email||"")}</div>
+  <div class="box"><b>Véhicule</b><br/>${safe(veh)}<br/>Plaque: ${safe(v?.plate||"")}<br/>VIN: ${safe(v?.vin||"")}<br/>KM (visite): ${safe(w.km||"")}</div>
+</div>
+
+<h3 style="margin-top:14px">Détails</h3>
+<table><thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
+
+<div class="tot">
+  <div><span>Sous-total</span><span>${money(w.subtotal||0)}</span></div>
+  <div><span>TPS</span><span>${money(w.tpsAmount||0)}</span></div>
+  <div><span>TVQ</span><span>${money(w.tvqAmount||0)}</span></div>
+  <div class="grand"><span>Total</span><span>${money(w.total||0)}</span></div>
+</div>
+</body></html>`;
+
+  const win = window.open("", "_blank");
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+};
+
+// ===== Settings =====
+$("#saveSettingsBtn").addEventListener("click", async ()=>{
+  const tps = Number($("#tpsRate").value || 0.05);
+  const tvq = Number($("#tvqRate").value || 0.09975);
+  try{
+    await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, updatedAt: serverTimestamp() }, { merge:true });
+    $("#settingsMsg").textContent="Enregistré.";
+  }catch(e){
+    console.error(e);
+    $("#settingsMsg").textContent="Erreur.";
+    alert("Erreur settings: "+(e.message||e));
   }
 });
