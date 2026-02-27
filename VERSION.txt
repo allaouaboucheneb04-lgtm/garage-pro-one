@@ -1,1 +1,3 @@
-Garage Pro One — PRO — ROOT + Legacy Firestore AutoDetect (v4)
+Garage Pro One - LIGHT-INVOICE-FIX
+2026-02-27 11:16:02.416713
+Fix: mode autodetect (user/root/nested) + invoice GP-0001 + paiement + EN_COURS + save invoiceHtml on print

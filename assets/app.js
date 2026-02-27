@@ -6,7 +6,7 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, query, where, orderBy, limit, getDocs,
-  addDoc, serverTimestamp, onSnapshot, writeBatch
+  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 /* ============
@@ -121,11 +121,53 @@ document.querySelectorAll("[data-go]").forEach(btn=>{
    Firestore paths (per user)
 =========== */
 let currentUid = null;
+let DATA_MODE = "user"; // "user" | "root" | "nested"
 
-function colCustomers(){ return collection(db, "users", currentUid, "customers"); }
-function colVehicles(){ return collection(db, "users", currentUid, "vehicles"); }
-function colWorkorders(){ return collection(db, "users", currentUid, "workorders"); }
-function docSettings(){ return doc(db, "users", currentUid, "meta", "settings"); }
+function colCustomers(){
+  if(DATA_MODE==="root") return collection(db, "customers");
+  if(DATA_MODE==="nested") return collection(db, "customers", "customers", "customers");
+  return collection(db, "users", currentUid, "customers");
+}
+function colVehicles(){
+  if(DATA_MODE==="root") return collection(db, "vehicles");
+  if(DATA_MODE==="nested") return collection(db, "vehicles", "vehicles", "vehicles");
+  return collection(db, "users", currentUid, "vehicles");
+}
+function colWorkorders(){
+  if(DATA_MODE==="root") return collection(db, "workorders");
+  if(DATA_MODE==="nested") return collection(db, "workorders", "workorders", "workorders");
+  return collection(db, "users", currentUid, "workorders");
+}
+function colAppointments(){
+  if(DATA_MODE==="root") return collection(db, "appointments");
+  if(DATA_MODE==="nested") return collection(db, "appointments", "appointments", "appointments");
+  return collection(db, "users", currentUid, "appointments");
+}
+function docSettings(){
+  if(DATA_MODE==="root") return doc(db, "meta", "settings");
+  if(DATA_MODE==="nested") return doc(db, "meta", "settings"); // shared
+  return doc(db, "users", currentUid, "meta", "settings");
+}
+function docCounters(){
+  if(DATA_MODE==="root") return doc(db, "meta", "counters");
+  if(DATA_MODE==="nested") return doc(db, "meta", "counters");
+  return doc(db, "users", currentUid, "meta", "counters");
+}
+async function _hasAnyDocs(colRef){
+  try{
+    const snap = await getDocs(query(colRef, limit(1)));
+    return snap.docs.length>0;
+  }catch(e){ return false; }
+}
+async function detectDataMode(){
+  // Prefer per-user if it already contains data
+  if(await _hasAnyDocs(collection(db, "users", currentUid, "customers"))) return "user";
+  // Then root
+  if(await _hasAnyDocs(collection(db, "customers"))) return "root";
+  // Then nested customers/customers/customers
+  if(await _hasAnyDocs(collection(db, "customers", "customers", "customers"))) return "nested";
+  return "user";
+}
 
 /* ============
    Live cache
@@ -219,6 +261,22 @@ async function ensureSettingsDoc(){
   if(!snap.exists()){
     await setDoc(ref, { tpsRate: 0.05, tvqRate: 0.09975, updatedAt: serverTimestamp() });
   }
+  const cRef = docCounters();
+  const cSnap = await getDoc(cRef);
+  if(!cSnap.exists()){
+    await setDoc(cRef, { invoiceNext: 1, updatedAt: serverTimestamp() });
+  }
+}
+
+async function nextInvoiceNo(){
+  const ref = docCounters();
+  const n = await runTransaction(db, async (tx)=>{
+    const s = await tx.get(ref);
+    const cur = s.exists() ? Number(s.data().invoiceNext||1) : 1;
+    tx.set(ref, { invoiceNext: cur+1, updatedAt: serverTimestamp() }, { merge:true });
+    return cur;
+  });
+  return "GP-" + String(n).padStart(4,"0");
 }
 
 function subscribeAll(){
@@ -569,7 +627,7 @@ async function createCustomer(data){
   await addDoc(colCustomers(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
 }
 async function updateCustomer(id, data){
-  await updateDoc(doc(db, "users", currentUid, "customers", id), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(colCustomers(), id), { ...data, updatedAt: serverTimestamp() });
 }
 async function deleteCustomer(id){
   const vdocs = (await getDocs(query(colVehicles(), where("customerId","==", id), limit(2000)))).docs;
@@ -579,7 +637,7 @@ async function deleteCustomer(id){
     wdocs.forEach(w=>batch.delete(w.ref));
     batch.delete(v.ref);
   }
-  batch.delete(doc(db, "users", currentUid, "customers", id));
+  batch.delete(doc(colCustomers(), id));
   await batch.commit();
 }
 
@@ -715,13 +773,13 @@ async function createVehicle(customerId, data){
   await addDoc(colVehicles(), { customerId, ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
 }
 async function updateVehicle(id, data){
-  await updateDoc(doc(db, "users", currentUid, "vehicles", id), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(colVehicles(), id), { ...data, updatedAt: serverTimestamp() });
 }
 async function deleteVehicle(id){
   const wdocs = (await getDocs(query(colWorkorders(), where("vehicleId","==", id), limit(2000)))).docs;
   const batch = writeBatch(db);
   wdocs.forEach(w=>batch.delete(w.ref));
-  batch.delete(doc(db, "users", currentUid, "vehicles", id));
+  batch.delete(doc(colVehicles(), id));
   await batch.commit();
 }
 
@@ -912,9 +970,12 @@ function openNewRepairChooser(){
 }
 
 async function createWorkorder(data){
+  if(!data.invoiceNo){
+    data.invoiceNo = await nextInvoiceNo();
+  }
   await addDoc(colWorkorders(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
   if(data.km){
-    await updateDoc(doc(db, "users", currentUid, "vehicles", data.vehicleId), { currentKm: data.km, updatedAt: serverTimestamp() });
+    await updateDoc(doc(colVehicles(), data.vehicleId), { currentKm: data.km, updatedAt: serverTimestamp() });
   }
 }
 
@@ -937,6 +998,7 @@ function openWorkorderForm(vehicleId){
           <label>Statut</label>
           <select name="status">
             <option value="OUVERT">Ouvert</option>
+            <option value="EN_COURS">En cours</option>
             <option value="TERMINE">Terminé</option>
           </select>
         </div>
@@ -945,6 +1007,27 @@ function openWorkorderForm(vehicleId){
           <input name="km" inputmode="numeric" placeholder="ex: 123456" />
         </div>
       </div>
+
+      <div class="row" style="gap:12px">
+        <div style="flex:1; min-width:220px">
+          <label>Paiement</label>
+          <select name="paymentMethod">
+            <option value="">Non défini</option>
+            <option value="CASH">Cash</option>
+            <option value="CARTE">Carte</option>
+            <option value="VIREMENT">Virement</option>
+            <option value="AUTRE">Autre</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:220px">
+          <label>Statut paiement</label>
+          <select name="paymentStatus">
+            <option value="NON_PAYE">Non payé</option>
+            <option value="PAYE">Payé</option>
+          </select>
+        </div>
+      </div>
+
       <label>Problème rapporté (client)</label>
       <textarea name="reportedIssue" rows="3" placeholder="ex: bruit avant gauche..."></textarea>
       <label>Diagnostic</label>
@@ -1041,6 +1124,8 @@ function openWorkorderForm(vehicleId){
     const diagnostic = String(fd.get("diagnostic")||"").trim();
     const workDone = String(fd.get("workDone")||"").trim();
     const notes = String(fd.get("notes")||"").trim();
+    const paymentMethod = String(fd.get("paymentMethod")||"").trim();
+    const paymentStatus = String(fd.get("paymentStatus")||"NON_PAYE").trim();
 
     const items = collectItems();
     const t = calcTotals(items, settings.tpsRate, settings.tvqRate);
@@ -1054,8 +1139,8 @@ function openWorkorderForm(vehicleId){
     try{
       await createWorkorder({
         vehicleId,
-        status: status==="TERMINE" ? "TERMINE" : "OUVERT",
-        km, reportedIssue, diagnostic, workDone, notes,
+        status: (status==="TERMINE"?"TERMINE":(status==="EN_COURS"?"EN_COURS":"OUVERT")),
+        km, reportedIssue, diagnostic, workDone, notes, paymentMethod, paymentStatus,
         items: t.items,
         subtotal: t.subtotal,
         tpsRate: settings.tpsRate,
@@ -1072,10 +1157,10 @@ function openWorkorderForm(vehicleId){
 }
 
 async function toggleWorkorderStatus(id, next){
-  await updateDoc(doc(db, "users", currentUid, "workorders", id), { status: next, updatedAt: serverTimestamp() });
+  await updateDoc(doc(colWorkorders(), id), { status: next, updatedAt: serverTimestamp() });
 }
 async function deleteWorkorder(id){
-  await deleteDoc(doc(db, "users", currentUid, "workorders", id));
+  await deleteDoc(doc(colWorkorders(), id));
 }
 
 function openWorkorderView(workorderId){
@@ -1152,7 +1237,7 @@ window.__toggleWo = async (id, next)=>{ await toggleWorkorderStatus(id, next); c
 window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
 
 /* Print */
-window.__printWorkorder = (workorderId)=>{
+window.__printWorkorder = async (workorderId)=>{
   const wo = workorders.find(w=>w.id===workorderId);
   if(!wo) return;
   const v = getVehicle(wo.vehicleId);
@@ -1170,7 +1255,7 @@ window.__printWorkorder = (workorderId)=>{
 
     const html = `
   <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Réparation — ${safe(GARAGE.name)}</title>
+  <title>${safe(wo.invoiceNo||"Réparation")} — ${safe(GARAGE.name)}</title>
   <style>
   body{font-family:Arial,sans-serif;margin:24px;color:#111;}
   .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
@@ -1223,6 +1308,8 @@ window.__printWorkorder = (workorderId)=>{
     <div class="grand"><span>Total TTC</span><span>${money(wo.total)}</span></div>
   </div>
   </body></html>`;
+  // Sauvegarde automatique (HTML) dans l'historique
+  try{ await updateDoc(doc(colWorkorders(), workorderId), { invoiceHtml: html, invoiceSavedAt: serverTimestamp() }); }catch(e){}
   const w = window.open("", "_blank");
   w.document.open(); w.document.write(html); w.document.close();
 };
@@ -1231,6 +1318,7 @@ window.__printWorkorder = (workorderId)=>{
 onAuthStateChanged(auth, async (user)=>{
   if(user){
     currentUid = user.uid;
+    DATA_MODE = await detectDataMode();
     $("viewAuth").style.display = "none";
     $("viewApp").style.display = "";
     $("navAuthed").style.display = "";
