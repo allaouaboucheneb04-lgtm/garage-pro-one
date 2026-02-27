@@ -27,7 +27,9 @@ const db = getFirestore(app);
 /* ============
    Roles (admin / mechanic)
 =========== */
-let currentRole = "admin";
+// role is stored in Firestore at /users/{uid}.role
+// possible values: "admin" | "mechanic"
+let currentRole = "unknown";
 let currentUserName = "";
 let unsubProfile = null;
 let mechanics = [];
@@ -36,38 +38,38 @@ function docUserProfile(uid=currentUid){
   return doc(db, "users", uid);
 }
 
-async function ensureUserProfile(user){
-  // Si aucun profil (première connexion), on crée ADMIN par défaut
-  const ref = docUserProfile(user.uid);
-  const snap = await getDoc(ref);
-  if(!snap.exists()){
-    await setDoc(ref, {
-      role: "admin",
-      name: (user.displayName || ""),
-      email: user.email || "",
-      createdAt: isoNow(),
-      createdAtTs: serverTimestamp(),
-      updatedAt: isoNow(),
-      updatedAtTs: serverTimestamp(),
-    });
-  }
+async function ensureUserProfile(_user){
+  // IMPORTANT: with your Firestore rules, ONLY an admin can create/update /users/{uid}.
+  // So we do NOT auto-create anything here.
+  return;
 }
 
 async function loadRole(){
   if(!currentUid) return;
   try{
     const snap = await getDoc(docUserProfile());
-    if(snap.exists()){
-      const d = snap.data();
-      currentRole = (d.role === "mechanic") ? "mechanic" : "admin";
-      currentUserName = d.name || d.email || "";
-    }else{
-      currentRole = "admin";
+    if(!snap.exists()){
+      currentRole = "unknown";
       currentUserName = "";
+      applyRoleUI();
+
+      // Without this doc, your rules cannot compute role(), so the user will be blocked.
+      alert(
+        "Compte non configuré par l’admin.\n\n"+
+        "Demande à l’admin de créer : users/"+currentUid+"\n"+
+        "avec au minimum : { role: 'mechanic' (ou 'admin'), name: '...' }.\n\n"+
+        "UID: "+currentUid
+      );
+      await signOut(auth);
+      return;
     }
+    const d = snap.data() || {};
+    currentRole = (d.role === "admin") ? "admin" : "mechanic";
+    currentUserName = d.name || d.email || "";
   }catch(e){
     console.warn("loadRole failed", e);
-    currentRole = "admin";
+    currentRole = "unknown";
+    currentUserName = "";
   }
   applyRoleUI();
 }
@@ -206,13 +208,10 @@ document.querySelectorAll("[data-go]").forEach(btn=>{
    Firestore paths (per user)
 =========== */
 let currentUid = null;
-// IMPORTANT:
-// - "root"   => /customers, /vehicles, /workorders, /appointments, /meta
-// - "user"   => /users/{uid}/customers, /users/{uid}/vehicles, /users/{uid}/workorders, /users/{uid}/appointments, /users/{uid}/meta
-// - "nested" => /customers/customers/customers (ancien test)
-// Beaucoup de bugs venaient du fait que Firestore était en mode "root" mais l'app écrivait en mode "user".
-// On met donc "root" par défaut et on auto-détecte si des données existent ailleurs.
-let DATA_MODE = "root"; // "user" | "root" | "nested"
+// DB structure (current):
+//   /customers, /vehicles, /workorders, /appointments, /meta, /users/{uid}
+// We force ROOT mode to match your Firestore rules.
+let DATA_MODE = "root";
 
 function colCustomers(){
   if(DATA_MODE==="root") return collection(db, "customers");
@@ -251,13 +250,6 @@ async function _hasAnyDocs(colRef){
   }catch(e){ return false; }
 }
 async function detectDataMode(){
-  // Prefer per-user if it already contains data
-  if(await _hasAnyDocs(collection(db, "users", currentUid, "customers"))) return "user";
-  // Then root
-  if(await _hasAnyDocs(collection(db, "customers"))) return "root";
-  // Then nested customers/customers/customers
-  if(await _hasAnyDocs(collection(db, "customers", "customers", "customers"))) return "nested";
-  // If empty everywhere, default to root (matches our rules + your current DB structure)
   return "root";
 }
 
@@ -269,6 +261,7 @@ let vehicles = [];
 let workorders = [];
 let settings = { tpsRate: 0.05, tvqRate: 0.09975 };
 
+let unsubSettings = null;
 let unsubCustomers = null;
 let unsubVehicles = null;
 let unsubWorkorders = null;
@@ -372,10 +365,9 @@ async function nextInvoiceNo(){
 }
 
 function subscribeAll(){
-  // Settings are stored in /meta/settings. Mechanics usually shouldn't access meta.
-  // If we subscribe as a mechanic, Firestore rules can block and the UI looks broken.
+  // settings/meta are admin-only (rules)
   if(currentRole === "admin"){
-    onSnapshot(docSettings(), (snap)=>{
+    unsubSettings = onSnapshot(docSettings(), (snap)=>{
       if(snap.exists()){
         const d = snap.data();
         settings = {
@@ -385,11 +377,7 @@ function subscribeAll(){
         renderSettings();
         renderDashboard();
       }
-    }, (err)=>console.warn("settings snapshot error", err));
-  }else{
-    // Defaults for invoice calculations
-    settings = { tpsRate: 0.05, tvqRate: 0.09975 };
-    renderSettings();
+    });
   }
 
   unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
@@ -416,10 +404,11 @@ function subscribeAll(){
 }
 
 function unsubscribeAll(){
+  if(unsubSettings) unsubSettings();
   if(unsubCustomers) unsubCustomers();
   if(unsubVehicles) unsubVehicles();
   if(unsubWorkorders) unsubWorkorders();
-  unsubCustomers = unsubVehicles = unsubWorkorders = null;
+  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = null;
 }
 
 /* ============
@@ -776,6 +765,10 @@ function openClientForm(customerId=null){
 
   $("clientForm").onsubmit = async (e)=>{
     e.preventDefault();
+    if(currentRole !== "admin"){
+      alert("Accès refusé : seul l’admin peut créer/modifier des clients.");
+      return;
+    }
     const fd = new FormData(e.target);
     const fullName = String(fd.get("fullName")||"").trim();
     const phone = String(fd.get("phone")||"").trim();
@@ -792,7 +785,10 @@ function openClientForm(customerId=null){
       else await createCustomer({fullName, phone, email, notes});
       closeModal();
     }catch(ex){
-      alert("Erreur sauvegarde client.");
+      const msg = (ex && ex.code === "permission-denied")
+        ? "Accès refusé (règles Firestore). Seul l’admin peut enregistrer un client."
+        : "Erreur sauvegarde client.";
+      alert(msg);
     }
   };
 }
@@ -1455,6 +1451,9 @@ onAuthStateChanged(auth, async (user)=>{
     await ensureUserProfile(user);
     await loadRole();
 
+    // If profile is missing, loadRole() signs out.
+    if(!currentUid || currentRole === "unknown") return;
+
     $("viewAuth").style.display = "none";
     $("viewApp").style.display = "";
     $("navAuthed").style.display = "";
@@ -1463,17 +1462,16 @@ onAuthStateChanged(auth, async (user)=>{
     unsubProfile = onSnapshot(docUserProfile(), (snap)=>{
       if(snap.exists()){
         const d = snap.data();
-        currentRole = (d.role === "mechanic") ? "mechanic" : "admin";
+        currentRole = (d.role === "admin") ? "admin" : "mechanic";
         currentUserName = d.name || d.email || "";
         applyRoleUI();
       }
     });
 
-    // Admin only: settings/meta + mechanics list. If a mechanic account hits these,
-    // Firestore rules will block and the app looked like it "doesn't log in".
+    // settings/meta are admin-only (rules)
     if(currentRole === "admin"){
-      try{ await ensureSettingsDoc(); }catch(e){ console.warn("ensureSettingsDoc failed", e); }
-      try{ await loadMechanics(); }catch(e){ console.warn("loadMechanics failed", e); }
+      await ensureSettingsDoc();
+      await loadMechanics();
     }
     unsubscribeAll();
     subscribeAll();
@@ -1483,10 +1481,10 @@ onAuthStateChanged(auth, async (user)=>{
     }else{
       go("dashboard");
     }
-    renderSettings();
+    if(currentRole === "admin") renderSettings();
   }else{
     currentUid = null;
-    currentRole = "admin";
+    currentRole = "unknown";
     currentUserName = "";
     if(unsubProfile) try{unsubProfile();}catch(e){}
     unsubProfile = null;

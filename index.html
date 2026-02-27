@@ -33,7 +33,8 @@
 
       <div class="tabs no-print">
         <button class="tab active" id="tabLogin">Se connecter</button>
-        <button class="tab" id="tabRegister">Créer compte</button>
+        <!-- Création de compte désactivée dans l'app : comptes via Firebase Auth + /users/{uid} créé par admin -->
+        <button class="tab" id="tabRegister" style="display:none;">Créer compte</button>
       </div>
 
       <div id="authError" class="alert" style="display:none; margin-top:12px;"></div>
