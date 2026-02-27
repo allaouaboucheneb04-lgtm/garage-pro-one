@@ -6,7 +6,7 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, query, where, orderBy, limit, getDocs,
-  addDoc, serverTimestamp, onSnapshot, writeBatch
+  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 /* ============
@@ -37,6 +37,12 @@ const views = {
 const pageTitle = $("pageTitle");
 
 function safe(s){ return String(s??"").replace(/[&<>"]/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+async function saveInvoiceSnapshot(workorderId, html){
+  try{
+    await updateDoc(doc(db, "users", currentUid, "workorders", workorderId), { invoiceHtml: html, invoiceSavedAt: serverTimestamp() });
+  }catch(e){ /* ignore */ }
+}
+
 function money(n){
   const x = Number(n||0);
   return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2}) + " $";
@@ -44,6 +50,49 @@ function money(n){
 function pct(n){
   return (Number(n)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'') + "%";
 }
+
+function formatInvoiceNo(n){
+  const num = Number(n||0);
+  const pad = String(num).padStart(4,'0');
+  return "GP-" + pad;
+}
+
+function downloadICS({title, description, location, start, durationMin=60}){
+  const dt = new Date(start);
+  const end = new Date(dt.getTime() + durationMin*60000);
+  const fmt = (x)=>{
+    const pad=(n)=>String(n).padStart(2,'0');
+    return x.getUTCFullYear()+pad(x.getUTCMonth()+1)+pad(x.getUTCDate())+"T"+pad(x.getUTCHours())+pad(x.getUTCMinutes())+"00Z";
+  };
+  const uid = (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now())) + "@garage-pro-one";
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Garage Pro One//FR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    "UID:"+uid,
+    "DTSTAMP:"+fmt(new Date()),
+    "DTSTART:"+fmt(dt),
+    "DTEND:"+fmt(end),
+    "SUMMARY:"+String(title||"Rendez-vous Garage").replace(/\n/g," "),
+    "DESCRIPTION:"+String(description||"").replace(/\n/g,"\\n"),
+    "LOCATION:"+String(location||"").replace(/\n/g," "),
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ];
+  const blob = new Blob([lines.join("\r\n")], {type:"text/calendar;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "rendez-vous.ics";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function byCreatedDesc(a,b){
   return (String(b.createdAt||"")).localeCompare(String(a.createdAt||""));
 }
@@ -126,6 +175,7 @@ function colCustomers(){ return collection(db, "users", currentUid, "customers")
 function colVehicles(){ return collection(db, "users", currentUid, "vehicles"); }
 function colWorkorders(){ return collection(db, "users", currentUid, "workorders"); }
 function docSettings(){ return doc(db, "users", currentUid, "meta", "settings"); }
+function docCounters(){ return doc(db, "users", currentUid, "meta", "counters"); }
 
 /* ============
    Live cache
@@ -213,7 +263,7 @@ $("btnLogout").onclick = async ()=>{ await signOut(auth); };
 /* ============
    Snapshot subscriptions
 =========== */
-async function ensureSettingsDoc(){
+async function ensureMetaDocs(){
   const ref = docSettings();
   const snap = await getDoc(ref);
   if(!snap.exists()){
@@ -307,7 +357,76 @@ function renderDashboard(){
       `;
     }).join("");
   }
+
+
+// Last 6 months revenue
+const monthsEl = document.getElementById("monthsStats");
+if(monthsEl){
+  const now = new Date();
+  const keys = [];
+  for(let i=5;i>=0;i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    keys.push(d.toISOString().slice(0,7));
+  }
+  const totals = Object.fromEntries(keys.map(k=>[k,0]));
+  for(const w of workorders){
+    const k = String(w.createdAt||"").slice(0,7);
+    if(totals[k] != null) totals[k] += Number(w.total||0);
+  }
+  const rows = keys.map(k=>`<tr><td>${safe(k)}</td><td style="text-align:right"><strong>${money(totals[k])}</strong></td></tr>`).join("");
+  monthsEl.innerHTML = `
+    <div class="table-wrap">
+      <table style="min-width:0">
+        <thead><tr><th>Mois</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
 }
+
+// Upcoming appointments (next 14 days)
+const apptEl = document.getElementById("upcomingAppts");
+if(apptEl){
+  const now = new Date();
+  const max = new Date(now.getTime() + 14*24*60*60*1000);
+  const list = workorders
+    .filter(w=>w.appointmentAt)
+    .map(w=>({w, dt:new Date(w.appointmentAt)}))
+    .filter(x=>!isNaN(x.dt) && x.dt>=now && x.dt<=max)
+    .sort((a,b)=>a.dt-b.dt)
+    .slice(0,20);
+
+  if(list.length===0){
+    apptEl.innerHTML = '<div class="muted">Aucun rendez-vous dans les 14 prochains jours.</div>';
+  }else{
+    apptEl.innerHTML = `
+      <div class="table-wrap">
+        <table style="min-width:0">
+          <thead><tr><th>Date</th><th>Client</th><th>Véhicule</th><th></th></tr></thead>
+          <tbody>
+            ${list.map(x=>{
+              const v = getVehicle(x.w.vehicleId);
+              const c = v ? getCustomer(v.customerId) : null;
+              const veh = v ? [v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+              return `
+                <tr>
+                  <td class="nowrap">${safe(String(x.w.appointmentAt).replace("T"," "))}</td>
+                  <td>${safe(c?.fullName||"—")}</td>
+                  <td>${safe(veh)}</td>
+                  <td class="nowrap">
+                    <button class="btn btn-small" onclick="window.__openWorkorderView('${x.w.id}')">Ouvrir</button>
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+}
+}
+
 
 /* Quick search */
 $("btnQuickSearch").onclick = ()=>runQuickSearch();
@@ -488,7 +607,7 @@ $("importFile").addEventListener("change", async (e)=>{
     if(!obj || typeof obj!=="object") throw new Error("format");
     if(!confirm("Importer ce JSON dans le cloud ? (écrase tout)")) return;
     await wipeCloudData();
-    const batch = writeBatch(db);
+    const batch = writeBatch, runTransaction(db);
 
     const tpsRate = Number(obj.settings?.tpsRate ?? 0.05);
     const tvqRate = Number(obj.settings?.tvqRate ?? 0.09975);
@@ -573,7 +692,7 @@ async function updateCustomer(id, data){
 }
 async function deleteCustomer(id){
   const vdocs = (await getDocs(query(colVehicles(), where("customerId","==", id), limit(2000)))).docs;
-  const batch = writeBatch(db);
+  const batch = writeBatch, runTransaction(db);
   for(const v of vdocs){
     const wdocs = (await getDocs(query(colWorkorders(), where("vehicleId","==", v.id), limit(2000)))).docs;
     wdocs.forEach(w=>batch.delete(w.ref));
@@ -719,7 +838,7 @@ async function updateVehicle(id, data){
 }
 async function deleteVehicle(id){
   const wdocs = (await getDocs(query(colWorkorders(), where("vehicleId","==", id), limit(2000)))).docs;
-  const batch = writeBatch(db);
+  const batch = writeBatch, runTransaction(db);
   wdocs.forEach(w=>batch.delete(w.ref));
   batch.delete(doc(db, "users", currentUid, "vehicles", id));
   await batch.commit();
@@ -912,10 +1031,26 @@ function openNewRepairChooser(){
 }
 
 async function createWorkorder(data){
-  await addDoc(colWorkorders(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
+  const countersRef = docCounters();
+  const woCol = colWorkorders();
+  const woRef = doc(woCol);
+
+  const result = await runTransaction(db, async (tx)=>{
+    const csnap = await tx.get(countersRef);
+    let next = 1;
+    if(csnap.exists()){
+      next = Number(csnap.data().invoiceNext || 1);
+    }
+    const invoiceNo = formatInvoiceNo(next);
+    tx.set(woRef, { ...data, invoiceNo, createdAt: isoNow(), createdAtTs: serverTimestamp() });
+    tx.set(countersRef, { invoiceNext: next + 1, updatedAt: serverTimestamp() }, { merge: true });
+    return { invoiceNo };
+  });
+
   if(data.km){
     await updateDoc(doc(db, "users", currentUid, "vehicles", data.vehicleId), { currentKm: data.km, updatedAt: serverTimestamp() });
   }
+  return result.invoiceNo;
 }
 
 function openWorkorderForm(vehicleId){
@@ -945,6 +1080,31 @@ function openWorkorderForm(vehicleId){
           <input name="km" inputmode="numeric" placeholder="ex: 123456" />
         </div>
       </div>
+
+      <div class="row" style="gap:12px">
+        <div style="flex:1; min-width:220px">
+          <label>Rendez-vous (optionnel)</label>
+          <input name="appointmentAt" type="datetime-local" />
+        </div>
+        <div style="flex:1; min-width:220px">
+          <label>Paiement</label>
+          <select name="paymentMethod">
+            <option value="">Non défini</option>
+            <option value="CASH">Cash</option>
+            <option value="CARTE">Carte</option>
+            <option value="VIREMENT">Virement</option>
+            <option value="AUTRE">Autre</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:220px">
+          <label>Statut paiement</label>
+          <select name="paymentStatus">
+            <option value="NON_PAYE">Non payé</option>
+            <option value="PAYE">Payé</option>
+          </select>
+        </div>
+      </div>
+
       <label>Problème rapporté (client)</label>
       <textarea name="reportedIssue" rows="3" placeholder="ex: bruit avant gauche..."></textarea>
       <label>Diagnostic</label>
@@ -1037,6 +1197,9 @@ function openWorkorderForm(vehicleId){
     const fd = new FormData(e.target);
     const status = String(fd.get("status")||"OUVERT");
     const km = String(fd.get("km")||"").trim();
+    const appointmentAt = String(fd.get("appointmentAt")||"").trim();
+    const paymentMethod = String(fd.get("paymentMethod")||"").trim();
+    const paymentStatus = String(fd.get("paymentStatus")||"NON_PAYE").trim();
     const reportedIssue = String(fd.get("reportedIssue")||"").trim();
     const diagnostic = String(fd.get("diagnostic")||"").trim();
     const workDone = String(fd.get("workDone")||"").trim();
@@ -1054,7 +1217,10 @@ function openWorkorderForm(vehicleId){
     try{
       await createWorkorder({
         vehicleId,
-        status: status==="TERMINE" ? "TERMINE" : "OUVERT",
+        status: (status==="TERMINE" ? "TERMINE" : (status==="EN_COURS" ? "EN_COURS" : "OUVERT")),
+        appointmentAt: appointmentAt || "",
+        paymentMethod: paymentMethod || "",
+        paymentStatus: (paymentStatus==="PAYE" ? "PAYE" : "NON_PAYE"),
         km, reportedIssue, diagnostic, workDone, notes,
         items: t.items,
         subtotal: t.subtotal,
@@ -1107,6 +1273,7 @@ function openWorkorderView(workorderId){
       </div>
       <div class="row">
         <button class="btn btn-small" onclick="window.__printWorkorder('${wo.id}')">Imprimer / PDF</button>
+        <button class="btn btn-small btn-ghost" onclick="window.__addToCalendar('${wo.id}')">Ajouter au calendrier</button>
         <button class="btn btn-small btn-ghost" onclick="window.__toggleWo('${wo.id}', '${wo.status==="OUVERT" ? "TERMINE":"OUVERT"}')">${wo.status==="OUVERT" ? "Marquer Terminé" : "Rouvrir"}</button>
         <button class="btn btn-small btn-danger" onclick="window.__deleteWo('${wo.id}')">Supprimer</button>
       </div>
@@ -1227,6 +1394,24 @@ window.__printWorkorder = (workorderId)=>{
   w.document.open(); w.document.write(html); w.document.close();
 };
 
+window.__addToCalendar = (workorderId)=>{
+  const wo = workorders.find(w=>w.id===workorderId);
+  if(!wo || !wo.appointmentAt){
+    alert("Aucun rendez-vous défini.");
+    return;
+  }
+  const v = getVehicle(wo.vehicleId);
+  const c = v ? getCustomer(v.customerId) : null;
+  const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "";
+  downloadICS({
+    title: `Rendez-vous ${GARAGE.name} — ${c?.fullName||""}`,
+    description: `Client: ${c?.fullName||""}\nTel: ${c?.phone||""}\nVéhicule: ${vehTxt} ${v?.plate?("("+v.plate+")"):""}\nProblème: ${wo.reportedIssue||""}\nFacture: ${wo.invoiceNo||""}`,
+    location: `${GARAGE.address1}, ${GARAGE.address2}`,
+    start: wo.appointmentAt,
+    durationMin: 60
+  });
+};
+
 /* Auth boot */
 onAuthStateChanged(auth, async (user)=>{
   if(user){
@@ -1234,7 +1419,7 @@ onAuthStateChanged(auth, async (user)=>{
     $("viewAuth").style.display = "none";
     $("viewApp").style.display = "";
     $("navAuthed").style.display = "";
-    await ensureSettingsDoc();
+    await ensureMetaDocs();
     unsubscribeAll();
     subscribeAll();
     go("dashboard");
