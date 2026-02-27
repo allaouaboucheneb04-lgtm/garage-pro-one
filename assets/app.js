@@ -41,7 +41,7 @@ const pageTitle = $("pageTitle");
 function safe(s){ return String(s??"").replace(/[&<>"]/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
 async function saveInvoiceSnapshot(workorderId, html){
   try{
-    await updateDoc(doc(db, "users", currentUid, "workorders", workorderId), { invoiceHtml: html, invoiceSavedAt: serverTimestamp() });
+    await updateDoc(doc(db, "workorders", workorderId), { invoiceHtml: html, invoiceSavedAt: serverTimestamp() });
   }catch(e){ /* ignore */ }
 }
 
@@ -178,11 +178,11 @@ document.querySelectorAll("[data-go]").forEach(btn=>{
 =========== */
 let currentUid = null;
 
-function colCustomers(){ return collection(db, "users", currentUid, "customers"); }
-function colVehicles(){ return collection(db, "users", currentUid, "vehicles"); }
-function colWorkorders(){ return collection(db, "users", currentUid, "workorders"); }
-function docSettings(){ return doc(db, "users", currentUid, "meta", "settings"); }
-function docCounters(){ return doc(db, "users", currentUid, "meta", "counters"); }
+function colCustomers(){ return collection(db, "customers"); }
+function colVehicles(){ return collection(db, "vehicles"); }
+function colWorkorders(){ return collection(db, "workorders"); }
+function docSettings(){ return doc(db, "meta", "settings"); }
+function docCounters(){ return doc(db, "meta", "counters"); }
 
 /* ============
    Live cache
@@ -695,7 +695,7 @@ async function createCustomer(data){
   await addDoc(colCustomers(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
 }
 async function updateCustomer(id, data){
-  await updateDoc(doc(db, "users", currentUid, "customers", id), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, "customers", id), { ...data, updatedAt: serverTimestamp() });
 }
 async function deleteCustomer(id){
   const vdocs = (await getDocs(query(colVehicles(), where("customerId","==", id), limit(2000)))).docs;
@@ -705,7 +705,7 @@ async function deleteCustomer(id){
     wdocs.forEach(w=>batch.delete(w.ref));
     batch.delete(v.ref);
   }
-  batch.delete(doc(db, "users", currentUid, "customers", id));
+  batch.delete(doc(db, "customers", id));
   await batch.commit();
 }
 
@@ -841,13 +841,13 @@ async function createVehicle(customerId, data){
   await addDoc(colVehicles(), { customerId, ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
 }
 async function updateVehicle(id, data){
-  await updateDoc(doc(db, "users", currentUid, "vehicles", id), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, "vehicles", id), { ...data, updatedAt: serverTimestamp() });
 }
 async function deleteVehicle(id){
   const wdocs = (await getDocs(query(colWorkorders(), where("vehicleId","==", id), limit(2000)))).docs;
   const batch = writeBatch, runTransaction(db);
   wdocs.forEach(w=>batch.delete(w.ref));
-  batch.delete(doc(db, "users", currentUid, "vehicles", id));
+  batch.delete(doc(db, "vehicles", id));
   await batch.commit();
 }
 
@@ -1055,7 +1055,7 @@ async function createWorkorder(data){
   });
 
   if(data.km){
-    await updateDoc(doc(db, "users", currentUid, "vehicles", data.vehicleId), { currentKm: data.km, updatedAt: serverTimestamp() });
+    await updateDoc(doc(db, "vehicles", data.vehicleId), { currentKm: data.km, updatedAt: serverTimestamp() });
   }
   return result.invoiceNo;
 }
@@ -1245,10 +1245,10 @@ function openWorkorderForm(vehicleId){
 }
 
 async function toggleWorkorderStatus(id, next){
-  await updateDoc(doc(db, "users", currentUid, "workorders", id), { status: next, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, "workorders", id), { status: next, updatedAt: serverTimestamp() });
 }
 async function deleteWorkorder(id){
-  await deleteDoc(doc(db, "users", currentUid, "workorders", id));
+  await deleteDoc(doc(db, "workorders", id));
 }
 
 function openWorkorderView(workorderId){
