@@ -53,6 +53,37 @@ function isoNow(){
   return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes());
 }
 
+
+
+/* ============
+   Garage info (modifiable)
+=========== */
+const GARAGE = {
+  name: "Garage Pro One",
+  phone: "(514) 727-0522",
+  email: "garageproone@gmail.com",
+  address1: "7880 Boul PIE-IX",
+  address2: "Montréal (QC) H1Z 3T3",
+  country: "Canada",
+  tps: "73259 0344",
+  tvq: "1230268666",
+  tagline: "Vérification / Diagnostic / Réparation"
+};
+
+// Simple inline logo (SVG) — tu peux le remplacer par une image plus tard
+const GARAGE_LOGO_SVG = `
+<svg width="44" height="44" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="Garage Pro One">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="url(#g)" opacity="0.12"/>
+  <path d="M22 40l10-10m0 0l6-6m-6 6l6 6" stroke="#1d4ed8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M40 22c-3 0-5 2-5 5 0 1 .3 2 .9 2.9L24 42c-1.5.5-3.2.2-4.4-1-1.7-1.7-1.8-4.5-.2-6.3l3.2 3.2 4-4-3.2-3.2c1.8-1.6 4.6-1.5 6.3.2 1.2 1.2 1.5 2.9 1 4.4l12-12c-.9-.6-1.9-.9-2.9-.9z" fill="#2563eb"/>
+</svg>`;
+
 /* ============
    Modal
 =========== */
@@ -1137,40 +1168,61 @@ window.__printWorkorder = (workorderId)=>{
     </tr>
   `).join("") || `<tr><td colspan="5">Aucune ligne</td></tr>`;
 
-  const html = `
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Réparation — Garage Pro One</title>
-<style>
-body{font-family:Arial,sans-serif;margin:24px;color:#111;}
-.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
-h1{margin:0 0 6px 0;font-size:20px;}
-.muted{color:#555;font-size:12px;}
-.box{border:1px solid #ddd;padding:12px;border-radius:10px;}
-table{width:100%;border-collapse:collapse;margin-top:12px;}
-th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px;}
-th{background:#fafafa;}
-.tot{margin-top:12px;max-width:320px;margin-left:auto;}
-.tot div{display:flex;justify-content:space-between;padding:4px 0;}
-.grand{font-weight:bold;font-size:16px;border-top:1px solid #ddd;padding-top:8px;}
-@media print{.no-print{display:none;}body{margin:0;}}
-</style></head><body>
-<div class="no-print" style="margin-bottom:12px;"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
-<div class="top"><div><h1>Garage Pro One — Fiche réparation</h1>
-<div class="muted">Date: ${safe(String(wo.createdAt||"").slice(0,16))} | Statut: ${safe(wo.status)}</div></div>
-<div class="muted">Généré le ${safe(new Date().toLocaleString('fr-CA'))}</div></div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
-  <div class="box"><strong>Client</strong><br>${safe(c?.fullName||"—")}<br>${safe(c?.phone||"")}<br>${safe(c?.email||"")}</div>
-  <div class="box"><strong>Véhicule</strong><br>${safe(vehTxt)}<br>Plaque: ${safe(v?.plate||"")}<br>VIN: ${safe(v?.vin||"")}<br>KM (visite): ${safe(wo.km||"")}</div>
-</div>
-<h3>Détails</h3>
-<table><thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="tot">
-  <div><span>Sous-total</span><span>${money(wo.subtotal)}</span></div>
-  <div><span>TPS (${pct(wo.tpsRate)})</span><span>${money(wo.tpsAmount)}</span></div>
-  <div><span>TVQ (${pct(wo.tvqRate)})</span><span>${money(wo.tvqAmount)}</span></div>
-  <div class="grand"><span>Total TTC</span><span>${money(wo.total)}</span></div>
-</div>
-</body></html>`;
+    const html = `
+  <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Réparation — ${safe(GARAGE.name)}</title>
+  <style>
+  body{font-family:Arial,sans-serif;margin:24px;color:#111;}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+  h1{margin:0 0 6px 0;font-size:20px;}
+  h2{margin:0 0 2px 0;font-size:16px;}
+  .muted{color:#555;font-size:12px;}
+  .small{font-size:11px;color:#555;}
+  .box{border:1px solid #ddd;padding:12px;border-radius:10px;}
+  .headerCard{border:1px solid #ddd;border-radius:12px;padding:14px;}
+  .brandRow{display:flex;gap:12px;align-items:center;}
+  table{width:100%;border-collapse:collapse;margin-top:12px;}
+  th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px;}
+  th{background:#fafafa;}
+  .tot{margin-top:12px;max-width:360px;margin-left:auto;}
+  .tot div{display:flex;justify-content:space-between;padding:4px 0;}
+  .grand{font-weight:bold;font-size:16px;border-top:1px solid #ddd;padding-top:8px;}
+  @media print{.no-print{display:none;}body{margin:0;}}
+  </style></head><body>
+  <div class="no-print" style="margin-bottom:12px;"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
+  
+  <div class="headerCard">
+    <div class="top">
+      <div class="brandRow">
+        <div>${GARAGE_LOGO_SVG}</div>
+        <div>
+          <h1>${safe(GARAGE.name)}</h1>
+          <div class="muted">${safe(GARAGE.address1)} — ${safe(GARAGE.address2)} — ${safe(GARAGE.country)}</div>
+          <div class="muted">${safe(GARAGE.email)} • ${safe(GARAGE.phone)}</div>
+          <div class="small">${safe(GARAGE.tagline)}</div>
+        </div>
+      </div>
+      <div class="muted" style="text-align:right">
+        <div><strong>Date:</strong> ${safe(String(wo.createdAt||"").slice(0,16))}</div>
+        <div><strong>Statut:</strong> ${safe(wo.status)}</div>
+        <div class="small" style="margin-top:6px">TPS/TVH: ${safe(GARAGE.tps)}<br/>TVQ: ${safe(GARAGE.tvq)}</div>
+      </div>
+    </div>
+  </div>
+  
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+    <div class="box"><strong>Client</strong><br>${safe(c?.fullName||"—")}<br>${safe(c?.phone||"")}<br>${safe(c?.email||"")}</div>
+    <div class="box"><strong>Véhicule</strong><br>${safe(vehTxt)}<br>Plaque: ${safe(v?.plate||"")}<br>VIN: ${safe(v?.vin||"")}<br>KM (visite): ${safe(wo.km||"")}</div>
+  </div>
+  <h2 style="margin-top:14px;">Détails</h2>
+  <table><thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="tot">
+    <div><span>Sous-total</span><span>${money(wo.subtotal)}</span></div>
+    <div><span>TPS (${pct(wo.tpsRate)})</span><span>${money(wo.tpsAmount)}</span></div>
+    <div><span>TVQ (${pct(wo.tvqRate)})</span><span>${money(wo.tvqAmount)}</span></div>
+    <div class="grand"><span>Total TTC</span><span>${money(wo.total)}</span></div>
+  </div>
+  </body></html>`;
   const w = window.open("", "_blank");
   w.document.open(); w.document.write(html); w.document.close();
 };
