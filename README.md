@@ -1,46 +1,33 @@
-# Garage Pro One — Synchro automatique (iPhone + PC) — HTML/CSS/JS + Firebase
+# Maître du Voyage — Luxe Premium (Démo)
 
-✅ Même site sur iPhone et PC, **données synchronisées automatiquement** (cloud).
-Connexion: **Email / Mot de passe**.
+Projet Next.js (App Router) + Tailwind — site public + application Admin (dans /admin) pour gérer les promotions **sans toucher au code**.
 
-## 1) Créer Firebase (Google)
-1. Firebase Console → crée un projet
-2. **Authentication** → Sign-in method → **Email/Password** (Enable)
-3. **Firestore Database** → Create database
+## Pré-requis
+- Node.js 18+ (idéalement 20)
 
-## 2) Mettre la config Firebase (OBLIGATOIRE)
-Firebase Console → Project settings → Your apps → Web app → SDK setup and configuration
-
-Copie l'objet `firebaseConfig` et colle-le dans:
-- `assets/firebase-config.js`
-
-Exemple:
-```js
-window.FIREBASE_CONFIG = {
-  apiKey: "...",
-  authDomain: "...",
-  projectId: "...",
-  storageBucket: "...",
-  messagingSenderId: "...",
-  appId: "..."
-};
-```
-
-## 3) Règles de sécurité Firestore
-Firebase Console → Firestore Database → Rules
-Copie/colle le fichier `firestore.rules`.
-
-## 4) Mettre en ligne (Firebase Hosting)
-Sur PC:
+## Installation
 ```bash
-npm i -g firebase-tools
-firebase login
-firebase init hosting
-firebase deploy
+npm install
+npm run dev
 ```
 
-## Utilisation
-- Ouvre le site
-- Onglet **Créer compte**
-- Connecte-toi sur iPhone et PC avec le même email/mot de passe
-➡️ mêmes clients / réparations.
+Ouvre: http://localhost:3000
+
+## Accès
+- Site public: `/` et `/promotions`
+- Admin promos: `/admin`
+- Demandes (devis/réservation démo): `/admin/leads`
+
+## Stockage (démo locale)
+- Promos: `src/data/promos.json`
+- Leads: `src/data/leads.json` (créé automatiquement)
+
+> Important: en production (hébergement serverless), l'écriture fichier n'est pas idéale.
+> On branchera Supabase (DB) + Auth + Storage, et Stripe pour les paiements.
+
+## Roadmap production (si tu veux)
+- Auth admin (login + rôles)
+- DB Supabase + stockage images
+- Paiements Stripe (acompte / complet)
+- SEO + pages destinations détaillées
+- Import CSV promos + gestion vedettes + expiration automatique
