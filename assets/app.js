@@ -51,6 +51,11 @@ function pct(n){
   return (Number(n)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'') + "%";
 }
 
+function payLabel(v){
+  const m={CASH:"Cash",CARTE:"Carte",VIREMENT:"Virement",AUTRE:"Autre"};
+  return m[v] || v || "";
+}
+
 function formatInvoiceNo(n){
   const num = Number(n||0);
   const pad = String(num).padStart(4,'0');
@@ -1337,7 +1342,7 @@ window.__printWorkorder = (workorderId)=>{
 
     const html = `
   <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Réparation — ${safe(GARAGE.name)}</title>
+  <title>Facture ${safe(wo.invoiceNo||"")} — ${safe(GARAGE.name)}</title>
   <style>
   body{font-family:Arial,sans-serif;margin:24px;color:#111;}
   .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
@@ -1369,9 +1374,11 @@ window.__printWorkorder = (workorderId)=>{
           <div class="small">${safe(GARAGE.tagline)}</div>
         </div>
       </div>
-      <div class="muted" style="text-align:right">
+            <div class="muted" style="text-align:right">
+        <div><strong>Facture:</strong> ${safe(wo.invoiceNo||"")}</div>
         <div><strong>Date:</strong> ${safe(String(wo.createdAt||"").slice(0,16))}</div>
         <div><strong>Statut:</strong> ${safe(wo.status)}</div>
+        ${wo.paymentMethod ? `<div><strong>Paiement:</strong> ${safe(payLabel(wo.paymentMethod))} ${wo.paymentStatus==="PAYE" ? "(Payé)" : "(Non payé)"}</div>` : ""}
         <div class="small" style="margin-top:6px">TPS/TVH: ${safe(GARAGE.tps)}<br/>TVQ: ${safe(GARAGE.tvq)}</div>
       </div>
     </div>
