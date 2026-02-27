@@ -45,3 +45,5 @@ tr:hover td{background:#fbfdff}
 .modal header h3{margin:0;font-size:15px}
 .modal .body{padding:14px}
 .footer{padding:18px 0;text-align:center;color:var(--muted);font-size:12px}
+
+#navBar.hidden{display:none !important}

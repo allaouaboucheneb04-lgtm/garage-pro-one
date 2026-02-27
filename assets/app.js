@@ -1,3 +1,4 @@
+setNavVisible(false);
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -44,6 +45,13 @@ const docSettings  = ()=>doc(db,"users",uid,"meta","settings");
 const docCounters  = ()=>doc(db,"users",uid,"meta","counters");
 const docUser      = ()=>doc(db,"users",uid);
 
+
+function setNavVisible(isVisible){
+  const nav = document.getElementById("navBar");
+  const logout = document.getElementById("logoutBtn");
+  if(nav) nav.classList.toggle("hidden", !isVisible);
+  if(logout) logout.classList.toggle("hidden", !isVisible);
+}
 function showTab(name){
   $("#dashboardTab").classList.toggle("hidden", name!=="dashboard");
   $("#clientsTab").classList.toggle("hidden", name!=="clients");
@@ -144,11 +152,13 @@ onAuthStateChanged(auth, async (user)=>{
   unsubscribeAll();
   if(!user){
     uid=null;
+    setNavVisible(false);
     $("#authView").classList.remove("hidden");
     $("#appView").classList.add("hidden");
     return;
   }
   uid=user.uid;
+  setNavVisible(true);
   $("#authView").classList.add("hidden");
   $("#appView").classList.remove("hidden");
   showTab("dashboard");
