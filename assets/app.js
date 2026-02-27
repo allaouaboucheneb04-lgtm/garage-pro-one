@@ -25,6 +25,88 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 /* ============
+   Roles (admin / mechanic)
+=========== */
+let currentRole = "admin";
+let currentUserName = "";
+let unsubProfile = null;
+let mechanics = [];
+
+function docUserProfile(uid=currentUid){
+  return doc(db, "users", uid);
+}
+
+async function ensureUserProfile(user){
+  // Si aucun profil (première connexion), on crée ADMIN par défaut
+  const ref = docUserProfile(user.uid);
+  const snap = await getDoc(ref);
+  if(!snap.exists()){
+    await setDoc(ref, {
+      role: "admin",
+      name: (user.displayName || ""),
+      email: user.email || "",
+      createdAt: isoNow(),
+      createdAtTs: serverTimestamp(),
+      updatedAt: isoNow(),
+      updatedAtTs: serverTimestamp(),
+    });
+  }
+}
+
+async function loadRole(){
+  if(!currentUid) return;
+  try{
+    const snap = await getDoc(docUserProfile());
+    if(snap.exists()){
+      const d = snap.data();
+      currentRole = (d.role === "mechanic") ? "mechanic" : "admin";
+      currentUserName = d.name || d.email || "";
+    }else{
+      currentRole = "admin";
+      currentUserName = "";
+    }
+  }catch(e){
+    console.warn("loadRole failed", e);
+    currentRole = "admin";
+  }
+  applyRoleUI();
+}
+
+function applyRoleUI(){
+  const btnDash = document.querySelector('[data-go="dashboard"]');
+  const btnSettings = document.querySelector('[data-go="settings"]');
+  if(btnDash) btnDash.style.display = (currentRole === "admin") ? "" : "none";
+  if(btnSettings) btnSettings.style.display = (currentRole === "admin") ? "" : "none";
+
+  const b1 = $("btnNewClient");
+  const b2 = $("btnNewRepair");
+  const b3 = $("btnNewRepair2");
+  if(b1) b1.style.display = (currentRole === "admin") ? "" : "none";
+  if(b2) b2.style.display = (currentRole === "admin") ? "" : "none";
+  if(b3) b3.style.display = (currentRole === "admin") ? "" : "none";
+
+  const subtitle = document.querySelector('.brand .muted');
+  if(subtitle){
+    subtitle.textContent = (currentRole === "mechanic")
+      ? "Mode mécanicien — Mes travaux"
+      : "Synchro automatique (Firebase)";
+  }
+}
+
+async function loadMechanics(){
+  mechanics = [];
+  if(currentRole !== "admin") return;
+  try{
+    const snap = await getDocs(query(collection(db, "users"), where("role","==","mechanic")));
+    mechanics = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}))
+      .map(u=>({uid:u.uid, name:u.name || u.email || u.uid, email:u.email||""}));
+  }catch(e){
+    console.warn("loadMechanics failed", e);
+  }
+}
+
+
+/* ============
    UI helpers
 =========== */
 const $ = (id)=>document.getElementById(id);
@@ -109,6 +191,9 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings")){
+    view = "repairs";
+  }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
   const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
@@ -288,25 +373,29 @@ function subscribeAll(){
         tvqRate: Number(d.tvqRate ?? 0.09975),
       };
       renderSettings();
-      renderDashboard();
+      if(currentRole === "admin") renderDashboard();
     }
   });
 
   unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
     customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderDashboard();
+    if(currentRole === "admin") renderDashboard();
     renderClients();
   });
 
   unsubVehicles = onSnapshot(query(colVehicles(), orderBy("createdAt", "desc")), (snap)=>{
     vehicles = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderDashboard();
+    if(currentRole === "admin") renderDashboard();
     renderClients();
   });
 
-  unsubWorkorders = onSnapshot(query(colWorkorders(), orderBy("createdAt", "desc"), limit(400)), (snap)=>{
+  const woQ = (currentRole === "mechanic")
+    ? query(colWorkorders(), where("assignedTo","==", currentUid), limit(400))
+    : query(colWorkorders(), orderBy("createdAt", "desc"), limit(400));
+
+  unsubWorkorders = onSnapshot(woQ, (snap)=>{
     workorders = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderDashboard();
+    if(currentRole === "admin") renderDashboard();
     renderRepairs();
   });
 }
@@ -327,6 +416,11 @@ function getCustomer(id){ return customers.find(c=>c.id===id); }
 function getVehicle(id){ return vehicles.find(v=>v.id===id); }
 
 function renderDashboard(){
+  if(currentRole === "mechanic"){
+    $("dashboardCards").innerHTML = `<div class="note">Accès réservé à l'administrateur.</div>`;
+    $("openRepairsTbody").innerHTML = `<tr><td colspan="4" class="muted">—</td></tr>`;
+    return;
+  }
   const totalCustomers = customers.length;
   const totalVehicles = vehicles.length;
   const openCount = workorders.filter(w=>w.status==="OUVERT").length;
@@ -491,7 +585,7 @@ function renderRepairs(){
     const client = c ? c.fullName : "—";
     const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
     const d = String(w.createdAt||"").slice(0,10);
-    const pill = w.status==="TERMINE" ? "pill-ok" : "pill-warn";
+    const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
     return `
       <tr>
         <td>${safe(d)}</td>
@@ -715,7 +809,7 @@ function openClientView(customerId){
   const woRows = wos.length ? wos.map(w=>{
     const v = getVehicle(w.vehicleId);
     const veh = v ? [v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-    const pill = w.status==="TERMINE" ? "pill-ok" : "pill-warn";
+    const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
     return `
       <tr>
         <td>${safe(String(w.createdAt||"").slice(0,10))}</td>
@@ -849,7 +943,7 @@ function openVehicleView(vehicleId){
   const wos = workorders.filter(w=>w.vehicleId===v.id).sort(byCreatedDesc);
 
   const woRows = wos.length ? wos.map(w=>{
-    const pill = w.status==="TERMINE" ? "pill-ok" : "pill-warn";
+    const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
     return `
       <tr>
         <td>${safe(String(w.createdAt||"").slice(0,10))}</td>
@@ -973,9 +1067,9 @@ async function createWorkorder(data){
   if(!data.invoiceNo){
     data.invoiceNo = await nextInvoiceNo();
   }
-  await addDoc(colWorkorders(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
+  await addDoc(colWorkorders(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp(), createdBy: currentUid, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid });
   if(data.km){
-    await updateDoc(doc(colVehicles(), data.vehicleId), { currentKm: data.km, updatedAt: serverTimestamp() });
+    await updateDoc(doc(colVehicles(), data.vehicleId), { currentKm: data.km, updatedAt: isoNow(), updatedAtTs: serverTimestamp() });
   }
 }
 
@@ -1007,6 +1101,19 @@ function openWorkorderForm(vehicleId){
           <input name="km" inputmode="numeric" placeholder="ex: 123456" />
         </div>
       </div>
+
+      ${currentRole==="admin" ? `
+      <div class="row" style="gap:12px">
+        <div style="flex:1; min-width:220px">
+          <label>Assigné à (mécanicien)</label>
+          <select name="assignedTo">
+            <option value="">— Non assigné —</option>
+            ${mechanics.map(m=>`<option value="${m.uid}" ${wo?.assignedTo===m.uid ? "selected":""}>${safe(m.name)}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+
+      ` : ``}
 
       <div class="row" style="gap:12px">
         <div style="flex:1; min-width:220px">
@@ -1126,6 +1233,8 @@ function openWorkorderForm(vehicleId){
     const notes = String(fd.get("notes")||"").trim();
     const paymentMethod = String(fd.get("paymentMethod")||"").trim();
     const paymentStatus = String(fd.get("paymentStatus")||"NON_PAYE").trim();
+    const assignedTo = String(fd.get("assignedTo")||"").trim();
+    const assignedName = mechanics.find(m=>m.uid===assignedTo)?.name || "";
 
     const items = collectItems();
     const t = calcTotals(items, settings.tpsRate, settings.tvqRate);
@@ -1141,6 +1250,9 @@ function openWorkorderForm(vehicleId){
         vehicleId,
         status: (status==="TERMINE"?"TERMINE":(status==="EN_COURS"?"EN_COURS":"OUVERT")),
         km, reportedIssue, diagnostic, workDone, notes, paymentMethod, paymentStatus,
+        assignedTo: (currentRole==="admin" ? assignedTo : currentUid),
+        assignedName: (currentRole==="admin" ? assignedName : (currentUserName || "")),
+        
         items: t.items,
         subtotal: t.subtotal,
         tpsRate: settings.tpsRate,
@@ -1156,6 +1268,11 @@ function openWorkorderForm(vehicleId){
   };
 }
 
+async function setWorkorderStatus(id, status){
+  const ref = docWorkorder(id);
+  await updateDoc(ref, { status, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid });
+}
+
 async function toggleWorkorderStatus(id, next){
   await updateDoc(doc(colWorkorders(), id), { status: next, updatedAt: serverTimestamp() });
 }
@@ -1169,7 +1286,7 @@ function openWorkorderView(workorderId){
   const v = getVehicle(wo.vehicleId);
   const c = v ? getCustomer(v.customerId) : null;
   const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "—";
-  const pill = wo.status==="TERMINE" ? "pill-ok" : "pill-warn";
+  const pill = wo.status==="TERMINE" ? "pill-ok" : (wo.status==="EN_COURS" ? "pill-blue" : "pill-warn");
 
   const itemsRows = (wo.items && wo.items.length) ? wo.items.map(it=>`
     <tr>
@@ -1187,13 +1304,14 @@ function openWorkorderView(workorderId){
         <h2 style="margin:0">Réparation</h2>
         <div class="muted" style="margin-top:6px">
           Date: ${safe(String(wo.createdAt||"").slice(0,16))} —
-          Statut: <span class="pill ${pill}">${safe(wo.status)}</span>
+          Statut: <span class="pill ${pill}">${safe(wo.status)}</span> — Assigné: <strong>${safe(wo.assignedName || "—")}</strong>
         </div>
       </div>
       <div class="row">
         <button class="btn btn-small" onclick="window.__printWorkorder('${wo.id}')">Imprimer / PDF</button>
-        <button class="btn btn-small btn-ghost" onclick="window.__toggleWo('${wo.id}', '${wo.status==="OUVERT" ? "TERMINE":"OUVERT"}')">${wo.status==="OUVERT" ? "Marquer Terminé" : "Rouvrir"}</button>
-        <button class="btn btn-small btn-danger" onclick="window.__deleteWo('${wo.id}')">Supprimer</button>
+        ${wo.status!=="EN_COURS" ? `<button class="btn btn-small btn-ghost" onclick="window.__setWoStatus('${wo.id}', 'EN_COURS')">Démarrer</button>` : ``}
+        ${wo.status!=="TERMINE" ? `<button class="btn btn-small btn-ghost" onclick="window.__setWoStatus('${wo.id}', 'TERMINE')">Terminer</button>` : `<button class="btn btn-small btn-ghost" onclick="window.__setWoStatus('${wo.id}', 'OUVERT')">Rouvrir</button>`}
+        ${currentRole==="admin" ? `<button class="btn btn-small btn-danger" onclick="window.__deleteWo('${wo.id}')">Supprimer</button>` : ``}
       </div>
     </div>
     <div class="divider"></div>
@@ -1233,7 +1351,7 @@ function openWorkorderView(workorderId){
     ${wo.notes ? `<h3>Notes</h3><div class="note">${safe(wo.notes).replace(/\n/g,'<br>')}</div>` : ""}
   `);
 }
-window.__toggleWo = async (id, next)=>{ await toggleWorkorderStatus(id, next); closeModal(); };
+window.__setWoStatus = async (id, next)=>{ await setWorkorderStatus(id, next); closeModal(); };
 window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
 
 /* Print */
@@ -1319,16 +1437,41 @@ onAuthStateChanged(auth, async (user)=>{
   if(user){
     currentUid = user.uid;
     DATA_MODE = await detectDataMode();
+    await ensureUserProfile(user);
+    await loadRole();
+
     $("viewAuth").style.display = "none";
     $("viewApp").style.display = "";
     $("navAuthed").style.display = "";
+
+    if(unsubProfile) try{unsubProfile();}catch(e){}
+    unsubProfile = onSnapshot(docUserProfile(), (snap)=>{
+      if(snap.exists()){
+        const d = snap.data();
+        currentRole = (d.role === "mechanic") ? "mechanic" : "admin";
+        currentUserName = d.name || d.email || "";
+        applyRoleUI();
+      }
+    });
+
     await ensureSettingsDoc();
+    await loadMechanics();
     unsubscribeAll();
     subscribeAll();
-    go("dashboard");
+
+    if(currentRole === "mechanic"){
+      go("repairs");
+    }else{
+      go("dashboard");
+    }
     renderSettings();
   }else{
     currentUid = null;
+    currentRole = "admin";
+    currentUserName = "";
+    if(unsubProfile) try{unsubProfile();}catch(e){}
+    unsubProfile = null;
+
     unsubscribeAll();
     customers = []; vehicles = []; workorders = [];
     $("viewApp").style.display = "none";
