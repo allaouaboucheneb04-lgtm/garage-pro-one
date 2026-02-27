@@ -89,6 +89,17 @@
         <div class="card" style="grid-column:1/-1">
           <h2>Résumé</h2>
           <div class="kpi" id="kpi"></div>
+          <div class="divider"></div>
+          <div class="grid" style="grid-template-columns:1fr; gap:12px">
+            <div>
+              <h3 style="margin:0 0 8px 0">Revenus (6 derniers mois)</h3>
+              <div id="monthsStats" class="muted">—</div>
+            </div>
+            <div>
+              <h3 style="margin:0 0 8px 0">Rendez-vous à venir</h3>
+              <div id="upcomingAppts" class="muted">—</div>
+            </div>
+          </div>
         </div>
 
         <div class="card" style="grid-column:1/-1">
@@ -151,6 +162,7 @@
           <select id="repairsStatus">
             <option value="">Tous statuts</option>
             <option value="OUVERT">Ouvert</option>
+            <option value="EN_COURS">En cours</option>
             <option value="TERMINE">Terminé</option>
           </select>
           <button class="btn btn-primary" id="btnRepairsFilter">Filtrer</button>
