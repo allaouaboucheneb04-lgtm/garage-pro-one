@@ -9,6 +9,8 @@ import {
   addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
+
+const APP_VERSION = "PRO-FIX-v3-2026-02-27";
 /* ============
    Firebase init
 =========== */
