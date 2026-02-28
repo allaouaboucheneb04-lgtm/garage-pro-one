@@ -94,17 +94,16 @@ async function loadRole(){
 }
 
 function applyRoleUI(){
-  const btnDash = document.querySelector('[data-go="dashboard"]');
-  const btnSettings = document.querySelector('[data-go="settings"]');
-  if(btnDash) btnDash.style.display = (currentRole === "admin") ? "" : "none";
-  if(btnSettings) btnSettings.style.display = (currentRole === "admin") ? "" : "none";
+  const isAdmin = (currentRole === "admin");
 
-  const b1 = $("btnNewClient");
-  const b2 = $("btnNewRepair");
-  const b3 = $("btnNewRepair2");
-  if(b1) b1.style.display = (currentRole === "admin") ? "" : "none";
-  if(b2) b2.style.display = (currentRole === "admin") ? "" : "none";
-  if(b3) b3.style.display = (currentRole === "admin") ? "" : "none";
+  // 1) tout ce qui est marqué data-role="admin" (HTML)
+  document.querySelectorAll('[data-role="admin"]').forEach(el=>{
+    el.style.display = isAdmin ? "" : "none";
+  });
+
+  // 2) fallback pour quelques ids (au cas où)
+  const ids = ["btnNewClient","btnNewClient2","btnNewRepair","btnNewRepair2"];
+  ids.forEach(id=>{ const el = $(id); if(el) el.style.display = isAdmin ? "" : "none"; });
 
   const subtitle = document.querySelector('.brand .muted');
   if(subtitle){
@@ -200,19 +199,48 @@ const GARAGE_LOGO_SVG = `
 const modalBackdrop = $("modalBackdrop");
 const modalTitle = $("modalTitle");
 const modalBody = $("modalBody");
-$("btnModalClose").onclick = closeModal;
+const btnModalClose = $("btnModalClose");
+btnModalClose.onclick = closeModal;
 modalBackdrop.addEventListener("click", (e)=>{ if(e.target===modalBackdrop) closeModal(); });
 
+// pour éviter l\'avertissement aria-hidden (focus gardé dans le modal)
+let _lastFocusedBeforeModal = null;
+
 function openModal(title, html){
+  _lastFocusedBeforeModal = document.activeElement;
+
   modalTitle.textContent = title;
   modalBody.innerHTML = html;
   modalBackdrop.style.display = "flex";
   modalBackdrop.setAttribute("aria-hidden","false");
+  modalBackdrop.removeAttribute("inert");
+
+  document.body.classList.add("modal-open");
+
+  // focus sur le bouton fermer (accessibilité)
+  setTimeout(()=>{ try{ btnModalClose && btnModalClose.focus(); }catch(e){} }, 0);
 }
+
 function closeModal(){
+  // si le focus est dans le modal, on le retire avant de cacher (sinon warning aria-hidden)
+  try{
+    if(modalBackdrop.contains(document.activeElement)){
+      document.activeElement.blur();
+    }
+  }catch(e){}
+
   modalBackdrop.style.display = "none";
   modalBackdrop.setAttribute("aria-hidden","true");
+  modalBackdrop.setAttribute("inert", "");
   modalBody.innerHTML = "";
+
+  document.body.classList.remove("modal-open");
+
+  // revenir au dernier élément focus
+  try{
+    if(_lastFocusedBeforeModal && _lastFocusedBeforeModal.focus) _lastFocusedBeforeModal.focus();
+  }catch(e){}
+  _lastFocusedBeforeModal = null;
 }
 
 /* ============
@@ -844,11 +872,11 @@ function openClientView(customerId){
         <td class="muted">${safe(v.vin||"")}</td>
         <td class="nowrap">
           <button class="btn btn-small" onclick="window.__openVehicleView('${v.id}')">Ouvrir</button>
-          <button class="btn btn-small btn-ghost" onclick="window.__openWorkorderForm('${v.id}')">+ Réparation</button>
+          ${currentRole === 'admin' ? `<button class="btn btn-small btn-ghost" onclick="window.__openWorkorderForm('${v.id}')">+ Réparation</button>` : ``}
         </td>
       </tr>
     `;
-  }).join("") : `<tr><td colspan="4" class="muted">Aucun véhicule. Ajoute-en un.</td></tr>`;
+  }).join("") : `<tr><td colspan="4" class="muted">Aucun véhicule.</td></tr>`;
 
   const woRows = wos.length ? wos.map(w=>{
     const v = getVehicle(w.vehicleId);
@@ -875,11 +903,13 @@ function openClientView(customerId){
           <strong>Email:</strong> ${safe(c.email||"")}
         </div>
       </div>
+      ${currentRole === 'admin' ? `
       <div class="row">
         <button class="btn btn-small" onclick="window.__openClientForm('${c.id}')">Modifier</button>
         <button class="btn btn-small btn-ghost" onclick="window.__openVehicleForm(null, '${c.id}')">+ Véhicule</button>
         <button class="btn btn-small btn-danger" onclick="window.__deleteCustomer('${c.id}')">Supprimer</button>
       </div>
+      ` : ``}
     </div>
     ${c.notes ? `<div class="note" style="margin-top:12px">${safe(c.notes).replace(/\n/g,'<br>')}</div>` : ""}
     <div class="divider"></div>
