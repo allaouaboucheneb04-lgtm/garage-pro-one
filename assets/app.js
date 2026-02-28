@@ -142,6 +142,7 @@ const views = {
   clients: $("viewClients"),
   repairs: $("viewRepairs"),
   settings: $("viewSettings"),
+  revenue: $("viewRevenue"),
 };
 const pageTitle = $("pageTitle");
 
@@ -247,11 +248,11 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
-  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue")){
     view = "repairs";
   }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", revenue:"Revenus", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
 }
 document.querySelectorAll("[data-go]").forEach(btn=>{
@@ -438,12 +439,14 @@ function subscribeAll(){
     customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
     if(currentRole === "admin") renderDashboard();
     renderClients();
+    if(currentRole === "admin") renderRevenue();
   });
 
   unsubVehicles = onSnapshot(query(colVehicles(), orderBy("createdAt", "desc")), (snap)=>{
     vehicles = snap.docs.map(d=>({id:d.id, ...d.data()}));
     if(currentRole === "admin") renderDashboard();
     renderClients();
+    if(currentRole === "admin") renderRevenue();
   });
 
   const woQ = (currentRole === "mechanic")
@@ -456,6 +459,7 @@ function subscribeAll(){
       workorders = snap.docs.map(d=>({id:d.id, ...d.data()}));
       if(currentRole === "admin") renderDashboard();
       renderRepairs();
+      if(currentRole === "admin") renderRevenue();
     },
     (err)=>{
       console.warn('workorders onSnapshot error', err);
@@ -591,6 +595,132 @@ const clientsCount = $("clientsCount");
 $("btnClientsSearch").onclick = ()=>renderClients();
 $("btnClientsClear").onclick = ()=>{ $("clientsSearch").value=""; renderClients(); };
 
+
+/* ============
+   Revenue view
+=========== */
+const revPresetEl = $("revPreset");
+const revFromEl = $("revFrom");
+const revToEl = $("revTo");
+const revTotalEl = $("revTotal");
+const revCountEl = $("revCount");
+const revAvgEl = $("revAvg");
+const revTbody = $("revTbody");
+const btnRevApply = $("btnRevApply");
+
+function isoDate(d){
+  // YYYY-MM-DD in local time
+  const tzOff = d.getTimezoneOffset()*60000;
+  return new Date(d.getTime()-tzOff).toISOString().slice(0,10);
+}
+function firstDayOfMonth(d){
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+function lastDayOfMonth(d){
+  return new Date(d.getFullYear(), d.getMonth()+1, 0);
+}
+function setRevenuePreset(preset){
+  const now = new Date();
+  if(preset === "today"){
+    const t = isoDate(now);
+    revFromEl.value = t;
+    revToEl.value = t;
+    revFromEl.disabled = true;
+    revToEl.disabled = true;
+  }else if(preset === "month"){
+    revFromEl.value = isoDate(firstDayOfMonth(now));
+    revToEl.value = isoDate(lastDayOfMonth(now));
+    revFromEl.disabled = true;
+    revToEl.disabled = true;
+  }else{
+    // custom
+    if(!revFromEl.value) revFromEl.value = isoDate(firstDayOfMonth(now));
+    if(!revToEl.value) revToEl.value = isoDate(now);
+    revFromEl.disabled = false;
+    revToEl.disabled = false;
+  }
+}
+function revenueRange(){
+  const from = (revFromEl && revFromEl.value) ? revFromEl.value : "0000-01-01";
+  const to = (revToEl && revToEl.value) ? revToEl.value : "9999-12-31";
+  return {from, to};
+}
+function workorderDateKey(w){
+  const s = String(w.invoiceDate || w.createdAt || w.updatedAt || "");
+  return s.slice(0,10);
+}
+function filterRevenueWorkorders(){
+  const {from, to} = revenueRange();
+  return workorders
+    .filter(w=>Number(w.total||0) > 0)
+    .filter(w=>!!w.invoiceNo) // seulement factures
+    .filter(w=>{
+      const k = workorderDateKey(w);
+      return k && k >= from && k <= to;
+    })
+    .sort((a,b)=> (workorderDateKey(b).localeCompare(workorderDateKey(a))) || String(b.invoiceNo||"").localeCompare(String(a.invoiceNo||"")));
+}
+
+function renderRevenue(){
+  if(!$("viewRevenue")) return;
+  if(currentRole !== "admin"){
+    // sécurité: revenue view admin only
+    if(revTotalEl) revTotalEl.textContent = money(0);
+    if(revCountEl) revCountEl.textContent = "0";
+    if(revAvgEl) revAvgEl.textContent = money(0);
+    if(revTbody) revTbody.innerHTML = '<tr><td colspan="7" class="muted">Accès réservé à l\'administrateur.</td></tr>';
+    return;
+  }
+
+  const rows = filterRevenueWorkorders();
+  const total = rows.reduce((s,w)=>s+Number(w.total||0),0);
+  const count = rows.length;
+  const avg = count ? total/count : 0;
+
+  if(revTotalEl) revTotalEl.textContent = money(total);
+  if(revCountEl) revCountEl.textContent = String(count);
+  if(revAvgEl) revAvgEl.textContent = money(avg);
+
+  if(!revTbody) return;
+
+  if(count === 0){
+    revTbody.innerHTML = '<tr><td colspan="7" class="muted">Aucune facture pour cette période.</td></tr>';
+    return;
+  }
+
+  revTbody.innerHTML = rows.map(w=>{
+    const v = getVehicle(w.vehicleId);
+    const c = v ? getCustomer(v.customerId) : null;
+    const client = c ? esc(c.fullName) : "—";
+    const veh = v ? esc([v.year,v.make,v.model].filter(Boolean).join(" ")) + (v.plate ? " • " + esc(v.plate) : "") : "—";
+    const date = esc(workorderDateKey(w) || "—");
+    const method = esc(String(w.paymentMethod || "—"));
+    const inv = esc(String(w.invoiceNo || "—"));
+    const tot = money(Number(w.total||0));
+    const btn = `<button class="btn btn-ghost" onclick="window.__printWorkorder('${w.id}')">PDF</button>`;
+    return `<tr>
+      <td>${inv}</td>
+      <td>${date}</td>
+      <td>${client}</td>
+      <td>${veh}</td>
+      <td>${method}</td>
+      <td style="text-align:right">${tot}</td>
+      <td class="no-print" style="text-align:right">${btn}</td>
+    </tr>`;
+  }).join("");
+}
+
+// init revenue controls
+if(revPresetEl && revFromEl && revToEl){
+  setRevenuePreset(revPresetEl.value || "month");
+  revPresetEl.addEventListener("change", ()=>{
+    setRevenuePreset(revPresetEl.value);
+    renderRevenue();
+  });
+  if(btnRevApply) btnRevApply.addEventListener("click", ()=>renderRevenue());
+}
+
+
 function renderClients(){
   const q = ($("clientsSearch").value||"").trim().toLowerCase();
   let list = [...customers].sort((a,b)=> String(a.fullName||"").localeCompare(String(b.fullName||""), 'fr'));
@@ -623,7 +753,9 @@ function renderClients(){
 const repairsTbody = $("repairsTbody");
 const repairsCount = $("repairsCount");
 $("btnRepairsFilter").onclick = ()=>renderRepairs();
-$("btnRepairsClear").onclick = ()=>{ $("repairsSearch").value=""; $("repairsStatus").value=""; renderRepairs(); };
+      if(currentRole === "admin") renderRevenue();
+$("btnRepairsClear").onclick = ()=>{ $("repairsSearch").value=""; $("repairsStatus").value=""; renderRepairs();
+      if(currentRole === "admin") renderRevenue(); };
 
 function renderRepairs(){
   const q = ($("repairsSearch").value||"").trim().toLowerCase();
