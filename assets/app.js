@@ -683,31 +683,53 @@ function renderRevenue(){
 
   if(!revTbody) return;
 
+  // Important: sur certains navigateurs (mobile + overlay/modals),
+  // revTbody.innerHTML peut ne pas se rafraîchir correctement.
+  // Ici on reconstruit les lignes via le DOM, plus fiable.
+  while(revTbody.firstChild) revTbody.removeChild(revTbody.firstChild);
+
   if(count === 0){
-    revTbody.innerHTML = '<tr><td colspan="7" class="muted">Aucune facture pour cette période.</td></tr>';
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 7;
+    td.className = 'muted';
+    td.textContent = 'Aucune facture pour cette période.';
+    tr.appendChild(td);
+    revTbody.appendChild(tr);
     return;
   }
 
-  revTbody.innerHTML = rows.map(w=>{
+  for(const w of rows){
     const v = getVehicle(w.vehicleId);
     const c = v ? getCustomer(v.customerId) : null;
-    const client = c ? esc(c.fullName) : "—";
-    const veh = v ? esc([v.year,v.make,v.model].filter(Boolean).join(" ")) + (v.plate ? " • " + esc(v.plate) : "") : "—";
-    const date = esc(workorderDateKey(w) || "—");
-    const method = esc(String(w.paymentMethod || "—"));
-    const inv = esc(String(w.invoiceNo || "—"));
+    const client = c ? (c.fullName || '—') : '—';
+    const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(' ') + (v.plate ? ' • ' + v.plate : '') : '—';
+    const date = workorderDateKey(w) || '—';
+    const method = String(w.paymentMethod || '—');
+    const inv = String(w.invoiceNo || '—');
     const tot = money(Number(w.total||0));
-    const btn = `<button class="btn btn-ghost" onclick="window.__printWorkorder('${w.id}')">PDF</button>`;
-    return `<tr>
-      <td>${inv}</td>
-      <td>${date}</td>
-      <td>${client}</td>
-      <td>${veh}</td>
-      <td>${method}</td>
-      <td style="text-align:right">${tot}</td>
-      <td class="no-print" style="text-align:right">${btn}</td>
-    </tr>`;
-  }).join("");
+
+    const tr = document.createElement('tr');
+    const cells = [inv, date, client, veh, method, tot];
+    cells.forEach((val, idx)=>{
+      const td = document.createElement('td');
+      if(idx === 5) td.style.textAlign = 'right';
+      td.textContent = val;
+      tr.appendChild(td);
+    });
+
+    const tdBtn = document.createElement('td');
+    tdBtn.className = 'no-print';
+    tdBtn.style.textAlign = 'right';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost';
+    btn.textContent = 'PDF';
+    btn.addEventListener('click', ()=> window.__printWorkorder && window.__printWorkorder(w.id));
+    tdBtn.appendChild(btn);
+    tr.appendChild(tdBtn);
+
+    revTbody.appendChild(tr);
+  }
 }
 
 // init revenue controls
