@@ -142,3 +142,8 @@ tr:hover td{background:#f3f4f6}
 
 /* Empêche le scroll de la page quand le modal est ouvert */
 body.modal-open{overflow:hidden}
+
+/* Table row selection (promotions) */
+.row-selected td{
+  background: rgba(0,0,0,.04);
+}

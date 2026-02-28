@@ -48,6 +48,10 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /promotions/{id} {
+      allow read, write: if isAdmin();
+    }
+
     match /meta/{id} {
       allow read, write: if isAdmin();
     }

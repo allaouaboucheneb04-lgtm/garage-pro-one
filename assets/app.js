@@ -9,6 +9,8 @@ import {
   addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
+
 /* ============
    Firebase init
 =========== */
@@ -23,6 +25,7 @@ if (!window.FIREBASE_CONFIG) {
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const functions = getFunctions(app);
 
 /* ============
    Roles (admin / mechanic)
@@ -141,6 +144,7 @@ const views = {
   dashboard: $("viewDashboard"),
   clients: $("viewClients"),
   repairs: $("viewRepairs"),
+  promotions: $("viewPromotions"),
   settings: $("viewSettings"),
   revenue: $("viewRevenue"),
 };
@@ -248,11 +252,11 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
-  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions")){
     view = "repairs";
   }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", revenue:"Revenus", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
 }
 document.querySelectorAll("[data-go]").forEach(btn=>{
@@ -288,6 +292,12 @@ function colAppointments(){
   if(DATA_MODE==="nested") return collection(db, "appointments", "appointments", "appointments");
   return collection(db, "users", currentUid, "appointments");
 }
+
+function colPromotions(){
+  if(DATA_MODE==="root") return collection(db, "promotions");
+  if(DATA_MODE==="nested") return collection(db, "promotions", "promotions", "promotions");
+  return collection(db, "users", currentUid, "promotions");
+}
 function docSettings(){
   if(DATA_MODE==="root") return doc(db, "meta", "settings");
   if(DATA_MODE==="nested") return doc(db, "meta", "settings"); // shared
@@ -316,10 +326,14 @@ let vehicles = [];
 let workorders = [];
 let settings = { tpsRate: 0.05, tvqRate: 0.09975 };
 
+let promotions = [];
+let selectedPromotionId = null;
+
 let unsubSettings = null;
 let unsubCustomers = null;
 let unsubVehicles = null;
 let unsubWorkorders = null;
+let unsubPromotions = null;
 
 /* ============
    Auth UI
@@ -433,6 +447,12 @@ function subscribeAll(){
         renderDashboard();
       }
     });
+
+    // Promotions (admin only)
+    unsubPromotions = onSnapshot(query(colPromotions(), orderBy("createdAt", "desc"), limit(200)), (snap)=>{
+      promotions = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      renderPromotions();
+    });
   }
 
   unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
@@ -440,6 +460,7 @@ function subscribeAll(){
     if(currentRole === "admin") renderDashboard();
     renderClients();
     if(currentRole === "admin") renderRevenue();
+    if(currentRole === "admin") renderPromotions();
   });
 
   unsubVehicles = onSnapshot(query(colVehicles(), orderBy("createdAt", "desc")), (snap)=>{
@@ -473,7 +494,8 @@ function unsubscribeAll(){
   if(unsubCustomers) unsubCustomers();
   if(unsubVehicles) unsubVehicles();
   if(unsubWorkorders) unsubWorkorders();
-  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = null;
+  if(unsubPromotions) unsubPromotions();
+  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = null;
 }
 
 /* ============
@@ -818,6 +840,134 @@ function renderRepairs(){
       </tr>
     `;
   }).join("");
+}
+
+/* Promotions */
+const formPromo = $("formPromo");
+const promosTbody = $("promosTbody");
+const promoSaved = $("promoSaved");
+const promoTestEmail = $("promoTestEmail");
+const btnPromoSend = $("btnPromoSend");
+const promoSendError = $("promoSendError");
+const promoSendOk = $("promoSendOk");
+const promoAudienceInfo = $("promoAudienceInfo");
+
+function _countCustomersWithEmail(){
+  return customers.filter(c=>String(c.email||"").includes("@")).length;
+}
+
+function renderPromotions(){
+  if(!promosTbody) return;
+  if(currentRole !== "admin"){
+    promosTbody.innerHTML = `<tr><td class="muted" colspan="5">Accès réservé à l'administrateur.</td></tr>`;
+    return;
+  }
+
+  // Audience info
+  if(promoAudienceInfo){
+    promoAudienceInfo.textContent = `Clients avec email: ${_countCustomersWithEmail()}`;
+  }
+
+  if(!promotions.length){
+    promosTbody.innerHTML = `<tr><td class="muted" colspan="5">Aucune promotion.</td></tr>`;
+    selectedPromotionId = null;
+    if(btnPromoSend) btnPromoSend.disabled = true;
+    return;
+  }
+
+  promosTbody.innerHTML = promotions.map(p=>{
+    const d = String(p.createdAt||"").slice(0,10) || "—";
+    const valid = p.validUntil ? String(p.validUntil).slice(0,10) : "—";
+    const sent = p.lastSentAt ? `Oui (${String(p.lastSentAt).slice(0,10)})` : "Non";
+    const isSel = p.id === selectedPromotionId;
+    return `
+      <tr class="${isSel ? 'row-selected' : ''}">
+        <td>${safe(d)}</td>
+        <td>${safe(p.subject||'')}</td>
+        <td>${safe(valid)}</td>
+        <td>${safe(sent)}</td>
+        <td class="nowrap"><button class="btn btn-small" data-promo-id="${p.id}">Sélectionner</button></td>
+      </tr>
+    `;
+  }).join("");
+
+  promosTbody.querySelectorAll("[data-promo-id]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      selectedPromotionId = btn.getAttribute("data-promo-id");
+      if(btnPromoSend) btnPromoSend.disabled = false;
+      renderPromotions();
+    });
+  });
+}
+
+if(formPromo){
+  formPromo.onsubmit = async (e)=>{
+    e.preventDefault();
+    if(currentRole !== "admin") return;
+    promoSaved.style.display = "none";
+    const fd = new FormData(formPromo);
+    const subject = String(fd.get("subject")||"").trim();
+    const message = String(fd.get("message")||"").trim();
+    const code = String(fd.get("code")||"").trim();
+    const validUntil = String(fd.get("validUntil")||"").trim();
+    if(!subject || !message){
+      alert("Objet et message obligatoires.");
+      return;
+    }
+    const docRef = await addDoc(colPromotions(), {
+      subject,
+      message,
+      code: code || "",
+      validUntil: validUntil || "",
+      createdAt: isoNow(),
+      createdAtTs: serverTimestamp(),
+      createdBy: currentUid,
+      lastSentAt: "",
+      lastSentAtTs: null,
+      sentCount: 0,
+    });
+    selectedPromotionId = docRef.id;
+    if(btnPromoSend) btnPromoSend.disabled = false;
+    promoSaved.textContent = "Promotion enregistrée. Sélectionnée pour l’envoi.";
+    promoSaved.style.display = "";
+    formPromo.reset();
+    renderPromotions();
+  };
+}
+
+if(btnPromoSend){
+  btnPromoSend.addEventListener("click", async ()=>{
+    promoSendError.style.display = "none";
+    promoSendOk.style.display = "none";
+    if(currentRole !== "admin") return;
+    if(!selectedPromotionId){
+      alert("Sélectionne une promotion.");
+      return;
+    }
+    const testEmail = String(promoTestEmail?.value||"").trim();
+    const isTest = testEmail.includes("@");
+    const count = _countCustomersWithEmail();
+    const msg = isTest
+      ? `Envoyer un TEST à: ${testEmail} ?`
+      : `Envoyer cette promotion à tous les clients avec email (${count}) ?`;
+    if(!confirm(msg)) return;
+
+    btnPromoSend.disabled = true;
+    try{
+      const fn = httpsCallable(functions, "sendPromotionEmail");
+      const res = await fn({ promotionId: selectedPromotionId, testEmail: isTest ? testEmail : "" });
+      const out = res?.data || {};
+      promoSendOk.textContent = `Envoyé: ${out.sent||0} / ${out.total||0}` + (isTest ? " (test)" : "");
+      promoSendOk.style.display = "";
+    }catch(err){
+      console.warn(err);
+      const msg2 = err?.message || "Erreur lors de l’envoi. Vérifie Cloud Functions + SendGrid.";
+      promoSendError.textContent = msg2;
+      promoSendError.style.display = "";
+    }finally{
+      btnPromoSend.disabled = false;
+    }
+  });
 }
 
 /* Settings */

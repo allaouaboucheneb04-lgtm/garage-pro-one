@@ -20,6 +20,7 @@
 <button class="btn btn-ghost" data-go="dashboard">Dashboard</button>
 <button class="btn btn-ghost" data-go="clients">Clients</button>
 <button class="btn btn-ghost" data-go="repairs">Réparations</button>
+<button class="btn btn-ghost" data-go="promotions" data-role="admin">Promotions</button>
 <button class="btn btn-ghost" data-go="revenue" data-role="admin">Revenus</button><button class="btn btn-ghost" data-go="settings" data-role="admin">Paramètres</button>
 <button class="btn btn-ghost" id="btnLogout">Déconnexion</button>
 </nav>
@@ -209,6 +210,79 @@
 </tbody>
 </table>
 </div>
+</section>
+
+<!-- PROMOTIONS -->
+<section class="card" id="viewPromotions" style="display:none">
+  <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
+    <div>
+      <h2 style="margin:0 0 6px 0">Promotions</h2>
+      <div class="muted">Créer une promotion et l’envoyer par email à tes clients.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="grid" style="grid-template-columns: 1.1fr .9fr; gap:12px">
+    <div class="box">
+      <h3 style="margin-top:0">Nouvelle promotion</h3>
+      <form class="form" id="formPromo">
+        <label>Objet (subject)</label>
+        <input name="subject" placeholder="Ex: -15% sur la main d’œuvre cette semaine" required />
+
+        <label>Message (email)</label>
+        <textarea name="message" rows="7" placeholder="Bonjour {name},\n\nVoici notre promo..." required></textarea>
+        <div class="muted" style="font-size:12px">Astuce: tu peux utiliser <code>{name}</code> et <code>{phone}</code>.</div>
+
+        <div class="row" style="gap:10px; flex-wrap:wrap">
+          <div style="min-width:190px; flex:1">
+            <label>Valable jusqu’au</label>
+            <input name="validUntil" type="date" />
+          </div>
+          <div style="min-width:190px; flex:1">
+            <label>Code promo (optionnel)</label>
+            <input name="code" placeholder="Ex: GARAGE15" />
+          </div>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Enregistrer la promotion</button>
+        <div class="note" id="promoSaved" style="display:none; margin-top:10px"></div>
+      </form>
+    </div>
+
+    <div class="box">
+      <h3 style="margin-top:0">Envoi</h3>
+      <div class="muted">Envoi via Firebase Cloud Functions (voir README). Tu peux aussi faire un test.</div>
+      <div class="divider"></div>
+      <label class="muted" style="font-size:12px">Email de test (optionnel)</label>
+      <input class="input" id="promoTestEmail" type="email" placeholder="ex: toi@gmail.com" />
+      <div class="muted" style="font-size:12px; margin-top:8px" id="promoAudienceInfo">Clients avec email: —</div>
+      <div class="divider"></div>
+      <button class="btn" id="btnPromoSend" disabled>Envoyer la promotion sélectionnée</button>
+      <div class="alert" id="promoSendError" style="display:none; margin-top:10px"></div>
+      <div class="note" id="promoSendOk" style="display:none; margin-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h3 style="margin:0 0 10px 0">Historique</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Objet</th>
+          <th>Valide</th>
+          <th>Envoyé</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="promosTbody">
+        <tr><td class="muted" colspan="5">Chargement…</td></tr>
+      </tbody>
+    </table>
+  </div>
 </section>
 <!-- SETTINGS -->
 <section class="card" id="viewSettings" style="display:none">
