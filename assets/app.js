@@ -34,6 +34,18 @@ let currentUserName = "";
 let unsubProfile = null;
 let mechanics = [];
 
+let roleNeedsSetup = false;
+let roleSetupShown = false;
+
+function normalizeRole(raw) {
+  const r = String(raw || "").toLowerCase().trim();
+  // tolérance aux fautes fréquentes
+  if (r === "mecanic" || r === "mecanicien" || r === "mechanicien") return "mechanic";
+  if (r === "administrateur" || r === "administrator") return "admin";
+  if (r === "admin" || r === "mechanic") return r;
+  return "";
+}
+
 function docUserProfile(uid=currentUid){
   return doc(db, "users", uid);
 }
@@ -64,7 +76,14 @@ async function loadRole(){
       return;
     }
     const d = snap.data() || {};
-    currentRole = (d.role === "admin") ? "admin" : "mechanic";
+    const normalized = normalizeRole(d.role);
+    if (!normalized) {
+      roleNeedsSetup = true;
+      currentRole = "mechanic";
+    } else {
+      roleNeedsSetup = false;
+      currentRole = normalized;
+    }
     currentUserName = d.name || d.email || "";
   }catch(e){
     console.warn("loadRole failed", e);
@@ -92,6 +111,13 @@ function applyRoleUI(){
     subtitle.textContent = (currentRole === "mechanic")
       ? "Mode mécanicien — Mes travaux"
       : "Synchro automatique (Firebase)";
+    if (roleNeedsSetup && !roleSetupShown) {
+      roleSetupShown = true;
+      showModal(
+        "Profil incomplet",
+        "Ton compte est connecté, mais ton document Firestore /users/" + currentUser.uid + " n'a pas un role valide.\n\n➡️ Mets le champ role = admin ou role = mechanic (exactement)."
+      );
+    }
   }
 }
 
@@ -396,11 +422,18 @@ function subscribeAll(){
     ? query(colWorkorders(), where("assignedTo","==", currentUid), limit(400))
     : query(colWorkorders(), orderBy("createdAt", "desc"), limit(400));
 
-  unsubWorkorders = onSnapshot(woQ, (snap)=>{
-    workorders = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    if(currentRole === "admin") renderDashboard();
-    renderRepairs();
-  });
+  unsubWorkorders = onSnapshot(
+    woQ,
+    (snap)=>{
+      workorders = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      if(currentRole === "admin") renderDashboard();
+      renderRepairs();
+    },
+    (err)=>{
+      console.warn('workorders onSnapshot error', err);
+      showToast("Accès refusé: réparations. Vérifie le champ role dans /users/{uid} (admin ou mechanic).", true);
+    }
+  );
 }
 
 function unsubscribeAll(){
@@ -1470,7 +1503,9 @@ onAuthStateChanged(auth, async (user)=>{
 
     // settings/meta are admin-only (rules)
     if(currentRole === "admin"){
-      await ensureSettingsDoc();
+      if (currentRole === "admin") {
+        await ensureSettingsDoc();
+      }
       await loadMechanics();
     }
     unsubscribeAll();
