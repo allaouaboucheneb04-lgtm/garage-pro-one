@@ -104,6 +104,19 @@
 
 <div class="divider"></div>
 <h3 style="margin-top:0">Dashboard financier (mois en cours)</h3>
+<div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px">
+  <div class="box">
+    <h3 style="margin-top:0">Revenus (12 mois)</h3>
+    <canvas id="chartSales" width="600" height="240" style="width:100%;height:240px"></canvas>
+    <div class="muted" style="margin-top:6px">Basé sur Total client.</div>
+  </div>
+  <div class="box">
+    <h3 style="margin-top:0">Profit net (12 mois)</h3>
+    <canvas id="chartNet" width="600" height="240" style="width:100%;height:240px"></canvas>
+    <div class="muted" style="margin-top:6px">Profit net = sous-total − coût pièces − frais carte.</div>
+  </div>
+</div>
+
 
 <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:10px">
   <div class="box"><div class="muted">Total client</div><div class="val" id="finSales">$0.00</div></div>
@@ -410,6 +423,12 @@
           </select>
         </div>
         <div>
+          <label>Heures main-d’œuvre</label>
+          <input class="input" id="invHours" type="number" step="0.25" min="0" value="0" />
+          <small class="muted">Main-d’œuvre = heures × tarif ($/h) dans Paramètres.</small>
+        </div>
+
+        <div>
           <label>Main-d'œuvre ($)</label>
           <input class="input" id="invLabor" type="number" step="0.01" min="0" value="0" />
         </div>
@@ -705,5 +724,43 @@
 </div>
 <script src="./assets/firebase-config.js"></script>
 <script src="./assets/app.js" type="module"></script>
+
+<div class="modal" id="clientStatsModal" style="display:none">
+  <div class="modal-card" style="max-width:720px">
+    <div class="modal-head">
+      <div>
+        <div style="font-weight:700" id="csTitle">Stats client</div>
+        <div class="muted" id="csSubtitle"></div>
+      </div>
+      <button class="btn btn-ghost" id="btnCloseClientStats">Fermer</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px">
+        <div class="box"><div class="muted">Factures</div><div class="val" id="csCount">0</div></div>
+        <div class="box"><div class="muted">Total client</div><div class="val" id="csSales">$0.00</div></div>
+        <div class="box"><div class="muted">Coût pièces</div><div class="val" id="csParts">$0.00</div></div>
+        <div class="box"><div class="muted">Profit net</div><div class="val" id="csNet">$0.00</div></div>
+      </div>
+      <div class="divider"></div>
+      <h3 style="margin-top:0">Dernières factures</h3>
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Réf</th>
+              <th>Date</th>
+              <th style="text-align:right">Total</th>
+              <th style="text-align:right">Profit net</th>
+            </tr>
+          </thead>
+          <tbody id="csTbody">
+            <tr><td class="muted" colspan="4">Aucune facture.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
