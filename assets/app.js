@@ -727,8 +727,11 @@ const invoiceFormBox = $("invoiceFormBox");
 const formInvoice = $("formInvoice");
 const invCustomerEl = $("invCustomer");
 const invDateEl = $("invDate");
+const invPurchaseDateEl = $("invPurchaseDate");
+const invInstallDateEl = $("invInstallDate");
 const invRefEl = $("invRef");
 const invWorkorderEl = $("invWorkorder");
+const invPayMethodEl = $("invPayMethod");
 const invItemsTbody = $("invItemsTbody");
 const btnInvAddLine = $("btnInvAddLine");
 const btnInvCancel = $("btnInvCancel");
@@ -742,6 +745,7 @@ const invListTbody = $("invListTbody");
 const invTopClientsTbody = $("invTopClientsTbody");
 const invMonthlyTbody = $("invMonthlyTbody");
 const invMonthlyChartEl = $("invMonthlyChart");
+const invPayTbody = $("invPayTbody");
 const invFromEl = $("invFrom");
 const invToEl = $("invTo");
 const btnInvThisMonth = $("btnInvThisMonth");
@@ -749,6 +753,7 @@ const btnInvLastMonth = $("btnInvLastMonth");
 const btnInvAll = $("btnInvAll");
 const btnInvExport = $("btnInvExport");
 
+let editingInvoiceId = null;
 let invFilter = { from: null, to: null };
 
 // UI wiring (Invoices)
@@ -849,6 +854,18 @@ function workorderDisplay(wo){
   return parts ? `${parts} — ${total}` : `${wo.id} — ${total}`;
 }
 
+
+function invPaymentLabel(pm){
+  const v = String(pm||"").toLowerCase();
+  if(v==="cash") return "Cash";
+  if(v==="card") return "Carte";
+  if(v==="etransfer") return "Interac";
+  if(v==="bank") return "Virement";
+  if(v==="cheque") return "Chèque";
+  if(v==="other") return "Autre";
+  return v || "—";
+}
+
 function fillInvoiceWorkorders(){
   if(!invWorkorderEl) return;
   // option vide
@@ -882,25 +899,34 @@ async function createInvoiceFromForm(e){
   const profit = sellTotal - costTotal;
   const payload = {
     ref: String(invRefEl.value||"").trim(),
+    paymentMethod: (invPayMethodEl?.value || "cash"),
     customerId,
     customerName: customer?.fullName || "",
     workorderId: workorderId || "",
     workorderLabel: workorderId ? workorderDisplay(workorders.find(w=>w.id===workorderId)) : "",
     date: d,
+    purchaseDate: invPurchaseDateEl?.value || "",
+    installDate: invInstallDateEl?.value || "",
     items,
     totals: { cost: costTotal, sell: sellTotal, profit },
     createdAt: serverTimestamp(),
     createdBy: currentUid,
   };
   try{
-    await addDoc(colInvoices(), payload);
+    if(editingInvoiceId){
+      await updateDoc(doc(colInvoices(), editingInvoiceId), payload);
+    }else{
+      await addDoc(colInvoices(), payload);
+    }
     openInvoiceForm(false);
     formInvoice.reset();
     invItemsTbody.innerHTML = "";
     ensureInvoiceLine();
     invDateEl.value = todayISO();
     if(invWorkorderEl) invWorkorderEl.value = "";
+    if(invPayMethodEl) invPayMethodEl.value = "cash";
     recalcInvoiceTotals();
+    editingInvoiceId = null;
     alert("Facture enregistrée.");
   }catch(err){
     console.error(err);
@@ -954,25 +980,26 @@ function exportInvoicesCSV(){
     const db = b.date instanceof Date ? b.date : (b.date?.toDate ? b.date.toDate() : new Date(b.date));
     return db - da;
   });
-  const header = ["date","ref","client","cost_total","sell_total","profit_total","item_desc","item_qty","item_cost","item_price"];
+  const header = ["date","ref","client","payment_method","cost_total","sell_total","profit_total","item_desc","item_qty","item_cost","item_price"];
   const rows = [header.join(",")];
   for(const inv of list){
     const dt = isoDate(inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date)));
     const ref = (inv.ref||"").replaceAll('"','""');
     const client = (inv.customerName||"").replaceAll('"','""');
+    const pm = (inv.paymentMethod||"").replaceAll('"','""');
     const costT = Number(inv.totals?.cost||0);
     const sellT = Number(inv.totals?.sell||0);
     const profitT = Number(inv.totals?.profit||0);
     const items = Array.isArray(inv.items) ? inv.items : [];
     if(items.length===0){
-      rows.push([dt, `"${ref}"`, `"${client}"`, costT, sellT, profitT, "", "", "", ""].join(","));
+      rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, costT, sellT, profitT, "", "", "", ""].join(","));
     }else{
       for(const it of items){
         const desc = String(it.desc||"").replaceAll('"','""');
         const qty = Number(it.qty||0);
         const cost = Number(it.cost||0);
         const price = Number(it.price||0);
-        rows.push([dt, `"${ref}"`, `"${client}"`, costT, sellT, profitT, `"${desc}"`, qty, cost, price].join(","));
+        rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, costT, sellT, profitT, `"${desc}"`, qty, cost, price].join(","));
       }
     }
   }
@@ -1023,15 +1050,35 @@ function renderInvoices(){
         <td>${ds}</td>
         <td>${ref}</td>
         <td>${cust}</td>
+        <td>${safe(invPaymentLabel(inv.paymentMethod))}</td>
         <td style="text-align:right">${c}</td>
         <td style="text-align:right">${s}</td>
         <td style="text-align:right"><b>${p}</b></td>
-        <td class="no-print" style="text-align:right"><button class="btn btn-ghost" data-del-inv="${inv.id}">Supprimer</button></td>
+        <td class="no-print" style="text-align:right"><button class="btn btn-ghost" data-edit-inv="${inv.id}">Modifier</button> <button class="btn btn-ghost" data-del-inv="${inv.id}">Supprimer</button></td>
       </tr>
     `;
   }).join('');
 
   renderInvoicesAnalytics(list);
+
+  
+  invListTbody.querySelectorAll('[data-edit-inv]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const inv = invoices.find(i=>i.id===btn.getAttribute('data-edit-inv'));
+      if(!inv) return;
+      editingInvoiceId = inv.id;
+      openInvoiceForm(true);
+      invCustomerEl.value = inv.customerId || "";
+      invDateEl.value = isoDate(inv.date instanceof Date ? inv.date : inv.date.toDate());
+      if(invPurchaseDateEl) invPurchaseDateEl.value = inv.purchaseDate || "";
+      if(invInstallDateEl) invInstallDateEl.value = inv.installDate || "";
+      invRefEl.value = inv.ref || "";
+      if(invPayMethodEl) invPayMethodEl.value = inv.paymentMethod || "cash";
+      invItemsTbody.innerHTML = "";
+      (inv.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
+      recalcInvoiceTotals();
+    });
+  });
 
   invListTbody.querySelectorAll('[data-del-inv]').forEach(btn=>{
     btn.addEventListener('click', ()=>deleteInvoice(btn.getAttribute('data-del-inv')));
@@ -1040,10 +1087,13 @@ function renderInvoices(){
 function renderInvoicesAnalytics(list){
   // list = factures filtrées
   if(!invTopClientsTbody || !invMonthlyTbody || !invMonthlyChartEl) return;
+  // invPayTbody is optional
+
   if(!Array.isArray(list) || list.length===0){
     invTopClientsTbody.innerHTML = '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
     invMonthlyTbody.innerHTML = '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
     invMonthlyChartEl.textContent = "—";
+    if(invPayTbody) invPayTbody.innerHTML = '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
     return;
   }
 
@@ -1098,6 +1148,33 @@ function renderInvoicesAnalytics(list){
   const maxP = Math.max(...months.map(m=>m.profit), 0);
   if(maxP<=0){
     invMonthlyChartEl.textContent = "Pas assez de données pour un graphique (bénéfice ≤ 0).";
+
+  // ---- Par méthode de paiement ----
+  if(invPayTbody){
+    const byPay = new Map();
+    for(const inv of list){
+      const key = inv.paymentMethod || "unknown";
+      const cur = byPay.get(key) || {method:key, sell:0, cost:0, profit:0};
+      const cost = Number(inv.totals?.cost||0);
+      const sell = Number(inv.totals?.sell||0);
+      const profit = Number(inv.totals?.profit||0);
+      cur.sell += sell; cur.cost += cost; cur.profit += profit;
+      byPay.set(key, cur);
+    }
+    const rows = [...byPay.values()].sort((a,b)=>b.profit-a.profit);
+    invPayTbody.innerHTML = rows.map(r=>{
+      const margin = r.sell>0 ? (r.profit/r.sell*100) : 0;
+      return `
+        <tr>
+          <td>${safe(invPaymentLabel(r.method))}</td>
+          <td style="text-align:right">${money(r.sell)}</td>
+          <td style="text-align:right">${money(r.cost)}</td>
+          <td style="text-align:right"><b>${money(r.profit)}</b></td>
+          <td style="text-align:right">${margin.toFixed(1)}%</td>
+        </tr>
+      `;
+    }).join('') || '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
+  }
   }else{
     const bars = months.slice().reverse().map(r=>{
       const w = Math.round((r.profit/maxP)*16);

@@ -191,7 +191,7 @@
 <button class="btn" id="btnRevApply">Appliquer</button>
 </div>
 </div>
-<div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:14px">
+<div class="grid" style="grid-template-columns: repeat(7, minmax(0,1fr)); gap:12px; margin-top:14px">
 <div class="box">
 <div class="muted">Total période</div>
 <div class="val" id="revTotal">$0.00</div>
@@ -215,11 +215,11 @@
 <th>Véhicule</th>
 <th>Paiement</th>
 <th style="text-align:right">Total</th>
-<th class="no-print"></th>
+<th class="no-print">Actions</th>
 </tr>
 </thead>
 <tbody id="revTbody">
-<tr><td class="muted" colspan="7">Aucune facture.</td></tr>
+<tr><td class="muted" colspan="8">Aucune facture.</td></tr>
 </tbody>
 </table>
 </div>
@@ -260,7 +260,7 @@
   <div class="box" id="invoiceFormBox" style="display:none">
     <h3 style="margin-top:0">Nouvelle facture</h3>
     <form class="form" id="formInvoice">
-      <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px">
+      <div class="grid" style="grid-template-columns: repeat(7, minmax(0,1fr)); gap:12px">
         <div>
           <label>Client</label>
           <select class="input" id="invCustomer" required></select>
@@ -270,6 +270,15 @@
           <input class="input" id="invDate" type="date" required />
         </div>
         <div>
+          <label>Date d'achat pièce</label>
+          <input class="input" id="invPurchaseDate" type="date" />
+        </div>
+        <div>
+          <label>Date d'installation</label>
+          <input class="input" id="invInstallDate" type="date" />
+        </div>
+
+        <div>
           <label># Référence (optionnel)</label>
           <input class="input" id="invRef" placeholder="ex: INV-1001" />
         
@@ -277,6 +286,18 @@
           <label>Réparation (optionnel)</label>
           <select class="input" id="invWorkorder">
             <option value="">— Aucune —</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Méthode de paiement</label>
+          <select class="input" id="invPayMethod" required>
+            <option value="cash">Cash</option>
+            <option value="card">Carte</option>
+            <option value="etransfer">Virement Interac</option>
+            <option value="bank">Virement bancaire</option>
+            <option value="cheque">Chèque</option>
+            <option value="other">Autre</option>
           </select>
         </div>
 </div>
@@ -316,7 +337,7 @@
   </div>
 
   <!-- Summary -->
-  <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:14px">
+  <div class="grid" style="grid-template-columns: repeat(7, minmax(0,1fr)); gap:12px; margin-top:14px">
     <div class="box">
       <div class="muted">Factures (30 derniers jours)</div>
       <div class="val" id="inv30Count">0</div>
@@ -338,14 +359,15 @@
           <th>Date</th>
           <th># Réf</th>
           <th>Client</th>
+          <th>Paiement</th>
           <th style="text-align:right">Coût</th>
           <th style="text-align:right">Facturé</th>
           <th style="text-align:right">Bénéfice</th>
-          <th class="no-print"></th>
+          <th class="no-print">Actions</th>
         </tr>
       </thead>
       <tbody id="invListTbody">
-        <tr><td class="muted" colspan="7">Aucune facture.</td></tr>
+        <tr><td class="muted" colspan="8">Aucune facture.</td></tr>
       </tbody>
     </table>
   
@@ -395,6 +417,26 @@
   </div>
 </div>
 
+
+  <div class="box" style="margin-top:12px">
+    <h3 style="margin-top:0">Bénéfice par méthode de paiement</h3>
+    <div style="overflow:auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Méthode</th>
+            <th style="text-align:right">Facturé</th>
+            <th style="text-align:right">Coût</th>
+            <th style="text-align:right">Bénéfice</th>
+            <th style="text-align:right">Marge</th>
+          </tr>
+        </thead>
+        <tbody id="invPayTbody">
+          <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </section>
 
 <!-- PROMOTIONS -->
