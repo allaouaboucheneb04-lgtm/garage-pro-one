@@ -557,6 +557,8 @@ function subscribeAll(){
       (snap)=>{
         invoices = snap.docs.map(d=>({id:d.id, ...d.data()}));
         renderInvoices();
+        renderFinanceDashboard();
+        renderRevenue();
       },
       (err)=>{
         console.warn('invoices onSnapshot error', err);
@@ -582,6 +584,14 @@ function unsubscribeAll(){
 =========== */
 const kpiEl = $("kpi");
 const openRepairsTbody = $("openRepairsTbody");
+const finSalesEl = $("finSales");
+const finPartsEl = $("finParts");
+const finLaborEl = $("finLabor");
+const finCardEl = $("finCard");
+const finTaxEl = $("finTax");
+const finNetEl = $("finNet");
+const finByPayTbody = $("finByPayTbody");
+const finByDayTbody = $("finByDayTbody");
 function getCustomer(id){ return customers.find(c=>c.id===id); }
 function getVehicle(id){ return vehicles.find(v=>v.id===id); }
 
@@ -605,6 +615,8 @@ function renderDashboard(){
     <div class="box"><div class="muted">Réparations ouvertes</div><div class="val">${openCount}</div></div>
     <div class="box"><div class="muted">Total (${monthKey})</div><div class="val">${money(monthTotal)}</div></div>
   `;
+
+  renderFinanceDashboard();
 
   const open = [...workorders].filter(w=>w.status==="OUVERT").sort(byCreatedDesc).slice(0,20);
   if(open.length===0){
@@ -630,6 +642,81 @@ function renderDashboard(){
     }).join("");
   }
 }
+
+function renderFinanceDashboard(){
+  if(currentRole !== "admin") return;
+  if(!finSalesEl) return;
+
+  const now = new Date();
+  const monthFrom = isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthTo = isoDate(new Date(now.getFullYear(), now.getMonth()+1, 0));
+
+  const monthInv = invoices.filter(inv=>{
+    const k = invoiceDateKey(inv);
+    return k >= monthFrom && k <= monthTo;
+  });
+
+  let sales=0, parts=0, labor=0, card=0, tax=0, net=0;
+  for(const inv of monthInv){
+    sales += Number(inv.totals?.grandTotal ?? 0);
+    parts += Number(inv.totals?.partsCost ?? 0);
+    labor += Number(inv.labor ?? 0);
+    card += Number(inv.totals?.cardFee ?? 0);
+    tax += Number(inv.totals?.tax ?? 0);
+    net += Number(inv.totals?.netProfit ?? 0);
+  }
+
+  finSalesEl.textContent = money(sales);
+  finPartsEl.textContent = money(parts);
+  finLaborEl.textContent = money(labor);
+  finCardEl.textContent = money(card);
+  finTaxEl.textContent = money(tax);
+  finNetEl.textContent = money(net);
+
+  // By payment
+  if(finByPayTbody){
+    const map=new Map();
+    for(const inv of monthInv){
+      const k=String(inv.paymentMethod||'').toLowerCase()||'unknown';
+      const cur=map.get(k)||{k,sales:0,net:0};
+      cur.sales += Number(inv.totals?.grandTotal ?? 0);
+      cur.net += Number(inv.totals?.netProfit ?? 0);
+      map.set(k,cur);
+    }
+    const list=[...map.values()].sort((a,b)=>b.net-a.net);
+    finByPayTbody.innerHTML = list.map(r=>`
+      <tr>
+        <td>${safe(invPaymentLabel(r.k))}</td>
+        <td style="text-align:right">${money(r.sales)}</td>
+        <td style="text-align:right"><b>${money(r.net)}</b></td>
+      </tr>
+    `).join('') || '<tr><td class="muted" colspan="3">Aucune donnée.</td></tr>';
+  }
+
+  // By day last 14 days
+  if(finByDayTbody){
+    const dayFrom = new Date(now.getTime() - 13*24*60*60*1000);
+    const map=new Map();
+    for(const inv of invoices){
+      const d = invoiceDateAsDate(inv);
+      if(d < dayFrom) continue;
+      const k = invoiceDateKey(inv);
+      const cur=map.get(k)||{k,sales:0,net:0};
+      cur.sales += Number(inv.totals?.grandTotal ?? 0);
+      cur.net += Number(inv.totals?.netProfit ?? 0);
+      map.set(k,cur);
+    }
+    const list=[...map.values()].sort((a,b)=> String(b.k).localeCompare(String(a.k)));
+    finByDayTbody.innerHTML = list.map(r=>`
+      <tr>
+        <td>${safe(r.k)}</td>
+        <td style="text-align:right">${money(r.sales)}</td>
+        <td style="text-align:right"><b>${money(r.net)}</b></td>
+      </tr>
+    `).join('') || '<tr><td class="muted" colspan="3">Aucune donnée.</td></tr>';
+  }
+}
+
 
 /* Quick search */
 $("btnQuickSearch").onclick = ()=>runQuickSearch();
@@ -710,12 +797,19 @@ if(btnPromoSelectNone) btnPromoSelectNone.onclick = ()=>window.__promoSelectAll(
    Revenue view
 =========== */
 const revPresetEl = $("revPreset");
+const revPayFilterEl = $("revPayFilter");
 const revFromEl = $("revFrom");
 const revToEl = $("revTo");
 const revTotalEl = $("revTotal");
 const revCountEl = $("revCount");
 const revAvgEl = $("revAvg");
+const revPartsCostEl = $("revPartsCost");
+const revNetProfitEl = $("revNetProfit");
+const revTaxesEl = $("revTaxes");
+const revCardFeesEl = $("revCardFees");
 const revTbody = $("revTbody");
+const revByPayTbody = $("revByPayTbody");
+const revByDateTbody = $("revByDateTbody");
 const btnRevApply = $("btnRevApply");
 
 
@@ -1378,6 +1472,12 @@ function setRevenuePreset(preset){
     revToEl.disabled = false;
   }
 }
+
+function getRevenueRange(){
+  const from = (revFromEl && revFromEl.value) ? revFromEl.value : null;
+  const to = (revToEl && revToEl.value) ? revToEl.value : null;
+  return {from, to};
+}
 function revenueRange(){
   const from = (revFromEl && revFromEl.value) ? revFromEl.value : "0000-01-01";
   const to = (revToEl && revToEl.value) ? revToEl.value : "9999-12-31";
@@ -1387,86 +1487,155 @@ function workorderDateKey(w){
   const s = String(w.invoiceDate || w.createdAt || w.updatedAt || "");
   return s.slice(0,10);
 }
-function filterRevenueWorkorders(){
-  const {from, to} = revenueRange();
-  return workorders
-    .filter(w=>Number(w.total||0) > 0)
-    .filter(w=>!!w.invoiceNo) // seulement factures
-    .filter(w=>{
-      const k = workorderDateKey(w);
-      return k && k >= from && k <= to;
-    })
-    .sort((a,b)=> (workorderDateKey(b).localeCompare(workorderDateKey(a))) || String(b.invoiceNo||"").localeCompare(String(a.invoiceNo||"")));
+
+function invoiceDateAsDate(inv){
+  if(!inv) return new Date(0);
+  const d = inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date));
+  return isNaN(d.getTime()) ? new Date(0) : d;
+}
+function invoiceDateKey(inv){
+  const d = invoiceDateAsDate(inv);
+  return isoDate(d);
+}
+function filterRevenueInvoices(){
+  // Filtre par période + méthode de paiement sur la collection invoices
+  const { from, to } = getRevenueRange();
+  const pay = String(revPayFilterEl?.value || "").trim().toLowerCase();
+
+  return invoices.filter(inv=>{
+    const k = invoiceDateKey(inv);
+    if(from && k < from) return false;
+    if(to && k > to) return false;
+    if(pay && String(inv.paymentMethod||"").toLowerCase() !== pay) return false;
+    return true;
+  });
 }
 
 function renderRevenue(){
   if(!$("viewRevenue")) return;
   if(currentRole !== "admin"){
-    // sécurité: revenue view admin only
     if(revTotalEl) revTotalEl.textContent = money(0);
     if(revCountEl) revCountEl.textContent = "0";
     if(revAvgEl) revAvgEl.textContent = money(0);
-    if(revTbody) revTbody.innerHTML = '<tr><td colspan="7" class="muted">Accès réservé à l\'administrateur.</td></tr>';
+    if(revPartsCostEl) revPartsCostEl.textContent = money(0);
+    if(revNetProfitEl) revNetProfitEl.textContent = money(0);
+    if(revTaxesEl) revTaxesEl.textContent = money(0);
+    if(revCardFeesEl) revCardFeesEl.textContent = money(0);
+    if(revTbody) revTbody.innerHTML = '<tr><td colspan="10" class="muted">Accès réservé à l\'administrateur.</td></tr>';
     return;
   }
 
-  const rows = filterRevenueWorkorders();
-  const total = rows.reduce((s,w)=>s+Number(w.total||0),0);
-  const count = rows.length;
-  const avg = count ? total/count : 0;
+  const rows = filterRevenueInvoices().sort((a,b)=> invoiceDateAsDate(b)-invoiceDateAsDate(a));
 
-  if(revTotalEl) revTotalEl.textContent = money(total);
+  let sales=0, parts=0, net=0, tax=0, card=0;
+  for(const inv of rows){
+    sales += Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+    parts += Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+    net += Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
+    tax += Number(inv.totals?.tax ?? 0);
+    card += Number(inv.totals?.cardFee ?? 0);
+  }
+  const count = rows.length;
+  const avg = count ? sales/count : 0;
+
+  if(revTotalEl) revTotalEl.textContent = money(sales);
   if(revCountEl) revCountEl.textContent = String(count);
   if(revAvgEl) revAvgEl.textContent = money(avg);
+  if(revPartsCostEl) revPartsCostEl.textContent = money(parts);
+  if(revNetProfitEl) revNetProfitEl.textContent = money(net);
+  if(revTaxesEl) revTaxesEl.textContent = money(tax);
+  if(revCardFeesEl) revCardFeesEl.textContent = money(card);
 
-  if(!revTbody) return;
+  if(revTbody){
+    while(revTbody.firstChild) revTbody.removeChild(revTbody.firstChild);
+    if(count===0){
+      const tr=document.createElement('tr'); const td=document.createElement('td');
+      td.colSpan=10; td.className='muted'; td.textContent='Aucune facture pour cette période.';
+      tr.appendChild(td); revTbody.appendChild(tr);
+    }else{
+      for(const inv of rows){
+        const ref = String(inv.ref||'—');
+        const date = invoiceDateKey(inv) || '—';
+        const client = String(inv.customerName||'—');
+        const repair = String(inv.workorderLabel||'—');
+        const method = invPaymentLabel(inv.paymentMethod);
+        const total = money(Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0));
+        const pCost = money(Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0));
+        const pNet = money(Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0));
 
-  // Important: sur certains navigateurs (mobile + overlay/modals),
-  // revTbody.innerHTML peut ne pas se rafraîchir correctement.
-  // Ici on reconstruit les lignes via le DOM, plus fiable.
-  while(revTbody.firstChild) revTbody.removeChild(revTbody.firstChild);
+        const tr=document.createElement('tr');
+        const cells=[ref, date, client, repair, method, total, pCost, pNet];
+        cells.forEach((val, idx)=>{
+          const td=document.createElement('td');
+          if(idx>=5) td.style.textAlign='right';
+          td.textContent=val;
+          tr.appendChild(td);
+        });
 
-  if(count === 0){
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 7;
-    td.className = 'muted';
-    td.textContent = 'Aucune facture pour cette période.';
-    tr.appendChild(td);
-    revTbody.appendChild(tr);
-    return;
+        const tdBtn=document.createElement('td');
+        tdBtn.className='no-print';
+        tdBtn.style.textAlign='right';
+        const btn=document.createElement('button');
+        btn.className='btn btn-ghost';
+        btn.textContent='Voir';
+        btn.addEventListener('click', ()=>{
+          // Ouvre la facture dans l'onglet Factures pièces (mode édition)
+          try{
+            go('invoices');
+            const b = document.querySelector(`[data-edit-inv="${inv.id}"]`);
+            if(b) b.click();
+          }catch(e){}
+        });
+        tdBtn.appendChild(btn);
+        tr.appendChild(tdBtn);
+
+        revTbody.appendChild(tr);
+      }
+    }
   }
 
-  for(const w of rows){
-    const v = getVehicle(w.vehicleId);
-    const c = v ? getCustomer(v.customerId) : null;
-    const client = c ? (c.fullName || '—') : '—';
-    const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(' ') + (v.plate ? ' • ' + v.plate : '') : '—';
-    const date = workorderDateKey(w) || '—';
-    const method = String(w.paymentMethod || '—');
-    const inv = String(w.invoiceNo || '—');
-    const tot = money(Number(w.total||0));
+  // ---- Breakdown par paiement ----
+  if(revByPayTbody){
+    const map=new Map();
+    for(const inv of rows){
+      const k=String(inv.paymentMethod||'').toLowerCase()||'unknown';
+      const cur=map.get(k)||{k, sales:0, parts:0, net:0};
+      cur.sales += Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+      cur.parts += Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+      cur.net += Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
+      map.set(k, cur);
+    }
+    const list=[...map.values()].sort((a,b)=>b.net-a.net);
+    revByPayTbody.innerHTML = list.map(r=>`
+      <tr>
+        <td>${safe(invPaymentLabel(r.k))}</td>
+        <td style="text-align:right">${money(r.sales)}</td>
+        <td style="text-align:right">${money(r.parts)}</td>
+        <td style="text-align:right"><b>${money(r.net)}</b></td>
+      </tr>
+    `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+  }
 
-    const tr = document.createElement('tr');
-    const cells = [inv, date, client, veh, method, tot];
-    cells.forEach((val, idx)=>{
-      const td = document.createElement('td');
-      if(idx === 5) td.style.textAlign = 'right';
-      td.textContent = val;
-      tr.appendChild(td);
-    });
-
-    const tdBtn = document.createElement('td');
-    tdBtn.className = 'no-print';
-    tdBtn.style.textAlign = 'right';
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-ghost';
-    btn.textContent = 'PDF';
-    btn.addEventListener('click', ()=> window.__printWorkorder && window.__printWorkorder(w.id));
-    tdBtn.appendChild(btn);
-    tr.appendChild(tdBtn);
-
-    revTbody.appendChild(tr);
+  // ---- Breakdown par date ----
+  if(revByDateTbody){
+    const map=new Map();
+    for(const inv of rows){
+      const k=invoiceDateKey(inv);
+      const cur=map.get(k)||{k, sales:0, parts:0, net:0};
+      cur.sales += Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+      cur.parts += Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+      cur.net += Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
+      map.set(k, cur);
+    }
+    const list=[...map.values()].sort((a,b)=> String(b.k).localeCompare(String(a.k))).slice(0,60);
+    revByDateTbody.innerHTML = list.map(r=>`
+      <tr>
+        <td>${safe(r.k)}</td>
+        <td style="text-align:right">${money(r.sales)}</td>
+        <td style="text-align:right">${money(r.parts)}</td>
+        <td style="text-align:right"><b>${money(r.net)}</b></td>
+      </tr>
+    `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
   }
 }
 
@@ -1478,6 +1647,7 @@ if(revPresetEl && revFromEl && revToEl){
     renderRevenue();
   });
   if(btnRevApply) btnRevApply.addEventListener("click", ()=>renderRevenue());
+  if(revPayFilterEl) revPayFilterEl.addEventListener("change", ()=>renderRevenue());
 }
 
 
