@@ -12,21 +12,6 @@ function normalizeEmail(data){
 }
 // ===== End helper =====
 
-function showToast(message, isError=false){
-  try{
-    const el = document.getElementById("toast");
-    if(!el){ console.warn("toast element not found"); return; }
-    el.textContent = String(message || "");
-    el.classList.toggle("error", !!isError);
-    el.hidden = false;
-    clearTimeout(showToast._t);
-    showToast._t = setTimeout(()=>{ el.hidden = true; }, 4500);
-  }catch(e){
-    console.warn("showToast failed", e);
-  }
-}
-
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -484,22 +469,12 @@ function subscribeAll(){
       }
     });
 
-  ,
-    (err)=>{
-      console.warn("onSnapshot error", err);
-      showToast("Accès refusé: paramètres (admin seulement).", true);
-    }
-  );// Promotions (admin only)
+    // Promotions (admin only)
     unsubPromotions = onSnapshot(query(colPromotions(), orderBy("createdAt", "desc"), limit(200)), (snap)=>{
       promotions = snap.docs.map(d=>({id:d.id, ...d.data()}));
       renderPromotions();
     });
-,
-    (err)=>{
-      console.warn("onSnapshot error", err);
-      showToast("Accès refusé: promotions (admin seulement).", true);
-    }
-  );}
+  }
 
   unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
     // Normalisation: certains clients ont l'email sous Email/courriel/mail...
@@ -515,12 +490,7 @@ function subscribeAll(){
         promoSelected: data.promoSelected === true,
       };
     });
-  ,
-    (err)=>{
-      console.warn("onSnapshot error", err);
-      showToast("Accès refusé: clients. Vérifie les règles Firestore et le rôle admin.", true);
-    }
-  );if(currentRole === "admin") renderDashboard();
+    if(currentRole === "admin") renderDashboard();
     renderClients();
     if(currentRole === "admin") renderRevenue();
     if(currentRole === "admin") renderPromotions();
@@ -533,12 +503,7 @@ function subscribeAll(){
     if(currentRole === "admin") renderRevenue();
   });
 
-,
-    (err)=>{
-      console.warn("onSnapshot error", err);
-      showToast("Accès refusé: véhicules. Vérifie les règles Firestore et le rôle admin.", true);
-    }
-  );const woQ = (currentRole === "mechanic")
+  const woQ = (currentRole === "mechanic")
     ? query(colWorkorders(), where("assignedTo","==", currentUid), limit(400))
     : query(colWorkorders(), orderBy("createdAt", "desc"), limit(400));
 
