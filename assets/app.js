@@ -463,19 +463,7 @@ function subscribeAll(){
   }
 
   unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
-    // Normalisation: certains clients ont l'email sous Email/courriel/mail...
-    // On force un champ `email` unique utilisé partout (Clients, Promotions, etc.).
-    customers = snap.docs.map(d=>{
-      const data = d.data() || {};
-      return {
-        id: d.id,
-        ...data,
-        fullName: String(data.fullName || data.name || "").trim(),
-        phone: String(data.phone || data.tel || data.mobile || "").trim(),
-        email: normalizeEmail(data),
-        promoSelected: data.promoSelected === true,
-      };
-    });
+    customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
     if(currentRole === "admin") renderDashboard();
     renderClients();
     if(currentRole === "admin") renderRevenue();
