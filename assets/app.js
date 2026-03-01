@@ -9,6 +9,9 @@ function normalizeEmail(data){
     data?.Mail ??
     "";
   return String(v).trim().toLowerCase();
+  }catch(e){
+    console.error("renderFinanceDashboard error:", e);
+  }
 }
 // ===== End helper =====
 
@@ -644,6 +647,7 @@ function renderDashboard(){
 }
 
 function renderFinanceDashboard(){
+  try{
   if(currentRole !== "admin") return;
   if(!finSalesEl) return;
 
@@ -1512,6 +1516,7 @@ function filterRevenueInvoices(){
 }
 
 function renderRevenue(){
+  try{
   if(!$("viewRevenue")) return;
   if(currentRole !== "admin"){
     if(revTotalEl) revTotalEl.textContent = money(0);
@@ -1636,6 +1641,9 @@ function renderRevenue(){
         <td style="text-align:right"><b>${money(r.net)}</b></td>
       </tr>
     `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+  }
+  }catch(e){
+    console.error("renderRevenue error:", e);
   }
 }
 
