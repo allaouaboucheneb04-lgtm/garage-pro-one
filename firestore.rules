@@ -4,45 +4,37 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
-    // user doc du compte connecté (évite les boucles)
-    function myUserDoc() {
-      return /databases/$(database)/documents/users/$(request.auth.uid);
-    }
-
     function role() {
-      // si le doc n'existe pas encore, rôle vide
-      return exists(myUserDoc()) ? get(myUserDoc()).data.role : null;
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     function isAdmin() { return signedIn() && role() == "admin"; }
     function isMech()  { return signedIn() && role() == "mechanic"; }
 
-    // IMPORTANT: ne pas utiliser isAdmin() dans la règle READ de /users,
-    // sinon ça peut créer une boucle avec role() -> get(/users/{uid})
     match /users/{uid} {
-      // chaque user peut lire SON doc (nécessaire pour role())
-      allow read: if signedIn() && request.auth.uid == uid;
-
-      // seul un admin peut écrire (changer roles, etc.)
-      allow create, update, delete: if isAdmin();
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
     }
 
     match /customers/{id} {
       allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /vehicles/{id} {
       allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /workorders/{id} {
       allow read: if isAdmin()
         || (isMech() && resource.data.assignedTo == request.auth.uid);
 
+      // admin crée les réparations
       allow create: if isAdmin();
 
+      // admin modifie tout
+      // mécanicien modifie seulement ses réparations (sans pouvoir changer assignedTo)
       allow update: if isAdmin()
         || (isMech()
             && resource.data.assignedTo == request.auth.uid
@@ -53,18 +45,11 @@ service cloud.firestore {
 
     match /appointments/{id} {
       allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow write: if isAdmin();
     }
 
-    // Promotions (création / envoi) : réservé admin
     match /promotions/{id} {
-      allow read, create, update, delete: if isAdmin();
-    }
-
-    // File d'envoi email utilisée par l'extension "Trigger Email from Firestore"
-    // (collection configurée = "mail")
-    match /mail/{id} {
-      allow read, create, update, delete: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     match /meta/{id} {
