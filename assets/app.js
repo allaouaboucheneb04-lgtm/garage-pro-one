@@ -168,6 +168,7 @@ const views = {
   promotions: $("viewPromotions"),
   settings: $("viewSettings"),
   revenue: $("viewRevenue"),
+  invoices: $("viewInvoices"),
 };
 const pageTitle = $("pageTitle");
 
@@ -273,11 +274,11 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
-  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices")){
     view = "repairs";
   }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", invoices:"Factures pièces", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
 }
 document.querySelectorAll("[data-go]").forEach(btn=>{
@@ -303,6 +304,13 @@ function colVehicles(){
   if(DATA_MODE==="nested") return collection(db, "vehicles", "vehicles", "vehicles");
   return collection(db, "users", currentUid, "vehicles");
 }
+
+function colInvoices(){
+  if(DATA_MODE==="root") return collection(db, "invoices");
+  if(DATA_MODE==="nested") return collection(db, "users", currentUid, "invoices");
+  return collection(db, "invoices");
+}
+
 function colWorkorders(){
   if(DATA_MODE==="root") return collection(db, "workorders");
   if(DATA_MODE==="nested") return collection(db, "workorders", "workorders", "workorders");
@@ -671,6 +679,199 @@ const revCountEl = $("revCount");
 const revAvgEl = $("revAvg");
 const revTbody = $("revTbody");
 const btnRevApply = $("btnRevApply");
+
+
+/* ============
+   Invoices (Parts) / Profit
+=========== */
+const btnNewInvoice = $("btnNewInvoice");
+const invoiceFormBox = $("invoiceFormBox");
+const formInvoice = $("formInvoice");
+const invCustomerEl = $("invCustomer");
+const invDateEl = $("invDate");
+const invRefEl = $("invRef");
+const invItemsTbody = $("invItemsTbody");
+const btnInvAddLine = $("btnInvAddLine");
+const btnInvCancel = $("btnInvCancel");
+const invCostTotalEl = $("invCostTotal");
+const invSellTotalEl = $("invSellTotal");
+const invProfitTotalEl = $("invProfitTotal");
+const inv30CountEl = $("inv30Count");
+const inv30ProfitEl = $("inv30Profit");
+const inv30MarginEl = $("inv30Margin");
+const invListTbody = $("invListTbody");
+
+function money(n){
+  const v = Number(n||0);
+  return v.toLocaleString('en-CA',{style:'currency',currency:'CAD'});
+}
+
+function todayISO(){
+  const d = new Date();
+  const tzOff = d.getTimezoneOffset()*60000;
+  return new Date(d.getTime()-tzOff).toISOString().slice(0,10);
+}
+
+function openInvoiceForm(open=true){
+  if(!invoiceFormBox) return;
+  invoiceFormBox.style.display = open ? "" : "none";
+}
+
+function ensureInvoiceLine(desc="", qty=1, cost=0, price=0){
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="input input-mini" data-k="desc" placeholder="ex: Plaquettes de frein" value="${safe(desc)}" /></td>
+    <td><input class="input input-mini" data-k="qty" type="number" min="1" value="${Number(qty||1)}" /></td>
+    <td style="text-align:right"><input class="input input-mini" data-k="cost" type="number" step="0.01" min="0" value="${Number(cost||0)}" /></td>
+    <td style="text-align:right"><input class="input input-mini" data-k="price" type="number" step="0.01" min="0" value="${Number(price||0)}" /></td>
+    <td class="no-print" style="text-align:right"><button class="btn btn-ghost btn-icon" type="button" title="Supprimer">✕</button></td>
+  `;
+  tr.querySelector('button').addEventListener('click', ()=>{ tr.remove(); recalcInvoiceTotals(); });
+  tr.querySelectorAll('input').forEach(inp=> inp.addEventListener('input', recalcInvoiceTotals));
+  invItemsTbody.appendChild(tr);
+}
+
+function readInvoiceItems(){
+  const items = [];
+  invItemsTbody.querySelectorAll('tr').forEach(tr=>{
+    const getv = (k)=> tr.querySelector(`[data-k="${k}"]`)?.value;
+    const desc = String(getv('desc')||"").trim();
+    const qty = Math.max(1, Number(getv('qty')||1));
+    const cost = Math.max(0, Number(getv('cost')||0));
+    const price = Math.max(0, Number(getv('price')||0));
+    if(desc || cost || price){
+      items.push({desc, qty, cost, price});
+    }
+  });
+  return items;
+}
+
+function recalcInvoiceTotals(){
+  const items = readInvoiceItems();
+  let costTotal = 0;
+  let sellTotal = 0;
+  for(const it of items){
+    costTotal += Number(it.cost||0) * Number(it.qty||1);
+    sellTotal += Number(it.price||0) * Number(it.qty||1);
+  }
+  const profit = sellTotal - costTotal;
+  invCostTotalEl.textContent = money(costTotal);
+  invSellTotalEl.textContent = money(sellTotal);
+  invProfitTotalEl.textContent = money(profit);
+}
+
+function fillInvoiceCustomers(){
+  if(!invCustomerEl) return;
+  const list = [...customers].sort((a,b)=> String(a.fullName||"").localeCompare(String(b.fullName||""), 'fr'));
+  invCustomerEl.innerHTML = list.map(c=>`<option value="${c.id}">${safe(c.fullName||'(Sans nom)')}</option>`).join('');
+}
+
+async function createInvoiceFromForm(e){
+  e.preventDefault();
+  const customerId = invCustomerEl.value;
+  const customer = customers.find(c=>c.id===customerId);
+  const items = readInvoiceItems();
+  if(items.length===0){
+    alert("Ajoute au moins une ligne (pièce / service). ");
+    return;
+  }
+  const dateStr = invDateEl.value || todayISO();
+  const d = new Date(dateStr+"T12:00:00");
+  let costTotal = 0, sellTotal = 0;
+  for(const it of items){
+    costTotal += Number(it.cost||0) * Number(it.qty||1);
+    sellTotal += Number(it.price||0) * Number(it.qty||1);
+  }
+  const profit = sellTotal - costTotal;
+  const payload = {
+    ref: String(invRefEl.value||"").trim(),
+    customerId,
+    customerName: customer?.fullName || "",
+    date: d,
+    items,
+    totals: { cost: costTotal, sell: sellTotal, profit },
+    createdAt: serverTimestamp(),
+    createdBy: currentUid,
+  };
+  try{
+    await addDoc(colInvoices(), payload);
+    openInvoiceForm(false);
+    formInvoice.reset();
+    invItemsTbody.innerHTML = "";
+    ensureInvoiceLine();
+    invDateEl.value = todayISO();
+    recalcInvoiceTotals();
+    alert("Facture enregistrée.");
+  }catch(err){
+    console.error(err);
+    alert("Erreur enregistrement facture: "+(err?.message||err));
+  }
+}
+
+async function deleteInvoice(id){
+  if(!confirm("Supprimer cette facture ?")) return;
+  try{
+    await deleteDoc(doc(db, "invoices", id));
+  }catch(err){
+    console.error(err);
+    alert("Erreur suppression: "+(err?.message||err));
+  }
+}
+
+function renderInvoices(){
+  if(!invListTbody) return;
+  // 30 derniers jours
+  const now = new Date();
+  const from = new Date(now.getTime() - 30*24*60*60*1000);
+  const inv30 = invoices.filter(inv=>{
+    const dt = inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date));
+    return dt >= from;
+  });
+  const count = inv30.length;
+  let profit = 0, sell=0;
+  for(const inv of inv30){
+    profit += Number(inv.totals?.profit||0);
+    sell += Number(inv.totals?.sell||0);
+  }
+  const margin = sell>0 ? (profit/sell*100) : 0;
+  inv30CountEl.textContent = String(count);
+  inv30ProfitEl.textContent = money(profit);
+  inv30MarginEl.textContent = `${margin.toFixed(1)}%`;
+
+  const list = [...invoices].sort((a,b)=>{
+    const da = a.date instanceof Date ? a.date : (a.date?.toDate ? a.date.toDate() : new Date(a.date));
+    const db = b.date instanceof Date ? b.date : (b.date?.toDate ? b.date.toDate() : new Date(b.date));
+    return db - da;
+  });
+  if(list.length===0){
+    invListTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucune facture.</td></tr>';
+    return;
+  }
+  invListTbody.innerHTML = list.map(inv=>{
+    const dt = inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date));
+    const ds = isoDate(dt);
+    const ref = safe(inv.ref||"");
+    const cust = safe(inv.customerName||"");
+    const c = money(inv.totals?.cost||0);
+    const s = money(inv.totals?.sell||0);
+    const p = money(inv.totals?.profit||0);
+    return `
+      <tr>
+        <td>${ds}</td>
+        <td>${ref}</td>
+        <td>${cust}</td>
+        <td style="text-align:right">${c}</td>
+        <td style="text-align:right">${s}</td>
+        <td style="text-align:right"><b>${p}</b></td>
+        <td class="no-print" style="text-align:right"><button class="btn btn-ghost" data-del-inv="${inv.id}">Supprimer</button></td>
+      </tr>
+    `;
+  }).join('');
+
+  invListTbody.querySelectorAll('[data-del-inv]').forEach(btn=>{
+    btn.addEventListener('click', ()=>deleteInvoice(btn.getAttribute('data-del-inv')));
+  });
+}
 
 function isoDate(d){
   // YYYY-MM-DD in local time

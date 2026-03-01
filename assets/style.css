@@ -147,3 +147,8 @@ body.modal-open{overflow:hidden}
 .row-selected td{
   background: rgba(0,0,0,.04);
 }
+
+
+/* Invoices table inputs */
+.table input.input-mini{padding:8px 10px; min-height:36px;}
+.table td .btn-icon{padding:6px 8px;}

@@ -21,7 +21,8 @@
 <button class="btn btn-ghost" data-go="clients">Clients</button>
 <button class="btn btn-ghost" data-go="repairs">Réparations</button>
 <button class="btn btn-ghost" data-go="promotions" data-role="admin">Promotions</button>
-<button class="btn btn-ghost" data-go="revenue" data-role="admin">Revenus</button><button class="btn btn-ghost" data-go="settings" data-role="admin">Paramètres</button>
+<button class="btn btn-ghost" data-go="revenue" data-role="admin">Revenus</button>
+<button class="btn btn-ghost" data-go="invoices" data-role="admin">Factures pièces</button><button class="btn btn-ghost" data-go="settings" data-role="admin">Paramètres</button>
 <button class="btn btn-ghost" id="btnLogout">Déconnexion</button>
 </nav>
 </header>
@@ -222,6 +223,112 @@
 </tbody>
 </table>
 </div>
+</section>
+
+<!-- FACTURES PIECES (Bénéfice) -->
+<section class="card" id="viewInvoices" style="display:none">
+  <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
+    <div>
+      <h2 style="margin:0 0 6px 0">Factures pièces & bénéfice</h2>
+      <div class="muted">Ajoute les factures de pièces (coût) et le prix facturé au client pour voir ton bénéfice.</div>
+    </div>
+    <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <button class="btn btn-primary" id="btnNewInvoice" data-role="admin">Nouvelle facture</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Form -->
+  <div class="box" id="invoiceFormBox" style="display:none">
+    <h3 style="margin-top:0">Nouvelle facture</h3>
+    <form class="form" id="formInvoice">
+      <div class="grid" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px">
+        <div>
+          <label>Client</label>
+          <select class="input" id="invCustomer" required></select>
+        </div>
+        <div>
+          <label>Date</label>
+          <input class="input" id="invDate" type="date" required />
+        </div>
+        <div>
+          <label># Référence (optionnel)</label>
+          <input class="input" id="invRef" placeholder="ex: INV-1001" />
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th style="width:90px">Qté</th>
+              <th style="width:130px;text-align:right">Coût ($)</th>
+              <th style="width:130px;text-align:right">Prix client ($)</th>
+              <th class="no-print" style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="invItemsTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="row-between" style="margin-top:10px; gap:12px; flex-wrap:wrap">
+        <button class="btn" id="btnInvAddLine" type="button">+ Ajouter une ligne</button>
+        <div class="row" style="gap:16px; flex-wrap:wrap">
+          <div class="muted">Coût total: <b id="invCostTotal">$0.00</b></div>
+          <div class="muted">Total facturé: <b id="invSellTotal">$0.00</b></div>
+          <div class="muted">Bénéfice: <b id="invProfitTotal">$0.00</b></div>
+        </div>
+      </div>
+
+      <div class="row" style="gap:10px; margin-top:12px; flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit">Enregistrer</button>
+        <button class="btn btn-ghost" id="btnInvCancel" type="button">Annuler</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Summary -->
+  <div class="grid" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; margin-top:14px">
+    <div class="box">
+      <div class="muted">Factures (30 derniers jours)</div>
+      <div class="val" id="inv30Count">0</div>
+    </div>
+    <div class="box">
+      <div class="muted">Bénéfice (30 jours)</div>
+      <div class="val" id="inv30Profit">$0.00</div>
+    </div>
+    <div class="box">
+      <div class="muted">Marge moyenne</div>
+      <div class="val" id="inv30Margin">0%</div>
+    </div>
+  </div>
+
+  <div style="margin-top:14px; overflow:auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th># Réf</th>
+          <th>Client</th>
+          <th style="text-align:right">Coût</th>
+          <th style="text-align:right">Facturé</th>
+          <th style="text-align:right">Bénéfice</th>
+          <th class="no-print"></th>
+        </tr>
+      </thead>
+      <tbody id="invListTbody">
+        <tr><td class="muted" colspan="7">Aucune facture.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</section>
+
+<!-- PROMOTIONS -->
 </section>
 
 <!-- PROMOTIONS -->
