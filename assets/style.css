@@ -147,3 +147,22 @@ body.modal-open{overflow:hidden}
 .row-selected td{
   background: rgba(0,0,0,.04);
 }
+
+
+/* Toast */
+.toast{
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  background: rgba(17,24,39,.95);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  z-index: 9999;
+  max-width: min(520px, calc(100vw - 32px));
+  font-size: 14px;
+  line-height: 1.3;
+}
+.toast.error{ background: rgba(220,38,38,.95); }
