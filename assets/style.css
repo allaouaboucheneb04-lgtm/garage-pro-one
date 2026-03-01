@@ -152,3 +152,20 @@ body.modal-open{overflow:hidden}
 /* Invoices table inputs */
 .table input.input-mini{padding:8px 10px; min-height:36px;}
 .table td .btn-icon{padding:6px 8px;}
+
+
+/* Toast (messages) */
+.toast{
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  background: rgba(20,20,20,0.92);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  z-index: 9999;
+  max-width: min(92vw, 520px);
+  text-align: center;
+}

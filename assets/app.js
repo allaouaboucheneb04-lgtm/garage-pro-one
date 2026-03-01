@@ -187,6 +187,19 @@ function isoNow(){
   const d = new Date();
   const pad = (n)=> String(n).padStart(2,'0');
   return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+
+const toastEl = $("toast");
+let toastTimer = null;
+function showToast(message, ms=3500){
+  if(!toastEl) return;
+  // compat: ancien code passait true/false
+  if(ms === true) ms = 7000;
+  if(ms === false) ms = 3500;
+  toastEl.textContent = String(message||"");
+  toastEl.style.display = "";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toastEl.style.display="none"; }, ms);
+}
 }
 
 
@@ -353,6 +366,7 @@ async function detectDataMode(){
 let customers = [];
 let vehicles = [];
 let workorders = [];
+let invoices = [];
 let settings = { tpsRate: 0.05, tvqRate: 0.09975 };
 
 let promotions = [];
@@ -363,6 +377,7 @@ let unsubCustomers = null;
 let unsubVehicles = null;
 let unsubWorkorders = null;
 let unsubPromotions = null;
+let unsubInvoices = null;
 
 /* ============
    Auth UI
@@ -500,6 +515,8 @@ function subscribeAll(){
     });
     if(currentRole === "admin") renderDashboard();
     renderClients();
+    fillInvoiceCustomers();
+    fillInvoiceWorkorders();
     if(currentRole === "admin") renderRevenue();
     if(currentRole === "admin") renderPromotions();
   });
@@ -508,6 +525,8 @@ function subscribeAll(){
     vehicles = snap.docs.map(d=>({id:d.id, ...d.data()}));
     if(currentRole === "admin") renderDashboard();
     renderClients();
+    fillInvoiceCustomers();
+    fillInvoiceWorkorders();
     if(currentRole === "admin") renderRevenue();
   });
 
@@ -521,6 +540,7 @@ function subscribeAll(){
       workorders = snap.docs.map(d=>({id:d.id, ...d.data()}));
       if(currentRole === "admin") renderDashboard();
       renderRepairs();
+      fillInvoiceWorkorders();
       if(currentRole === "admin") renderRevenue();
     },
     (err)=>{
@@ -528,6 +548,23 @@ function subscribeAll(){
       showToast("Accès refusé: réparations. Vérifie le champ role dans /users/{uid} (admin ou mechanic).", true);
     }
   );
+
+
+  // Invoices (admin)
+  if(currentRole === "admin"){
+    const invQ = query(colInvoices(), orderBy("date", "desc"), limit(500));
+    unsubInvoices = onSnapshot(invQ,
+      (snap)=>{
+        invoices = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderInvoices();
+      },
+      (err)=>{
+        console.warn('invoices onSnapshot error', err);
+        showToast("Accès refusé: factures. Vérifie les rules /invoices et ton rôle admin.", 7000);
+      }
+    );
+  }
+
 }
 
 function unsubscribeAll(){
@@ -536,7 +573,8 @@ function unsubscribeAll(){
   if(unsubVehicles) unsubVehicles();
   if(unsubWorkorders) unsubWorkorders();
   if(unsubPromotions) unsubPromotions();
-  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = null;
+  if(unsubInvoices) unsubInvoices();
+  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = unsubInvoices = null;
 }
 
 /* ============
@@ -690,6 +728,7 @@ const formInvoice = $("formInvoice");
 const invCustomerEl = $("invCustomer");
 const invDateEl = $("invDate");
 const invRefEl = $("invRef");
+const invWorkorderEl = $("invWorkorder");
 const invItemsTbody = $("invItemsTbody");
 const btnInvAddLine = $("btnInvAddLine");
 const btnInvCancel = $("btnInvCancel");
@@ -700,11 +739,42 @@ const inv30CountEl = $("inv30Count");
 const inv30ProfitEl = $("inv30Profit");
 const inv30MarginEl = $("inv30Margin");
 const invListTbody = $("invListTbody");
+const invTopClientsTbody = $("invTopClientsTbody");
+const invMonthlyTbody = $("invMonthlyTbody");
+const invMonthlyChartEl = $("invMonthlyChart");
+const invFromEl = $("invFrom");
+const invToEl = $("invTo");
+const btnInvThisMonth = $("btnInvThisMonth");
+const btnInvLastMonth = $("btnInvLastMonth");
+const btnInvAll = $("btnInvAll");
+const btnInvExport = $("btnInvExport");
 
-function money(n){
-  const v = Number(n||0);
-  return v.toLocaleString('en-CA',{style:'currency',currency:'CAD'});
+let invFilter = { from: null, to: null };
+
+// UI wiring (Invoices)
+if(invDateEl) invDateEl.value = todayISO();
+if(btnNewInvoice) btnNewInvoice.onclick = ()=>{
+  if(currentRole !== "admin"){ showToast("Accès réservé admin."); return; }
+  openInvoiceForm(true);
+};
+if(btnInvAddLine) btnInvAddLine.onclick = ()=>{ ensureInvoiceLine(); recalcInvoiceTotals(); };
+if(btnInvCancel) btnInvCancel.onclick = ()=>{ openInvoiceForm(false); };
+if(formInvoice) formInvoice.onsubmit = createInvoiceFromForm;
+
+function invSetMonth(which){
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + (which==="last"?-1:0), 1);
+  const from = isoDate(firstDayOfMonth(d));
+  const to = isoDate(lastDayOfMonth(d));
+  setInvFilter(from, to);
 }
+if(btnInvThisMonth) btnInvThisMonth.onclick = ()=>invSetMonth("this");
+if(btnInvLastMonth) btnInvLastMonth.onclick = ()=>invSetMonth("last");
+if(btnInvAll) btnInvAll.onclick = ()=>setInvFilter(null, null);
+if(invFromEl) invFromEl.onchange = ()=>setInvFilter(invFromEl.value||null, invToEl?.value||null);
+if(invToEl) invToEl.onchange = ()=>setInvFilter(invFromEl?.value||null, invToEl.value||null);
+if(btnInvExport) btnInvExport.onclick = ()=>exportInvoicesCSV();
+ // dates (YYYY-MM-DD)
 
 function todayISO(){
   const d = new Date();
@@ -766,10 +836,37 @@ function fillInvoiceCustomers(){
   invCustomerEl.innerHTML = list.map(c=>`<option value="${c.id}">${safe(c.fullName||'(Sans nom)')}</option>`).join('');
 }
 
+
+function workorderDisplay(wo){
+  if(!wo) return "";
+  const v = getVehicle(wo.vehicleId) || {};
+  const c = v.customerId ? (getCustomer(v.customerId) || {}) : {};
+  const client = c.fullName || "";
+  const veh = [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"");
+  const d = String(wo.createdAt||"").slice(0,10);
+  const total = money(wo.total||0);
+  const parts = [d, client, veh].filter(Boolean).join(" — ");
+  return parts ? `${parts} — ${total}` : `${wo.id} — ${total}`;
+}
+
+function fillInvoiceWorkorders(){
+  if(!invWorkorderEl) return;
+  // option vide
+  const opts = ['<option value="">— Aucune —</option>'];
+  // On ne liste que les réparations (workorders) existantes, triées par date desc
+  const list = [...workorders].sort(byCreatedDesc);
+  for(const wo of list){
+    opts.push(`<option value="${wo.id}">${safe(workorderDisplay(wo))}</option>`);
+  }
+  invWorkorderEl.innerHTML = opts.join('');
+}
+
+
 async function createInvoiceFromForm(e){
   e.preventDefault();
   const customerId = invCustomerEl.value;
   const customer = customers.find(c=>c.id===customerId);
+  const workorderId = (invWorkorderEl && invWorkorderEl.value) ? invWorkorderEl.value : "";
   const items = readInvoiceItems();
   if(items.length===0){
     alert("Ajoute au moins une ligne (pièce / service). ");
@@ -787,6 +884,8 @@ async function createInvoiceFromForm(e){
     ref: String(invRefEl.value||"").trim(),
     customerId,
     customerName: customer?.fullName || "",
+    workorderId: workorderId || "",
+    workorderLabel: workorderId ? workorderDisplay(workorders.find(w=>w.id===workorderId)) : "",
     date: d,
     items,
     totals: { cost: costTotal, sell: sellTotal, profit },
@@ -800,6 +899,7 @@ async function createInvoiceFromForm(e){
     invItemsTbody.innerHTML = "";
     ensureInvoiceLine();
     invDateEl.value = todayISO();
+    if(invWorkorderEl) invWorkorderEl.value = "";
     recalcInvoiceTotals();
     alert("Facture enregistrée.");
   }catch(err){
@@ -811,11 +911,73 @@ async function createInvoiceFromForm(e){
 async function deleteInvoice(id){
   if(!confirm("Supprimer cette facture ?")) return;
   try{
-    await deleteDoc(doc(db, "invoices", id));
+    await deleteDoc(doc(colInvoices(), id));
   }catch(err){
     console.error(err);
     alert("Erreur suppression: "+(err?.message||err));
   }
+}
+
+
+function setInvFilter(fromISO, toISO){
+  invFilter.from = fromISO || null;
+  invFilter.to = toISO || null;
+  if(invFromEl) invFromEl.value = invFilter.from || "";
+  if(invToEl) invToEl.value = invFilter.to || "";
+  renderInvoices();
+}
+function invInRange(inv){
+  // inv.date stored as string YYYY-MM-DD or Timestamp/Date
+  const d = inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date));
+  const iso = isoDate(d);
+  if(invFilter.from && iso < invFilter.from) return false;
+  if(invFilter.to && iso > invFilter.to) return false;
+  return true;
+}
+function getFilteredInvoices(){
+  return invoices.filter(invInRange);
+}
+function downloadText(filename, text){
+  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 500);
+}
+function exportInvoicesCSV(){
+  const list = getFilteredInvoices().sort((a,b)=>{
+    const da = a.date instanceof Date ? a.date : (a.date?.toDate ? a.date.toDate() : new Date(a.date));
+    const db = b.date instanceof Date ? b.date : (b.date?.toDate ? b.date.toDate() : new Date(b.date));
+    return db - da;
+  });
+  const header = ["date","ref","client","cost_total","sell_total","profit_total","item_desc","item_qty","item_cost","item_price"];
+  const rows = [header.join(",")];
+  for(const inv of list){
+    const dt = isoDate(inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date)));
+    const ref = (inv.ref||"").replaceAll('"','""');
+    const client = (inv.customerName||"").replaceAll('"','""');
+    const costT = Number(inv.totals?.cost||0);
+    const sellT = Number(inv.totals?.sell||0);
+    const profitT = Number(inv.totals?.profit||0);
+    const items = Array.isArray(inv.items) ? inv.items : [];
+    if(items.length===0){
+      rows.push([dt, `"${ref}"`, `"${client}"`, costT, sellT, profitT, "", "", "", ""].join(","));
+    }else{
+      for(const it of items){
+        const desc = String(it.desc||"").replaceAll('"','""');
+        const qty = Number(it.qty||0);
+        const cost = Number(it.cost||0);
+        const price = Number(it.price||0);
+        rows.push([dt, `"${ref}"`, `"${client}"`, costT, sellT, profitT, `"${desc}"`, qty, cost, price].join(","));
+      }
+    }
+  }
+  const fname = "factures_pieces.csv";
+  downloadText(fname, rows.join("\n"));
 }
 
 function renderInvoices(){
@@ -838,19 +1000,20 @@ function renderInvoices(){
   inv30ProfitEl.textContent = money(profit);
   inv30MarginEl.textContent = `${margin.toFixed(1)}%`;
 
-  const list = [...invoices].sort((a,b)=>{
+  const list = [...getFilteredInvoices()].sort((a,b)=>{
     const da = a.date instanceof Date ? a.date : (a.date?.toDate ? a.date.toDate() : new Date(a.date));
     const db = b.date instanceof Date ? b.date : (b.date?.toDate ? b.date.toDate() : new Date(b.date));
     return db - da;
   });
   if(list.length===0){
-    invListTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucune facture.</td></tr>';
+    invListTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucune facture pour ce filtre.</td></tr>';
     return;
   }
   invListTbody.innerHTML = list.map(inv=>{
     const dt = inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date));
     const ds = isoDate(dt);
     const ref = safe(inv.ref||"");
+    const wo = safe(inv.workorderLabel||"");
     const cust = safe(inv.customerName||"");
     const c = money(inv.totals?.cost||0);
     const s = money(inv.totals?.sell||0);
@@ -868,9 +1031,84 @@ function renderInvoices(){
     `;
   }).join('');
 
+  renderInvoicesAnalytics(list);
+
   invListTbody.querySelectorAll('[data-del-inv]').forEach(btn=>{
     btn.addEventListener('click', ()=>deleteInvoice(btn.getAttribute('data-del-inv')));
   });
+
+function renderInvoicesAnalytics(list){
+  // list = factures filtrées
+  if(!invTopClientsTbody || !invMonthlyTbody || !invMonthlyChartEl) return;
+  if(!Array.isArray(list) || list.length===0){
+    invTopClientsTbody.innerHTML = '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
+    invMonthlyTbody.innerHTML = '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
+    invMonthlyChartEl.textContent = "—";
+    return;
+  }
+
+  // ---- Top clients ----
+  const byClient = new Map();
+  for(const inv of list){
+    const key = inv.customerId || inv.customerName || "(Sans client)";
+    const name = inv.customerName || "(Sans client)";
+    const cur = byClient.get(key) || {name, sell:0, cost:0, profit:0};
+    const cost = Number(inv.totals?.cost||0);
+    const sell = Number(inv.totals?.sell||0);
+    const profit = Number(inv.totals?.profit||0);
+    cur.sell += sell; cur.cost += cost; cur.profit += profit;
+    byClient.set(key, cur);
+  }
+  const top = [...byClient.values()].sort((a,b)=>b.profit-a.profit).slice(0,10);
+  invTopClientsTbody.innerHTML = top.map(r=>{
+    const m = r.sell>0 ? (r.profit/r.sell) : 0;
+    return `<tr>
+      <td>${safe(r.name)}</td>
+      <td style="text-align:right">${money(r.sell)}</td>
+      <td style="text-align:right">${money(r.cost)}</td>
+      <td style="text-align:right"><b>${money(r.profit)}</b></td>
+      <td style="text-align:right">${(m*100).toFixed(1)}%</td>
+    </tr>`;
+  }).join('') || '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
+
+  // ---- Par mois (12 derniers) ----
+  const byMonth = new Map(); // YYYY-MM
+  for(const inv of list){
+    const dt = inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date));
+    const ym = dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,'0');
+    const cur = byMonth.get(ym) || {ym, sell:0, cost:0, profit:0};
+    cur.cost += Number(inv.totals?.cost||0);
+    cur.sell += Number(inv.totals?.sell||0);
+    cur.profit += Number(inv.totals?.profit||0);
+    byMonth.set(ym, cur);
+  }
+  const months = [...byMonth.values()].sort((a,b)=> String(b.ym).localeCompare(String(a.ym))).slice(0,12);
+  invMonthlyTbody.innerHTML = months.map(r=>{
+    const m = r.sell>0 ? (r.profit/r.sell) : 0;
+    return `<tr>
+      <td>${safe(r.ym)}</td>
+      <td style="text-align:right">${money(r.sell)}</td>
+      <td style="text-align:right">${money(r.cost)}</td>
+      <td style="text-align:right"><b>${money(r.profit)}</b></td>
+      <td style="text-align:right">${(m*100).toFixed(1)}%</td>
+    </tr>`;
+  }).join('') || '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
+
+  // ---- Mini graphique texte ----
+  const maxP = Math.max(...months.map(m=>m.profit), 0);
+  if(maxP<=0){
+    invMonthlyChartEl.textContent = "Pas assez de données pour un graphique (bénéfice ≤ 0).";
+  }else{
+    const bars = months.slice().reverse().map(r=>{
+      const w = Math.round((r.profit/maxP)*16);
+      const bar = "▮".repeat(Math.max(1,w));
+      return `${r.ym}: ${bar} ${money(r.profit)}`;
+    }).join("<br>");
+    invMonthlyChartEl.innerHTML = `<div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.5">${bars}</div>`;
+  }
+}
+
+
 }
 
 function isoDate(d){
@@ -1064,6 +1302,8 @@ window.__promoSelectHasEmail = async ()=>{
       return { ...c, promoSelected: hasEmail };
     });
     renderClients();
+    fillInvoiceCustomers();
+    fillInvoiceWorkorders();
     if(typeof renderPromotions === "function") renderPromotions();
 
     // batch updates (max 500 writes per batch)

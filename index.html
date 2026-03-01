@@ -191,7 +191,7 @@
 <button class="btn" id="btnRevApply">Appliquer</button>
 </div>
 </div>
-<div class="grid" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; margin-top:14px">
+<div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:14px">
 <div class="box">
 <div class="muted">Total période</div>
 <div class="val" id="revTotal">$0.00</div>
@@ -234,7 +234,24 @@
     </div>
     <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
       <button class="btn btn-primary" id="btnNewInvoice" data-role="admin">Nouvelle facture</button>
+    
+    <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <label class="muted" style="display:block;font-size:12px">Du</label>
+        <input class="input input-mini" id="invFrom" type="date">
+      </div>
+      <div>
+        <label class="muted" style="display:block;font-size:12px">Au</label>
+        <input class="input input-mini" id="invTo" type="date">
+      </div>
+      <div class="row" style="gap:8px; align-items:flex-end">
+        <button class="btn btn-ghost" id="btnInvThisMonth" type="button">Ce mois</button>
+        <button class="btn btn-ghost" id="btnInvLastMonth" type="button">Mois dernier</button>
+        <button class="btn btn-ghost" id="btnInvAll" type="button">Tout</button>
+      </div>
+      <button class="btn" id="btnInvExport" type="button">Exporter CSV</button>
     </div>
+</div>
   </div>
 
   <div class="divider"></div>
@@ -243,7 +260,7 @@
   <div class="box" id="invoiceFormBox" style="display:none">
     <h3 style="margin-top:0">Nouvelle facture</h3>
     <form class="form" id="formInvoice">
-      <div class="grid" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px">
+      <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px">
         <div>
           <label>Client</label>
           <select class="input" id="invCustomer" required></select>
@@ -255,7 +272,14 @@
         <div>
           <label># Référence (optionnel)</label>
           <input class="input" id="invRef" placeholder="ex: INV-1001" />
+        
+        <div>
+          <label>Réparation (optionnel)</label>
+          <select class="input" id="invWorkorder">
+            <option value="">— Aucune —</option>
+          </select>
         </div>
+</div>
       </div>
 
       <div class="divider"></div>
@@ -292,7 +316,7 @@
   </div>
 
   <!-- Summary -->
-  <div class="grid" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; margin-top:14px">
+  <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:14px">
     <div class="box">
       <div class="muted">Factures (30 derniers jours)</div>
       <div class="val" id="inv30Count">0</div>
@@ -324,7 +348,52 @@
         <tr><td class="muted" colspan="7">Aucune facture.</td></tr>
       </tbody>
     </table>
+  
+  <div class="divider"></div>
+
+  <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px">
+    <div class="box">
+      <h3 style="margin-top:0">Bénéfice par client (Top 10)</h3>
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Client</th>
+              <th style="text-align:right">Facturé</th>
+              <th style="text-align:right">Coût</th>
+              <th style="text-align:right">Bénéfice</th>
+              <th style="text-align:right">Marge</th>
+            </tr>
+          </thead>
+          <tbody id="invTopClientsTbody">
+            <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="box">
+      <h3 style="margin-top:0">Bénéfice par mois</h3>
+      <div id="invMonthlyChart" class="muted" style="margin:6px 0 10px 0">—</div>
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Mois</th>
+              <th style="text-align:right">Facturé</th>
+              <th style="text-align:right">Coût</th>
+              <th style="text-align:right">Bénéfice</th>
+              <th style="text-align:right">Marge</th>
+            </tr>
+          </thead>
+          <tbody id="invMonthlyTbody">
+            <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
+</div>
 
 </section>
 
@@ -432,6 +501,7 @@
 </section>
 </section>
 </main>
+<div id="toast" class="toast" style="display:none"></div>
 <footer class="footer no-print">
 <small>© <span id="year"></span> Garage Pro One — <span class="muted">Synchro Firebase</span></small>
 </footer>
