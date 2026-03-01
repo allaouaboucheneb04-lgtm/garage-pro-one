@@ -9,11 +9,9 @@ function normalizeEmail(data){
     data?.Mail ??
     "";
   return String(v).trim().toLowerCase();
-  }catch(e){
-    console.error("renderFinanceDashboard error:", e);
-  }
 }
 // ===== End helper =====
+
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {

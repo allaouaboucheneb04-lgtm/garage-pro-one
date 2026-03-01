@@ -1,4 +1,4 @@
-export const firebaseConfig = {
+window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyB0dGjtVj1_A35RPuRWYAZRpRbVwEE_Q5k",
   authDomain: "garage-pro-one.firebaseapp.com",
   projectId: "garage-pro-one",
