@@ -4,37 +4,41 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
-    function role() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    // role stocké dans /users/{uid}
+    function myUserDoc() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
     }
-
+    function role() {
+      return get(myUserDoc()).data.role;
+    }
     function isAdmin() { return signedIn() && role() == "admin"; }
     function isMech()  { return signedIn() && role() == "mechanic"; }
 
+    // IMPORTANT: ne pas utiliser isAdmin() dans la règle /users sinon boucle.
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
+      // chaque utilisateur peut lire SON doc (nécessaire pour role())
+      allow read: if signedIn() && request.auth.uid == uid;
+
+      // seul un admin peut écrire (changer roles, etc.)
+      allow create, update, delete: if isAdmin();
     }
 
     match /customers/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /vehicles/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /workorders/{id} {
       allow read: if isAdmin()
         || (isMech() && resource.data.assignedTo == request.auth.uid);
 
-      // admin crée les réparations
       allow create: if isAdmin();
 
-      // admin modifie tout
-      // mécanicien modifie seulement ses réparations (sans pouvoir changer assignedTo)
       allow update: if isAdmin()
         || (isMech()
             && resource.data.assignedTo == request.auth.uid
@@ -45,11 +49,22 @@ service cloud.firestore {
 
     match /appointments/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
+    // Promotions (page Promotions)
     match /promotions/{id} {
-      allow read, write: if isAdmin();
+      allow read: if signedIn();
+      // seule l'admin crée/modifie/supprime les promos
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Emails déclenchés par l’extension "Trigger Email from Firestore"
+    // La page Promotions écrit des docs dans /mail.
+    match /mail/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     match /meta/{id} {
