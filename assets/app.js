@@ -367,7 +367,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80 };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025 };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -732,7 +732,7 @@ const invInstallDateEl = $("invInstallDate");
 const invRefEl = $("invRef");
 const invWorkorderEl = $("invWorkorder");
 const invPayMethodEl = $("invPayMethod");
-const invHoursEl = $("invHours");
+const invLaborEl = $("invLabor");
 const invSubTotalEl = $("invSubTotal");
 const invTaxTotalEl = $("invTaxTotal");
 const invGrandTotalEl = $("invGrandTotal");
@@ -765,7 +765,7 @@ let invFilter = { from: null, to: null };
 
 // UI wiring (Invoices)
 if(invDateEl) invDateEl.value = todayISO();
-if(invHoursEl) invHoursEl.value = "0";
+if(invLaborEl) invLaborEl.value = "0";
 if(btnNewInvoice) btnNewInvoice.onclick = ()=>{
   if(currentRole !== "admin"){ showToast("Accès réservé admin."); return; }
   openInvoiceForm(true);
@@ -773,7 +773,7 @@ if(btnNewInvoice) btnNewInvoice.onclick = ()=>{
 if(btnInvAddLine) btnInvAddLine.onclick = ()=>{ ensureInvoiceLine(); recalcInvoiceTotals(); };
 if(btnInvCancel) btnInvCancel.onclick = ()=>{ openInvoiceForm(false); };
 if(formInvoice) formInvoice.onsubmit = createInvoiceFromForm;
-if(invHoursEl) invHoursEl.addEventListener("input", recalcInvoiceTotals);
+if(invLaborEl) invLaborEl.addEventListener("input", recalcInvoiceTotals);
 if(invPayMethodEl) invPayMethodEl.addEventListener("change", recalcInvoiceTotals);
 
 
@@ -834,17 +834,13 @@ function readInvoiceItems(){
 
 function recalcInvoiceTotals(){
   const items = readInvoiceItems();
-  const hours = Math.max(0, Number(invHoursEl?.value || 0));
-  const laborRate = Number(settings.laborRate||0);
-  const labor = hours * laborRate;
-
+  const labor = Math.max(0, Number(invLaborEl?.value || 0));
   let partsCost = 0;
   let partsSell = 0;
   for(const it of items){
     partsCost += Number(it.cost||0) * Number(it.qty||1);
     partsSell += Number(it.price||0) * Number(it.qty||1);
   }
-
   const subTotal = partsSell + labor;
 
   const tps = Number(settings.tpsRate||0);
@@ -856,6 +852,7 @@ function recalcInvoiceTotals(){
   const cardFeeRate = Number(settings.cardFeeRate||0);
   const cardFee = isCard ? (grandTotal * cardFeeRate) : 0;
 
+  // Profit net: on exclut les taxes (pas un revenu) et on retire les frais carte
   const netProfit = subTotal - partsCost - cardFee;
 
   if(invCostTotalEl) invCostTotalEl.textContent = money(partsCost);
@@ -864,7 +861,6 @@ function recalcInvoiceTotals(){
   if(invGrandTotalEl) invGrandTotalEl.textContent = money(grandTotal);
   if(invCardFeeEl) invCardFeeEl.textContent = money(cardFee);
   if(invNetProfitEl) invNetProfitEl.textContent = money(netProfit);
-}
 }
 
 function fillInvoiceCustomers(){
@@ -992,7 +988,7 @@ async function createInvoiceFromForm(e){
           invDateEl.value = todayISO();
           if(invWorkorderEl) invWorkorderEl.value = "";
           if(invPayMethodEl) invPayMethodEl.value = "cash";
-    if(invHoursEl) invHoursEl.value = "0";
+    if(invLaborEl) invLaborEl.value = "0";
           if(invPurchaseDateEl) invPurchaseDateEl.value = "";
           if(invInstallDateEl) invInstallDateEl.value = "";
           recalcInvoiceTotals();
@@ -1023,8 +1019,7 @@ async function createInvoiceFromForm(e){
     purchaseDate: invPurchaseDateEl?.value || "",
     installDate: invInstallDateEl?.value || "",
     items,
-    hours: Math.max(0, Number(invHoursEl?.value || 0)),
-    labor: Math.max(0, Number(invHoursEl?.value || 0)) * Number(settings.laborRate||0),
+    labor: Math.max(0, Number(invLaborEl?.value || 0)),
     totals: {
       partsCost: costTotal,
       partsSell: sellTotal,
@@ -1050,7 +1045,7 @@ async function createInvoiceFromForm(e){
     invDateEl.value = todayISO();
     if(invWorkorderEl) invWorkorderEl.value = "";
     if(invPayMethodEl) invPayMethodEl.value = "cash";
-    if(invHoursEl) invHoursEl.value = "0";
+    if(invLaborEl) invLaborEl.value = "0";
     recalcInvoiceTotals();
     editingInvoiceId = null;
     alert("Facture enregistrée.");
@@ -1206,7 +1201,7 @@ function renderInvoices(){
       if(invInstallDateEl) invInstallDateEl.value = inv.installDate || "";
       invRefEl.value = inv.ref || "";
       if(invPayMethodEl) invPayMethodEl.value = inv.paymentMethod || "cash";
-      if(invHoursEl) invHoursEl.value = String(inv.hours ?? 0);
+      if(invLaborEl) invLaborEl.value = String(inv.labor ?? 0);
       invItemsTbody.innerHTML = "";
       (inv.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
       recalcInvoiceTotals();
@@ -1872,19 +1867,17 @@ $("btnSaveSettings").onclick = async ()=>{
   const tps = parseFloat(String($("setTps").value).replace(',','.'))/100;
   const tvq = parseFloat(String($("setTvq").value).replace(',','.'))/100;
   const cardFee = parseFloat(String($("setCardFee").value||"0").replace(',','.'))/100;
-  const laborRate = parseFloat(String($("setLaborRate").value||"0").replace(',','.'));
-  if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || !isFinite(laborRate) || tps<0 || tvq<0 || cardFee<0 || laborRate<0){
+  if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || tps<0 || tvq<0 || cardFee<0){
     alert("TPS/TVQ invalides.");
     return;
   }
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, updatedAt: serverTimestamp() }, { merge:true });
+  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
 function renderSettings(){
   $("setTps").value = (settings.tpsRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setTvq").value = (settings.tvqRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setCardFee").value = (Number(settings.cardFeeRate||0)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
-  $("setLaborRate").value = Number(settings.laborRate||0);
 }
 
 /* Export / Import */
@@ -1915,8 +1908,7 @@ $("importFile").addEventListener("change", async (e)=>{
     const tpsRate = Number(obj.settings?.tpsRate ?? 0.05);
     const tvqRate = Number(obj.settings?.tvqRate ?? 0.09975);
     const cardFeeRate = Number(obj.settings?.cardFeeRate ?? 0.025);
-    const laborRate = Number(obj.settings?.laborRate ?? 80);
-    batch.set(docSettings(), { tpsRate, tvqRate, cardFeeRate, laborRate, updatedAt: serverTimestamp() }, { merge:true });
+    batch.set(docSettings(), { tpsRate, tvqRate, cardFeeRate, updatedAt: serverTimestamp() }, { merge:true });
 
     for(const c of (obj.customers||[])){
       batch.set(doc(colCustomers()), { fullName:c.fullName||"", phone:c.phone||"", email:c.email||"", notes:c.notes||"", createdAt:c.createdAt||isoNow(), createdAtTs: serverTimestamp() });

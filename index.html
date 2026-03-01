@@ -301,9 +301,8 @@
           </select>
         </div>
         <div>
-          <label>Nombre d’heures</label>
-          <input class="input" id="invHours" type="number" step="0.25" min="0" value="0" />
-<small class="muted">Calcul automatique selon tarif horaire.</small>
+          <label>Main-d'œuvre ($)</label>
+          <input class="input" id="invLabor" type="number" step="0.01" min="0" value="0" />
         </div>
 
 </div>
@@ -559,9 +558,6 @@
 <label>Frais carte (%)</label>
 <input id="setCardFee" inputmode="decimal" placeholder="2.5"/>
 <small class="muted">Appliqué seulement si paiement = Carte.</small>
-<label>Coût main‑d’œuvre ($ / heure)</label>
-<input id="setLaborRate" inputmode="decimal" placeholder="80"/>
-<small class="muted">Utilisé pour calcul automatique main‑d’œuvre.</small>
 <div class="row">
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
