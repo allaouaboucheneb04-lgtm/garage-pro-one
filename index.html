@@ -191,7 +191,7 @@
 <button class="btn" id="btnRevApply">Appliquer</button>
 </div>
 </div>
-<div class="grid" style="grid-template-columns: repeat(7, minmax(0,1fr)); gap:12px; margin-top:14px">
+<div class="grid" style="grid-template-columns: repeat(8, minmax(0,1fr)); gap:12px; margin-top:14px">
 <div class="box">
 <div class="muted">Total période</div>
 <div class="val" id="revTotal">$0.00</div>
@@ -260,7 +260,7 @@
   <div class="box" id="invoiceFormBox" style="display:none">
     <h3 style="margin-top:0">Nouvelle facture</h3>
     <form class="form" id="formInvoice">
-      <div class="grid" style="grid-template-columns: repeat(7, minmax(0,1fr)); gap:12px">
+      <div class="grid" style="grid-template-columns: repeat(8, minmax(0,1fr)); gap:12px">
         <div>
           <label>Client</label>
           <select class="input" id="invCustomer" required></select>
@@ -300,6 +300,11 @@
             <option value="other">Autre</option>
           </select>
         </div>
+        <div>
+          <label>Main-d'œuvre ($)</label>
+          <input class="input" id="invLabor" type="number" step="0.01" min="0" value="0" />
+        </div>
+
 </div>
       </div>
 
@@ -322,11 +327,16 @@
 
       <div class="row-between" style="margin-top:10px; gap:12px; flex-wrap:wrap">
         <button class="btn" id="btnInvAddLine" type="button">+ Ajouter une ligne</button>
+        
         <div class="row" style="gap:16px; flex-wrap:wrap">
-          <div class="muted">Coût total: <b id="invCostTotal">$0.00</b></div>
-          <div class="muted">Total facturé: <b id="invSellTotal">$0.00</b></div>
-          <div class="muted">Bénéfice: <b id="invProfitTotal">$0.00</b></div>
+          <div class="muted">Sous-total: <b id="invSubTotal">$0.00</b></div>
+          <div class="muted">Taxes (TPS+TVQ): <b id="invTaxTotal">$0.00</b></div>
+          <div class="muted">Total client: <b id="invGrandTotal">$0.00</b></div>
+          <div class="muted">Frais carte: <b id="invCardFee">$0.00</b></div>
+          <div class="muted">Coût pièces: <b id="invCostTotal">$0.00</b></div>
+          <div class="muted">Bénéfice net: <b id="invNetProfit">$0.00</b></div>
         </div>
+
       </div>
 
       <div class="row" style="gap:10px; margin-top:12px; flex-wrap:wrap">
@@ -337,7 +347,7 @@
   </div>
 
   <!-- Summary -->
-  <div class="grid" style="grid-template-columns: repeat(7, minmax(0,1fr)); gap:12px; margin-top:14px">
+  <div class="grid" style="grid-template-columns: repeat(8, minmax(0,1fr)); gap:12px; margin-top:14px">
     <div class="box">
       <div class="muted">Factures (30 derniers jours)</div>
       <div class="val" id="inv30Count">0</div>
@@ -361,8 +371,8 @@
           <th>Client</th>
           <th>Paiement</th>
           <th style="text-align:right">Coût</th>
-          <th style="text-align:right">Facturé</th>
-          <th style="text-align:right">Bénéfice</th>
+          <th style="text-align:right">Total client</th>
+          <th style="text-align:right">Bénéfice net</th>
           <th class="no-print">Actions</th>
         </tr>
       </thead>
@@ -435,7 +445,28 @@
           <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
         </tbody>
       </table>
+    
+  <div class="box" style="margin-top:12px">
+    <h3 style="margin-top:0">Bénéfice net par réparation (Top 10)</h3>
+    <div class="muted" style="margin-bottom:8px">Basé sur les factures liées à une réparation.</div>
+    <div style="overflow:auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Réparation</th>
+            <th style="text-align:right">Total client</th>
+            <th style="text-align:right">Coût pièces</th>
+            <th style="text-align:right">Frais carte</th>
+            <th style="text-align:right">Bénéfice net</th>
+          </tr>
+        </thead>
+        <tbody id="invTopRepairsTbody">
+          <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
+        </tbody>
+      </table>
     </div>
+  </div>
+</div>
   </div>
 </section>
 
@@ -524,6 +555,9 @@
 <input id="setTps" inputmode="decimal" placeholder="5">
 <label>TVQ (%)</label>
 <input id="setTvq" inputmode="decimal" placeholder="9.975"/>
+<label>Frais carte (%)</label>
+<input id="setCardFee" inputmode="decimal" placeholder="2.5"/>
+<small class="muted">Appliqué seulement si paiement = Carte.</small>
 <div class="row">
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>

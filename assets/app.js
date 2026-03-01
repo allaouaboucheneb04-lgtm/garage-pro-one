@@ -367,7 +367,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025 };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -732,6 +732,12 @@ const invInstallDateEl = $("invInstallDate");
 const invRefEl = $("invRef");
 const invWorkorderEl = $("invWorkorder");
 const invPayMethodEl = $("invPayMethod");
+const invLaborEl = $("invLabor");
+const invSubTotalEl = $("invSubTotal");
+const invTaxTotalEl = $("invTaxTotal");
+const invGrandTotalEl = $("invGrandTotal");
+const invCardFeeEl = $("invCardFee");
+const invNetProfitEl = $("invNetProfit");
 const invItemsTbody = $("invItemsTbody");
 const btnInvAddLine = $("btnInvAddLine");
 const btnInvCancel = $("btnInvCancel");
@@ -746,6 +752,7 @@ const invTopClientsTbody = $("invTopClientsTbody");
 const invMonthlyTbody = $("invMonthlyTbody");
 const invMonthlyChartEl = $("invMonthlyChart");
 const invPayTbody = $("invPayTbody");
+const invTopRepairsTbody = $("invTopRepairsTbody");
 const invFromEl = $("invFrom");
 const invToEl = $("invTo");
 const btnInvThisMonth = $("btnInvThisMonth");
@@ -758,6 +765,7 @@ let invFilter = { from: null, to: null };
 
 // UI wiring (Invoices)
 if(invDateEl) invDateEl.value = todayISO();
+if(invLaborEl) invLaborEl.value = "0";
 if(btnNewInvoice) btnNewInvoice.onclick = ()=>{
   if(currentRole !== "admin"){ showToast("Accès réservé admin."); return; }
   openInvoiceForm(true);
@@ -765,6 +773,9 @@ if(btnNewInvoice) btnNewInvoice.onclick = ()=>{
 if(btnInvAddLine) btnInvAddLine.onclick = ()=>{ ensureInvoiceLine(); recalcInvoiceTotals(); };
 if(btnInvCancel) btnInvCancel.onclick = ()=>{ openInvoiceForm(false); };
 if(formInvoice) formInvoice.onsubmit = createInvoiceFromForm;
+if(invLaborEl) invLaborEl.addEventListener("input", recalcInvoiceTotals);
+if(invPayMethodEl) invPayMethodEl.addEventListener("change", recalcInvoiceTotals);
+
 
 function invSetMonth(which){
   const now = new Date();
@@ -823,16 +834,33 @@ function readInvoiceItems(){
 
 function recalcInvoiceTotals(){
   const items = readInvoiceItems();
-  let costTotal = 0;
-  let sellTotal = 0;
+  const labor = Math.max(0, Number(invLaborEl?.value || 0));
+  let partsCost = 0;
+  let partsSell = 0;
   for(const it of items){
-    costTotal += Number(it.cost||0) * Number(it.qty||1);
-    sellTotal += Number(it.price||0) * Number(it.qty||1);
+    partsCost += Number(it.cost||0) * Number(it.qty||1);
+    partsSell += Number(it.price||0) * Number(it.qty||1);
   }
-  const profit = sellTotal - costTotal;
-  invCostTotalEl.textContent = money(costTotal);
-  invSellTotalEl.textContent = money(sellTotal);
-  invProfitTotalEl.textContent = money(profit);
+  const subTotal = partsSell + labor;
+
+  const tps = Number(settings.tpsRate||0);
+  const tvq = Number(settings.tvqRate||0);
+  const tax = subTotal * (tps + tvq);
+  const grandTotal = subTotal + tax;
+
+  const isCard = (invPayMethodEl?.value || "") === "card";
+  const cardFeeRate = Number(settings.cardFeeRate||0);
+  const cardFee = isCard ? (grandTotal * cardFeeRate) : 0;
+
+  // Profit net: on exclut les taxes (pas un revenu) et on retire les frais carte
+  const netProfit = subTotal - partsCost - cardFee;
+
+  if(invCostTotalEl) invCostTotalEl.textContent = money(partsCost);
+  if(invSubTotalEl) invSubTotalEl.textContent = money(subTotal);
+  if(invTaxTotalEl) invTaxTotalEl.textContent = money(tax);
+  if(invGrandTotalEl) invGrandTotalEl.textContent = money(grandTotal);
+  if(invCardFeeEl) invCardFeeEl.textContent = money(cardFee);
+  if(invNetProfitEl) invNetProfitEl.textContent = money(netProfit);
 }
 
 function fillInvoiceCustomers(){
@@ -960,6 +988,7 @@ async function createInvoiceFromForm(e){
           invDateEl.value = todayISO();
           if(invWorkorderEl) invWorkorderEl.value = "";
           if(invPayMethodEl) invPayMethodEl.value = "cash";
+    if(invLaborEl) invLaborEl.value = "0";
           if(invPurchaseDateEl) invPurchaseDateEl.value = "";
           if(invInstallDateEl) invInstallDateEl.value = "";
           recalcInvoiceTotals();
@@ -990,7 +1019,16 @@ async function createInvoiceFromForm(e){
     purchaseDate: invPurchaseDateEl?.value || "",
     installDate: invInstallDateEl?.value || "",
     items,
-    totals: { cost: costTotal, sell: sellTotal, profit },
+    labor: Math.max(0, Number(invLaborEl?.value || 0)),
+    totals: {
+      partsCost: costTotal,
+      partsSell: sellTotal,
+      subTotal: (sellTotal + Math.max(0, Number(invLaborEl?.value || 0))),
+      tax: ((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0))),
+      grandTotal: ((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (1 + Number(settings.tpsRate||0) + Number(settings.tvqRate||0))),
+      cardFee: (((invPayMethodEl?.value||"")==="card") ? (((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (1 + Number(settings.tpsRate||0) + Number(settings.tvqRate||0))) * Number(settings.cardFeeRate||0)) : 0),
+      netProfit: ((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) - costTotal - (((invPayMethodEl?.value||"")==="card") ? (((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (1 + Number(settings.tpsRate||0) + Number(settings.tvqRate||0))) * Number(settings.cardFeeRate||0)) : 0))
+    },
     createdAt: serverTimestamp(),
     createdBy: currentUid,
   };
@@ -1007,6 +1045,7 @@ async function createInvoiceFromForm(e){
     invDateEl.value = todayISO();
     if(invWorkorderEl) invWorkorderEl.value = "";
     if(invPayMethodEl) invPayMethodEl.value = "cash";
+    if(invLaborEl) invLaborEl.value = "0";
     recalcInvoiceTotals();
     editingInvoiceId = null;
     alert("Facture enregistrée.");
@@ -1062,26 +1101,32 @@ function exportInvoicesCSV(){
     const db = b.date instanceof Date ? b.date : (b.date?.toDate ? b.date.toDate() : new Date(b.date));
     return db - da;
   });
-  const header = ["date","ref","client","payment_method","cost_total","sell_total","profit_total","item_desc","item_qty","item_cost","item_price"];
+  const header = ["date","ref","client","payment_method","labor","sub_total","tax","grand_total","card_fee","parts_cost","net_profit","item_desc","item_qty","item_cost","item_price"];
   const rows = [header.join(",")];
   for(const inv of list){
     const dt = isoDate(inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date)));
     const ref = (inv.ref||"").replaceAll('"','""');
     const client = (inv.customerName||"").replaceAll('"','""');
     const pm = (inv.paymentMethod||"").replaceAll('"','""');
-    const costT = Number(inv.totals?.cost||0);
-    const sellT = Number(inv.totals?.sell||0);
-    const profitT = Number(inv.totals?.profit||0);
+    const labor = Number(inv.labor||0);
+    const subT = Number(inv.totals?.subTotal ?? 0);
+    const taxT = Number(inv.totals?.tax ?? 0);
+    const grandT = Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+    const cardF = Number(inv.totals?.cardFee ?? 0);
+    const costT = Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+    const netP = Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
+    const sellT = grandT;
+    const profitT = netP;
     const items = Array.isArray(inv.items) ? inv.items : [];
     if(items.length===0){
-      rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, costT, sellT, profitT, "", "", "", ""].join(","));
+      rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, labor, subT, taxT, grandT, cardF, costT, netP, "", "", "", ""].join(","));
     }else{
       for(const it of items){
         const desc = String(it.desc||"").replaceAll('"','""');
         const qty = Number(it.qty||0);
         const cost = Number(it.cost||0);
         const price = Number(it.price||0);
-        rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, costT, sellT, profitT, `"${desc}"`, qty, cost, price].join(","));
+        rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, labor, subT, taxT, grandT, cardF, costT, netP, `"${desc}"`, qty, cost, price].join(","));
       }
     }
   }
@@ -1101,8 +1146,8 @@ function renderInvoices(){
   const count = inv30.length;
   let profit = 0, sell=0;
   for(const inv of inv30){
-    profit += Number(inv.totals?.profit||0);
-    sell += Number(inv.totals?.sell||0);
+    profit += Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
+    sell += Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
   }
   const margin = sell>0 ? (profit/sell*100) : 0;
   inv30CountEl.textContent = String(count);
@@ -1124,9 +1169,9 @@ function renderInvoices(){
     const ref = safe(inv.ref||"");
     const wo = safe(inv.workorderLabel||"");
     const cust = safe(inv.customerName||"");
-    const c = money(inv.totals?.cost||0);
-    const s = money(inv.totals?.sell||0);
-    const p = money(inv.totals?.profit||0);
+    const c = money(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+    const s = money(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+    const p = money(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
     return `
       <tr>
         <td>${ds}</td>
@@ -1156,6 +1201,7 @@ function renderInvoices(){
       if(invInstallDateEl) invInstallDateEl.value = inv.installDate || "";
       invRefEl.value = inv.ref || "";
       if(invPayMethodEl) invPayMethodEl.value = inv.paymentMethod || "cash";
+      if(invLaborEl) invLaborEl.value = String(inv.labor ?? 0);
       invItemsTbody.innerHTML = "";
       (inv.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
       recalcInvoiceTotals();
@@ -1185,9 +1231,9 @@ function renderInvoicesAnalytics(list){
     const key = inv.customerId || inv.customerName || "(Sans client)";
     const name = inv.customerName || "(Sans client)";
     const cur = byClient.get(key) || {name, sell:0, cost:0, profit:0};
-    const cost = Number(inv.totals?.cost||0);
-    const sell = Number(inv.totals?.sell||0);
-    const profit = Number(inv.totals?.profit||0);
+    const cost = Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+    const sell = Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+    const profit = Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
     cur.sell += sell; cur.cost += cost; cur.profit += profit;
     byClient.set(key, cur);
   }
@@ -1237,15 +1283,40 @@ function renderInvoicesAnalytics(list){
     for(const inv of list){
       const key = inv.paymentMethod || "unknown";
       const cur = byPay.get(key) || {method:key, sell:0, cost:0, profit:0};
-      const cost = Number(inv.totals?.cost||0);
-      const sell = Number(inv.totals?.sell||0);
-      const profit = Number(inv.totals?.profit||0);
+      const cost = Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+      const sell = Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+      const profit = Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
       cur.sell += sell; cur.cost += cost; cur.profit += profit;
       byPay.set(key, cur);
     }
     const rows = [...byPay.values()].sort((a,b)=>b.profit-a.profit);
     invPayTbody.innerHTML = rows.map(r=>{
       const margin = r.sell>0 ? (r.profit/r.sell*100) : 0;
+
+  // ---- Par réparation (Top 10) ----
+  if(invTopRepairsTbody){
+    const byWo = new Map();
+    for(const inv of list){
+      const woId = inv.workorderId || "";
+      if(!woId) continue;
+      const cur = byWo.get(woId) || { woId, label: inv.workorderLabel || woId, sell:0, cost:0, cardFee:0, net:0 };
+      cur.sell += Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+      cur.cost += Number(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+      cur.cardFee += Number(inv.totals?.cardFee ?? 0);
+      cur.net += Number(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
+      byWo.set(woId, cur);
+    }
+    const topWo = [...byWo.values()].sort((a,b)=>b.net-a.net).slice(0,10);
+    invTopRepairsTbody.innerHTML = topWo.map(r=>`
+      <tr>
+        <td>${safe(r.label||r.woId)}</td>
+        <td style="text-align:right">${money(r.sell)}</td>
+        <td style="text-align:right">${money(r.cost)}</td>
+        <td style="text-align:right">${money(r.cardFee)}</td>
+        <td style="text-align:right"><b>${money(r.net)}</b></td>
+      </tr>
+    `).join('') || '<tr><td class="muted" colspan="5">Aucune donnée.</td></tr>';
+  }
       return `
         <tr>
           <td>${safe(invPaymentLabel(r.method))}</td>
@@ -1795,16 +1866,18 @@ if(btnPromoSend){
 $("btnSaveSettings").onclick = async ()=>{
   const tps = parseFloat(String($("setTps").value).replace(',','.'))/100;
   const tvq = parseFloat(String($("setTvq").value).replace(',','.'))/100;
-  if(!isFinite(tps) || !isFinite(tvq) || tps<0 || tvq<0){
+  const cardFee = parseFloat(String($("setCardFee").value||"0").replace(',','.'))/100;
+  if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || tps<0 || tvq<0 || cardFee<0){
     alert("TPS/TVQ invalides.");
     return;
   }
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, updatedAt: serverTimestamp() }, { merge:true });
+  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
 function renderSettings(){
   $("setTps").value = (settings.tpsRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setTvq").value = (settings.tvqRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
+  $("setCardFee").value = (Number(settings.cardFeeRate||0)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
 }
 
 /* Export / Import */
@@ -1834,7 +1907,8 @@ $("importFile").addEventListener("change", async (e)=>{
 
     const tpsRate = Number(obj.settings?.tpsRate ?? 0.05);
     const tvqRate = Number(obj.settings?.tvqRate ?? 0.09975);
-    batch.set(docSettings(), { tpsRate, tvqRate, updatedAt: serverTimestamp() }, { merge:true });
+    const cardFeeRate = Number(obj.settings?.cardFeeRate ?? 0.025);
+    batch.set(docSettings(), { tpsRate, tvqRate, cardFeeRate, updatedAt: serverTimestamp() }, { merge:true });
 
     for(const c of (obj.customers||[])){
       batch.set(doc(colCustomers()), { fullName:c.fullName||"", phone:c.phone||"", email:c.email||"", notes:c.notes||"", createdAt:c.createdAt||isoNow(), createdAtTs: serverTimestamp() });
