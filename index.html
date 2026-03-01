@@ -188,20 +188,6 @@
 <div class="muted" style="font-size:12px;margin-bottom:4px">Au</div>
 <input class="input" id="revTo" type="date"/>
 </div>
-
-    <div>
-      <div class="muted" style="font-size:12px;margin-bottom:4px">Paiement</div>
-      <select class="input" id="revPayFilter" style="min-width:170px">
-        <option value="">Tous</option>
-        <option value="cash">Cash</option>
-        <option value="card">Carte</option>
-        <option value="etransfer">Interac</option>
-        <option value="bank">Virement</option>
-        <option value="cheque">Chèque</option>
-        <option value="other">Autre</option>
-      </select>
-    </div>
-
 <button class="btn" id="btnRevApply">Appliquer</button>
 </div>
 </div>
@@ -218,68 +204,7 @@
 <div class="muted">Moyenne / facture</div>
 <div class="val" id="revAvg">$0.00</div>
 </div>
-<div class="box">
-<div class="muted">Coût pièces</div>
-<div class="val" id="revPartsCost">$0.00</div>
 </div>
-<div class="box">
-<div class="muted">Bénéfice net</div>
-<div class="val" id="revNetProfit">$0.00</div>
-</div>
-<div class="box">
-<div class="muted">Taxes (TPS+TVQ)</div>
-<div class="val" id="revTaxes">$0.00</div>
-</div>
-<div class="box">
-<div class="muted">Frais carte</div>
-<div class="val" id="revCardFees">$0.00</div>
-</div>
-</div>
-
-<div class="divider"></div>
-<h3 style="margin-top:0">Dashboard financier (mois en cours)</h3>
-<div class="grid" id="finKpi" style="grid-template-columns: repeat(6, minmax(0,1fr)); gap:12px; margin-top:10px">
-  <div class="box"><div class="muted">Total client</div><div class="val" id="finSales">$0.00</div></div>
-  <div class="box"><div class="muted">Coût pièces</div><div class="val" id="finParts">$0.00</div></div>
-  <div class="box"><div class="muted">Main-d’œuvre</div><div class="val" id="finLabor">$0.00</div></div>
-  <div class="box"><div class="muted">Frais carte</div><div class="val" id="finCard">$0.00</div></div>
-  <div class="box"><div class="muted">Taxes collectées</div><div class="val" id="finTax">$0.00</div></div>
-  <div class="box"><div class="muted">Bénéfice net</div><div class="val" id="finNet">$0.00</div></div>
-</div>
-
-<div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px">
-  <div class="box">
-    <h3 style="margin-top:0">Bénéfice net par méthode (mois)</h3>
-    <div style="overflow:auto">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Méthode</th>
-            <th style="text-align:right">Total client</th>
-            <th style="text-align:right">Bénéfice net</th>
-          </tr>
-        </thead>
-        <tbody id="finByPayTbody"><tr><td class="muted" colspan="3">Aucune donnée.</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-  <div class="box">
-    <h3 style="margin-top:0">Bénéfice net par jour (14j)</h3>
-    <div style="overflow:auto">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th style="text-align:right">Total client</th>
-            <th style="text-align:right">Bénéfice net</th>
-          </tr>
-        </thead>
-        <tbody id="finByDayTbody"><tr><td class="muted" colspan="3">Aucune donnée.</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
 <div style="margin-top:14px; overflow:auto">
 <table class="table">
 <thead>
@@ -294,52 +219,10 @@
 </tr>
 </thead>
 <tbody id="revTbody">
-<tr><td class="muted" colspan="10">Aucune facture.</td></tr>
+<tr><td class="muted" colspan="8">Aucune facture.</td></tr>
 </tbody>
 </table>
 </div>
-
-<div class="divider"></div>
-<div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px">
-  <div class="box">
-    <h3 style="margin-top:0">Par méthode de paiement</h3>
-    <div style="overflow:auto">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Méthode</th>
-            <th style="text-align:right">Total client</th>
-            <th style="text-align:right">Coût pièces</th>
-            <th style="text-align:right">Bénéfice net</th>
-          </tr>
-        </thead>
-        <tbody id="revByPayTbody">
-          <tr><td class="muted" colspan="4">Aucune donnée.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <div class="box">
-    <h3 style="margin-top:0">Par date</h3>
-    <div class="muted" style="margin-bottom:8px">Somme par jour (selon filtre).</div>
-    <div style="overflow:auto">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th style="text-align:right">Total client</th>
-            <th style="text-align:right">Coût pièces</th>
-            <th style="text-align:right">Bénéfice net</th>
-          </tr>
-        </thead>
-        <tbody id="revByDateTbody">
-          <tr><td class="muted" colspan="4">Aucune donnée.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
 </section>
 
 <!-- FACTURES PIECES (Bénéfice) -->
