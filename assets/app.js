@@ -1389,6 +1389,37 @@ function workorderDateKey(w){
   return s.slice(0,10);
 }
 
+
+function getInvoiceTotals(inv){
+  // Supporte plusieurs formats (anciens / nouveaux)
+  const t = inv?.totals || inv?.total || {};
+  // 1) si totals existe
+  let sell = Number(t.sell ?? t.total ?? t.grandTotal ?? 0);
+  let cost = Number(t.cost ?? t.partsCost ?? 0);
+  let profit = Number(t.profit ?? t.netProfit ?? 0);
+
+  // 2) si totals absent ou à 0 mais items existent -> recalcul
+  const items = Array.isArray(inv?.items) ? inv.items : [];
+  if((!sell && !cost && !profit) && items.length){
+    let s=0, c=0;
+    for(const it of items){
+      const qty = Number(it.qty ?? 1);
+      const price = Number(it.price ?? 0);
+      const icost = Number(it.cost ?? 0);
+      s += qty * price;
+      c += qty * icost;
+    }
+    sell = s;
+    cost = c;
+    profit = sell - cost;
+  }
+
+  // 3) fallback: si un seul champ existe
+  if(!profit && sell) profit = sell - cost;
+
+  return { sell, cost, profit };
+}
+
 function invoiceDateAsDate(inv){
   const d = inv?.date instanceof Date ? inv.date : (inv?.date?.toDate ? inv.date.toDate() : (inv?.date ? new Date(inv.date) : new Date(0)));
   return isNaN(d.getTime()) ? new Date(0) : d;
@@ -1440,9 +1471,10 @@ function renderRevenue(){
 
   let total=0, parts=0, profit=0;
   for(const inv of rows){
-    total += Number(inv.totals?.sell ?? 0);
-    parts += Number(inv.totals?.cost ?? 0);
-    profit += Number(inv.totals?.profit ?? 0);
+    const t = getInvoiceTotals(inv);
+    total += t.sell;
+    parts += t.cost;
+    profit += t.profit;
   }
   const count = rows.length;
   const avg = count ? total/count : 0;
@@ -1472,9 +1504,10 @@ function renderRevenue(){
       const client = String(inv.customerName || '—');
       const repair = String(inv.workorderLabel || '—');
       const method = invPaymentLabel(inv.paymentMethod);
-      const tot = money(Number(inv.totals?.sell ?? 0));
-      const cst = money(Number(inv.totals?.cost ?? 0));
-      const prf = money(Number(inv.totals?.profit ?? 0));
+      const t = getInvoiceTotals(inv);
+      const tot = money(t.sell);
+      const cst = money(t.cost);
+      const prf = money(t.profit);
 
       const tr=document.createElement('tr');
       const cells=[ref, date, client, repair, method, tot, cst, prf];
@@ -1511,9 +1544,10 @@ function renderRevenue(){
     for(const inv of rows){
       const k=String(inv.paymentMethod||'').toLowerCase()||'unknown';
       const cur=map.get(k)||{k,total:0,cost:0,profit:0};
-      cur.total += Number(inv.totals?.sell ?? 0);
-      cur.cost += Number(inv.totals?.cost ?? 0);
-      cur.profit += Number(inv.totals?.profit ?? 0);
+      const t = getInvoiceTotals(inv);
+      cur.total += t.sell;
+      cur.cost += t.cost;
+      cur.profit += t.profit;
       map.set(k,cur);
     }
     const list=[...map.values()].sort((a,b)=>b.profit-a.profit);
@@ -1533,9 +1567,10 @@ function renderRevenue(){
     for(const inv of rows){
       const k=invoiceDateKey(inv);
       const cur=map.get(k)||{k,total:0,cost:0,profit:0};
-      cur.total += Number(inv.totals?.sell ?? 0);
-      cur.cost += Number(inv.totals?.cost ?? 0);
-      cur.profit += Number(inv.totals?.profit ?? 0);
+      const t = getInvoiceTotals(inv);
+      cur.total += t.sell;
+      cur.cost += t.cost;
+      cur.profit += t.profit;
       map.set(k,cur);
     }
     const list=[...map.values()].sort((a,b)=>String(b.k).localeCompare(String(a.k))).slice(0,60);
