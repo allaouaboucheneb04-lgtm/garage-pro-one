@@ -903,35 +903,61 @@ function renderPromotions(){
 if(formPromo){
   formPromo.onsubmit = async (e)=>{
     e.preventDefault();
-    if(currentRole !== "admin") return;
+
+    // sécurité + message clair
+    if(currentRole !== "admin"){
+      alert("Accès refusé: cette action est réservée à l’admin.\n\nRôle actuel: "+currentRole);
+      return;
+    }
+    if(!promoSaved){
+      alert("Erreur UI: élément #promoSaved introuvable.");
+      return;
+    }
+
     promoSaved.style.display = "none";
+    promoSaved.textContent = "";
+
     const fd = new FormData(formPromo);
     const subject = String(fd.get("subject")||"").trim();
     const message = String(fd.get("message")||"").trim();
     const code = String(fd.get("code")||"").trim();
     const validUntil = String(fd.get("validUntil")||"").trim();
+
     if(!subject || !message){
       alert("Objet et message obligatoires.");
       return;
     }
-    const docRef = await addDoc(colPromotions(), {
-      subject,
-      message,
-      code: code || "",
-      validUntil: validUntil || "",
-      createdAt: isoNow(),
-      createdAtTs: serverTimestamp(),
-      createdBy: currentUid,
-      lastSentAt: "",
-      lastSentAtTs: null,
-      sentCount: 0,
-    });
-    selectedPromotionId = docRef.id;
-    if(btnPromoSend) btnPromoSend.disabled = false;
-    promoSaved.textContent = "Promotion enregistrée. Sélectionnée pour l’envoi.";
-    promoSaved.style.display = "";
-    formPromo.reset();
-    renderPromotions();
+
+    try{
+      const docRef = await addDoc(colPromotions(), {
+        subject,
+        message,
+        code: code || "",
+        validUntil: validUntil || "",
+        createdAt: isoNow(),
+        createdAtTs: serverTimestamp(),
+        createdBy: currentUid,
+        lastSentAt: "",
+        lastSentAtTs: null,
+        sentCount: 0,
+      });
+
+      selectedPromotionId = docRef.id;
+      if(btnPromoSend) btnPromoSend.disabled = false;
+
+      promoSaved.textContent = "✅ Promotion enregistrée. Sélectionnée pour l’envoi.";
+      promoSaved.style.display = "";
+      formPromo.reset();
+      renderPromotions();
+    }catch(err){
+      console.error("save promotion failed", err);
+      const msg = (err && (err.message || err.code)) ? (err.code ? (err.code+" — "+err.message) : err.message) : String(err);
+      promoSaved.textContent = "❌ Impossible d’enregistrer la promotion: " + msg;
+      promoSaved.style.display = "";
+      alert("Impossible d’enregistrer la promotion.\n\nDétail: "+msg+"\n\nVérifie: Firestore Rules + rôle admin + connexion internet.");
+    }
+  };
+}
   };
 }
 
