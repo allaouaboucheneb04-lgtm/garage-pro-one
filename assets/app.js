@@ -177,48 +177,6 @@ function money(n){
   const x = Number(n||0);
   return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2}) + " $";
 }
-
-function drawBarChart(canvas, labels, values){
-  if(!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0,0,w,h);
-
-  const max = Math.max(1, ...values.map(v=>Math.max(0,v)));
-  const pad = 28;
-  const bw = (w - pad*2) / Math.max(1, values.length);
-  ctx.strokeStyle = "#ddd";
-  ctx.beginPath();
-  ctx.moveTo(pad, h-pad);
-  ctx.lineTo(w-pad, h-pad);
-  ctx.stroke();
-
-  for(let i=0;i<values.length;i++){
-    const v = Math.max(0, values[i]);
-    const bh = (h - pad*2) * (v / max);
-    const x = pad + i*bw + 2;
-    const y = (h - pad) - bh;
-    ctx.fillStyle = "#2563eb";
-    ctx.fillRect(x, y, bw-4, bh);
-
-    // label (last 3 chars)
-    ctx.fillStyle = "#666";
-    ctx.font = "12px system-ui";
-    const lab = labels[i];
-    ctx.fillText(lab, x, h-10);
-  }
-
-  // max label
-  ctx.fillStyle="#666";
-  ctx.font="12px system-ui";
-  ctx.fillText(money(max), 6, 14);
-}
-function monthKey(d){
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-}
-
 function pct(n){
   return (Number(n)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'') + "%";
 }
@@ -409,7 +367,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025 , cardFeeRate: 0.025, laborRate: 80 };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025 };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -631,8 +589,6 @@ const finProfitEl = $("finProfit");
 const finCountEl = $("finCount");
 const finByPayTbody = $("finByPayTbody");
 const finByDayTbody = $("finByDayTbody");
-const chartSalesEl = $("chartSales");
-const chartNetEl = $("chartNet");
 const openRepairsTbody = $("openRepairsTbody");
 function getCustomer(id){ return customers.find(c=>c.id===id); }
 function getVehicle(id){ return vehicles.find(v=>v.id===id); }
@@ -763,24 +719,6 @@ function renderFinanceDashboard(){
   }catch(e){
     console.error("renderFinanceDashboard error:", e);
   }
-    // Graphiques 12 mois (revenus & profit net)
-    const m = new Map(); // key -> {sales, net}
-    for(const inv of (invoices||[])){
-      const d = invoiceDateAsDate(inv);
-      const k = monthKey(d);
-      const t = getInvoiceTotals(inv); // sell = totalClient, profit = netProfit
-      const cur = m.get(k) || {k, sales:0, net:0};
-      cur.sales += t.sell;
-      cur.net += t.profit;
-      m.set(k, cur);
-    }
-    const keys = [...m.keys()].sort().slice(-12);
-    const labels = keys.map(k=>k.slice(5));
-    const salesVals = keys.map(k=>m.get(k)?.sales||0);
-    const netVals = keys.map(k=>m.get(k)?.net||0);
-    drawBarChart(chartSalesEl, labels, salesVals);
-    drawBarChart(chartNetEl, labels, netVals);
-
 }
 
 
@@ -845,18 +783,6 @@ function runQuickSearch(){
 
 /* Clients view */
 const clientsTbody = $("clientsTbody");
-const clientStatsModal = $("clientStatsModal");
-const btnCloseClientStats = $("btnCloseClientStats");
-const csTitle = $("csTitle");
-const csSubtitle = $("csSubtitle");
-const csCount = $("csCount");
-const csSales = $("csSales");
-const csParts = $("csParts");
-const csNet = $("csNet");
-const csTbody = $("csTbody");
-if(btnCloseClientStats) btnCloseClientStats.onclick = ()=>{ if(clientStatsModal) clientStatsModal.style.display="none"; };
-if(clientStatsModal) clientStatsModal.addEventListener("click", (e)=>{ if(e.target===clientStatsModal) clientStatsModal.style.display="none"; });
-
 const clientsCount = $("clientsCount");
 const promoSelCount = $("promoSelCount");
 const btnPromoSelectAll = $("btnPromoSelectAll");
@@ -902,12 +828,6 @@ const invInstallDateEl = $("invInstallDate");
 const invRefEl = $("invRef");
 const invWorkorderEl = $("invWorkorder");
 const invPayMethodEl = $("invPayMethod");
-const invHoursEl = $("invHours");
-const invLaborTotalEl = $("invLaborTotal");
-const invSubTotalEl = $("invSubTotal");
-const invTaxTotalEl = $("invTaxTotal");
-const invCardFeeTotalEl = $("invCardFeeTotal");
-const invNetProfitTotalEl = $("invNetProfitTotal");
 const invLaborEl = $("invLabor");
 const invSubTotalEl = $("invSubTotal");
 const invTaxTotalEl = $("invTaxTotal");
@@ -951,7 +871,6 @@ if(btnInvCancel) btnInvCancel.onclick = ()=>{ openInvoiceForm(false); };
 if(formInvoice) formInvoice.onsubmit = createInvoiceFromForm;
 if(invLaborEl) invLaborEl.addEventListener("input", recalcInvoiceTotals);
 if(invPayMethodEl) invPayMethodEl.addEventListener("change", recalcInvoiceTotals);
-if(invHoursEl) invHoursEl.addEventListener("input", recalcInvoiceTotals);
 
 
 function invSetMonth(which){
@@ -1011,29 +930,33 @@ function readInvoiceItems(){
 
 function recalcInvoiceTotals(){
   const items = readInvoiceItems();
-  const hours = Math.max(0, Number(invHoursEl?.value || 0));
-  const pay = invPayMethodEl?.value || "cash";
-
-  // old totals for display
-  let costTotal = 0;
-  let sellTotal = 0;
+  const labor = Math.max(0, Number(invLaborEl?.value || 0));
+  let partsCost = 0;
+  let partsSell = 0;
   for(const it of items){
-    costTotal += Number(it.cost||0) * Number(it.qty||1);
-    sellTotal += Number(it.price||0) * Number(it.qty||1);
+    partsCost += Number(it.cost||0) * Number(it.qty||1);
+    partsSell += Number(it.price||0) * Number(it.qty||1);
   }
-  if(invCostTotalEl) invCostTotalEl.textContent = money(costTotal);
-  if(invSellTotalEl) invSellTotalEl.textContent = money(sellTotal);
+  const subTotal = partsSell + labor;
 
-  // net profit breakdown
-  const t = calcInvoiceNetFromItems(items, pay, hours);
-  if(invLaborTotalEl) invLaborTotalEl.textContent = money(t.labor);
-  if(invSubTotalEl) invSubTotalEl.textContent = money(t.subTotal);
-  if(invTaxTotalEl) invTaxTotalEl.textContent = money(t.tax);
-  if(invCardFeeTotalEl) invCardFeeTotalEl.textContent = money(t.cardFee);
-  if(invNetProfitTotalEl) invNetProfitTotalEl.textContent = money(t.netProfit);
+  const tps = Number(settings.tpsRate||0);
+  const tvq = Number(settings.tvqRate||0);
+  const tax = subTotal * (tps + tvq);
+  const grandTotal = subTotal + tax;
 
-  // keep old profit label if exists
-  if(invProfitTotalEl) invProfitTotalEl.textContent = money(sellTotal - costTotal);
+  const isCard = (invPayMethodEl?.value || "") === "card";
+  const cardFeeRate = Number(settings.cardFeeRate||0);
+  const cardFee = isCard ? (grandTotal * cardFeeRate) : 0;
+
+  // Profit net: on exclut les taxes (pas un revenu) et on retire les frais carte
+  const netProfit = subTotal - partsCost - cardFee;
+
+  if(invCostTotalEl) invCostTotalEl.textContent = money(partsCost);
+  if(invSubTotalEl) invSubTotalEl.textContent = money(subTotal);
+  if(invTaxTotalEl) invTaxTotalEl.textContent = money(tax);
+  if(invGrandTotalEl) invGrandTotalEl.textContent = money(grandTotal);
+  if(invCardFeeEl) invCardFeeEl.textContent = money(cardFee);
+  if(invNetProfitEl) invNetProfitEl.textContent = money(netProfit);
 }
 
 function fillInvoiceCustomers(){
@@ -1097,9 +1020,7 @@ async function createInvoiceFromForm(e){
     costTotal += Number(it.cost||0) * Number(it.qty||1);
     sellTotal += Number(it.price||0) * Number(it.qty||1);
   }
-  const hours = Math.max(0, Number(invHoursEl?.value || 0));
   const profit = sellTotal - costTotal;
-  const net = calcInvoiceNetFromItems(items, (invPayMethodEl?.value||"cash"), hours);
   const ref = String(invRefEl.value||"").trim();
 
   // Si la référence existe déjà, propose: 1) modifier la facture existante, 2) ajouter au même facture
@@ -1163,7 +1084,6 @@ async function createInvoiceFromForm(e){
           invDateEl.value = todayISO();
           if(invWorkorderEl) invWorkorderEl.value = "";
           if(invPayMethodEl) invPayMethodEl.value = "cash";
-    if(invHoursEl) invHoursEl.value = "0";
     if(invLaborEl) invLaborEl.value = "0";
           if(invPurchaseDateEl) invPurchaseDateEl.value = "";
           if(invInstallDateEl) invInstallDateEl.value = "";
@@ -1221,7 +1141,6 @@ async function createInvoiceFromForm(e){
     invDateEl.value = todayISO();
     if(invWorkorderEl) invWorkorderEl.value = "";
     if(invPayMethodEl) invPayMethodEl.value = "cash";
-    if(invHoursEl) invHoursEl.value = "0";
     if(invLaborEl) invLaborEl.value = "0";
     recalcInvoiceTotals();
     editingInvoiceId = null;
@@ -1378,7 +1297,6 @@ function renderInvoices(){
       if(invInstallDateEl) invInstallDateEl.value = inv.installDate || "";
       invRefEl.value = inv.ref || "";
       if(invPayMethodEl) invPayMethodEl.value = inv.paymentMethod || "cash";
-      if(invHoursEl) invHoursEl.value = String(inv.hours ?? 0);
       if(invLaborEl) invLaborEl.value = String(inv.labor ?? 0);
       invItemsTbody.innerHTML = "";
       (inv.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
@@ -1566,9 +1484,9 @@ function getInvoiceTotals(inv){
   // Supporte plusieurs formats (anciens / nouveaux)
   const t = inv?.totals || inv?.total || {};
   // 1) si totals existe
-  let sell = Number(t.totalClient ?? t.sell ?? t.total ?? t.grandTotal ?? 0);
+  let sell = Number(t.sell ?? t.total ?? t.grandTotal ?? 0);
   let cost = Number(t.cost ?? t.partsCost ?? 0);
-  let profit = Number(t.netProfit ?? t.profit ?? 0);
+  let profit = Number(t.profit ?? t.netProfit ?? 0);
 
   // 2) si totals absent ou à 0 mais items existent -> recalcul
   const items = Array.isArray(inv?.items) ? inv.items : [];
@@ -1591,25 +1509,6 @@ function getInvoiceTotals(inv){
 
   return { sell, cost, profit };
 }
-
-function calcInvoiceNetFromItems(items, payMethod, hours){
-  let partsCost = 0;
-  let partsSell = 0;
-  for(const it of (items||[])){
-    const qty = Number(it.qty ?? 1);
-    partsCost += qty * Number(it.cost ?? 0);
-    partsSell += qty * Number(it.price ?? 0);
-  }
-  const labor = Math.max(0, Number(hours||0)) * Number(settings.laborRate||0);
-  const subTotal = partsSell + labor;
-  const taxRate = Number(settings.tpsRate||0) + Number(settings.tvqRate||0);
-  const tax = subTotal * taxRate;
-  const totalClient = subTotal + tax;
-  const cardFee = (String(payMethod||"").toLowerCase()==="card") ? (totalClient * Number(settings.cardFeeRate||0)) : 0;
-  const netProfit = subTotal - partsCost - cardFee;
-  return { partsCost, partsSell, labor, subTotal, tax, totalClient, cardFee, netProfit };
-}
-
 
 function invoiceDateAsDate(inv){
   const d = inv?.date instanceof Date ? inv.date : (inv?.date?.toDate ? inv.date.toDate() : (inv?.date ? new Date(inv.date) : new Date(0)));
@@ -1905,49 +1804,6 @@ function renderClients(){
     </tr>
   `).join("");
 }
-
-
-function openClientStats(customerId){
-  const c = customers.find(x=>x.id===customerId) || {};
-  if(csTitle) csTitle.textContent = `Stats: ${c.fullName||"Client"}`;
-  if(csSubtitle) csSubtitle.textContent = `${c.phone||""} ${c.email?("• "+c.email):""}`.trim();
-
-  const invs = (invoices||[]).filter(inv=> (inv.customerId===customerId) || (String(inv.customerName||"").toLowerCase()===String(c.fullName||"").toLowerCase()));
-  invs.sort((a,b)=> invoiceDateAsDate(b)-invoiceDateAsDate(a));
-
-  let sales=0, parts=0, net=0;
-  for(const inv of invs){
-    const t = getInvoiceTotals(inv); // sell=totalClient, profit=netProfit
-    sales += t.sell;
-    parts += t.cost;
-    net += t.profit;
-  }
-  if(csCount) csCount.textContent = String(invs.length);
-  if(csSales) csSales.textContent = money(sales);
-  if(csParts) csParts.textContent = money(parts);
-  if(csNet) csNet.textContent = money(net);
-
-  if(csTbody){
-    if(invs.length===0){
-      csTbody.innerHTML = '<tr><td class="muted" colspan="4">Aucune facture.</td></tr>';
-    }else{
-      csTbody.innerHTML = invs.slice(0,20).map(inv=>{
-        const t = getInvoiceTotals(inv);
-        return `
-          <tr>
-            <td>${safe(inv.ref||inv.id||"—")}</td>
-            <td>${safe(invoiceDateKey(inv)||"—")}</td>
-            <td style="text-align:right">${money(t.sell)}</td>
-            <td style="text-align:right"><b>${money(t.profit)}</b></td>
-          </tr>
-        `;
-      }).join("");
-    }
-  }
-
-  if(clientStatsModal) clientStatsModal.style.display="flex";
-}
-window.__openClientStats = openClientStats;
 
 /* Repairs view */
 const repairsTbody = $("repairsTbody");
