@@ -557,6 +557,7 @@ function subscribeAll(){
       (snap)=>{
         invoices = snap.docs.map(d=>({id:d.id, ...d.data()}));
         renderInvoices();
+        renderRevenue();
       },
       (err)=>{
         console.warn('invoices onSnapshot error', err);
@@ -710,12 +711,17 @@ if(btnPromoSelectNone) btnPromoSelectNone.onclick = ()=>window.__promoSelectAll(
    Revenue view
 =========== */
 const revPresetEl = $("revPreset");
+const revPayFilterEl = $("revPayFilter");
 const revFromEl = $("revFrom");
 const revToEl = $("revTo");
 const revTotalEl = $("revTotal");
 const revCountEl = $("revCount");
 const revAvgEl = $("revAvg");
+const revPartsCostEl = $("revPartsCost");
+const revProfitEl = $("revProfit");
 const revTbody = $("revTbody");
+const revByPayTbody = $("revByPayTbody");
+const revByDateTbody = $("revByDateTbody");
 const btnRevApply = $("btnRevApply");
 
 
@@ -1382,6 +1388,14 @@ function workorderDateKey(w){
   const s = String(w.invoiceDate || w.createdAt || w.updatedAt || "");
   return s.slice(0,10);
 }
+
+function invoiceDateAsDate(inv){
+  const d = inv?.date instanceof Date ? inv.date : (inv?.date?.toDate ? inv.date.toDate() : (inv?.date ? new Date(inv.date) : new Date(0)));
+  return isNaN(d.getTime()) ? new Date(0) : d;
+}
+function invoiceDateKey(inv){
+  return isoDate(invoiceDateAsDate(inv));
+}
 function filterRevenueWorkorders(){
   const {from, to} = revenueRange();
   return workorders
@@ -1394,74 +1408,145 @@ function filterRevenueWorkorders(){
     .sort((a,b)=> (workorderDateKey(b).localeCompare(workorderDateKey(a))) || String(b.invoiceNo||"").localeCompare(String(a.invoiceNo||"")));
 }
 
+function filterRevenueInvoices(){
+  const from = revFromEl?.value || null;
+  const to = revToEl?.value || null;
+  const pay = String(revPayFilterEl?.value || "").trim().toLowerCase();
+
+  return (invoices||[]).filter(inv=>{
+    const k = invoiceDateKey(inv);
+    if(from && k < from) return false;
+    if(to && k > to) return false;
+    if(pay && String(inv.paymentMethod||"").toLowerCase() !== pay) return false;
+    return true;
+  });
+}
+
 function renderRevenue(){
   if(!$("viewRevenue")) return;
   if(currentRole !== "admin"){
-    // sécurité: revenue view admin only
     if(revTotalEl) revTotalEl.textContent = money(0);
     if(revCountEl) revCountEl.textContent = "0";
     if(revAvgEl) revAvgEl.textContent = money(0);
-    if(revTbody) revTbody.innerHTML = '<tr><td colspan="7" class="muted">Accès réservé à l\'administrateur.</td></tr>';
+    if(revPartsCostEl) revPartsCostEl.textContent = money(0);
+    if(revProfitEl) revProfitEl.textContent = money(0);
+    if(revTbody) revTbody.innerHTML = '<tr><td colspan="9" class="muted">Accès réservé à l\'administrateur.</td></tr>';
+    if(revByPayTbody) revByPayTbody.innerHTML = '<tr><td class="muted" colspan="4">—</td></tr>';
+    if(revByDateTbody) revByDateTbody.innerHTML = '<tr><td class="muted" colspan="4">—</td></tr>';
     return;
   }
 
-  const rows = filterRevenueWorkorders();
-  const total = rows.reduce((s,w)=>s+Number(w.total||0),0);
+  const rows = filterRevenueInvoices().sort((a,b)=> invoiceDateAsDate(b) - invoiceDateAsDate(a));
+
+  let total=0, parts=0, profit=0;
+  for(const inv of rows){
+    total += Number(inv.totals?.sell ?? 0);
+    parts += Number(inv.totals?.cost ?? 0);
+    profit += Number(inv.totals?.profit ?? 0);
+  }
   const count = rows.length;
   const avg = count ? total/count : 0;
 
   if(revTotalEl) revTotalEl.textContent = money(total);
   if(revCountEl) revCountEl.textContent = String(count);
   if(revAvgEl) revAvgEl.textContent = money(avg);
+  if(revPartsCostEl) revPartsCostEl.textContent = money(parts);
+  if(revProfitEl) revProfitEl.textContent = money(profit);
 
   if(!revTbody) return;
 
-  // Important: sur certains navigateurs (mobile + overlay/modals),
-  // revTbody.innerHTML peut ne pas se rafraîchir correctement.
-  // Ici on reconstruit les lignes via le DOM, plus fiable.
   while(revTbody.firstChild) revTbody.removeChild(revTbody.firstChild);
 
   if(count === 0){
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 7;
-    td.className = 'muted';
-    td.textContent = 'Aucune facture pour cette période.';
+    const tr=document.createElement('tr');
+    const td=document.createElement('td');
+    td.colSpan=9;
+    td.className='muted';
+    td.textContent='Aucune facture pour cette période.';
     tr.appendChild(td);
     revTbody.appendChild(tr);
-    return;
+  }else{
+    for(const inv of rows){
+      const ref = String(inv.ref || '—');
+      const date = invoiceDateKey(inv) || '—';
+      const client = String(inv.customerName || '—');
+      const repair = String(inv.workorderLabel || '—');
+      const method = invPaymentLabel(inv.paymentMethod);
+      const tot = money(Number(inv.totals?.sell ?? 0));
+      const cst = money(Number(inv.totals?.cost ?? 0));
+      const prf = money(Number(inv.totals?.profit ?? 0));
+
+      const tr=document.createElement('tr');
+      const cells=[ref, date, client, repair, method, tot, cst, prf];
+      cells.forEach((val, idx)=>{
+        const td=document.createElement('td');
+        if(idx>=5) td.style.textAlign='right';
+        td.textContent=val;
+        tr.appendChild(td);
+      });
+
+      const tdBtn=document.createElement('td');
+      tdBtn.className='no-print';
+      tdBtn.style.textAlign='right';
+      const btn=document.createElement('button');
+      btn.className='btn btn-ghost';
+      btn.textContent='Voir';
+      btn.addEventListener('click', ()=>{
+        try{
+          go('invoices');
+          const b=document.querySelector(`[data-edit-inv="${inv.id}"]`);
+          if(b) b.click();
+        }catch(e){}
+      });
+      tdBtn.appendChild(btn);
+      tr.appendChild(tdBtn);
+
+      revTbody.appendChild(tr);
+    }
   }
 
-  for(const w of rows){
-    const v = getVehicle(w.vehicleId);
-    const c = v ? getCustomer(v.customerId) : null;
-    const client = c ? (c.fullName || '—') : '—';
-    const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(' ') + (v.plate ? ' • ' + v.plate : '') : '—';
-    const date = workorderDateKey(w) || '—';
-    const method = String(w.paymentMethod || '—');
-    const inv = String(w.invoiceNo || '—');
-    const tot = money(Number(w.total||0));
+  // ---- Par méthode de paiement ----
+  if(revByPayTbody){
+    const map=new Map();
+    for(const inv of rows){
+      const k=String(inv.paymentMethod||'').toLowerCase()||'unknown';
+      const cur=map.get(k)||{k,total:0,cost:0,profit:0};
+      cur.total += Number(inv.totals?.sell ?? 0);
+      cur.cost += Number(inv.totals?.cost ?? 0);
+      cur.profit += Number(inv.totals?.profit ?? 0);
+      map.set(k,cur);
+    }
+    const list=[...map.values()].sort((a,b)=>b.profit-a.profit);
+    revByPayTbody.innerHTML = list.map(r=>`
+      <tr>
+        <td>${safe(invPaymentLabel(r.k))}</td>
+        <td style="text-align:right">${money(r.total)}</td>
+        <td style="text-align:right">${money(r.cost)}</td>
+        <td style="text-align:right"><b>${money(r.profit)}</b></td>
+      </tr>
+    `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+  }
 
-    const tr = document.createElement('tr');
-    const cells = [inv, date, client, veh, method, tot];
-    cells.forEach((val, idx)=>{
-      const td = document.createElement('td');
-      if(idx === 5) td.style.textAlign = 'right';
-      td.textContent = val;
-      tr.appendChild(td);
-    });
-
-    const tdBtn = document.createElement('td');
-    tdBtn.className = 'no-print';
-    tdBtn.style.textAlign = 'right';
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-ghost';
-    btn.textContent = 'PDF';
-    btn.addEventListener('click', ()=> window.__printWorkorder && window.__printWorkorder(w.id));
-    tdBtn.appendChild(btn);
-    tr.appendChild(tdBtn);
-
-    revTbody.appendChild(tr);
+  // ---- Par date (par jour) ----
+  if(revByDateTbody){
+    const map=new Map();
+    for(const inv of rows){
+      const k=invoiceDateKey(inv);
+      const cur=map.get(k)||{k,total:0,cost:0,profit:0};
+      cur.total += Number(inv.totals?.sell ?? 0);
+      cur.cost += Number(inv.totals?.cost ?? 0);
+      cur.profit += Number(inv.totals?.profit ?? 0);
+      map.set(k,cur);
+    }
+    const list=[...map.values()].sort((a,b)=>String(b.k).localeCompare(String(a.k))).slice(0,60);
+    revByDateTbody.innerHTML = list.map(r=>`
+      <tr>
+        <td>${safe(r.k)}</td>
+        <td style="text-align:right">${money(r.total)}</td>
+        <td style="text-align:right">${money(r.cost)}</td>
+        <td style="text-align:right"><b>${money(r.profit)}</b></td>
+      </tr>
+    `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
   }
 }
 
@@ -1473,6 +1558,7 @@ if(revPresetEl && revFromEl && revToEl){
     renderRevenue();
   });
   if(btnRevApply) btnRevApply.addEventListener("click", ()=>renderRevenue());
+  if(revPayFilterEl) revPayFilterEl.addEventListener("change", ()=>renderRevenue());
 }
 
 
