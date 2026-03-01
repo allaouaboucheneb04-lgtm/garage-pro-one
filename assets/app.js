@@ -558,6 +558,7 @@ function subscribeAll(){
         invoices = snap.docs.map(d=>({id:d.id, ...d.data()}));
         renderInvoices();
         renderRevenue();
+        renderFinanceDashboard();
       },
       (err)=>{
         console.warn('invoices onSnapshot error', err);
@@ -582,6 +583,12 @@ function unsubscribeAll(){
    Renderers
 =========== */
 const kpiEl = $("kpi");
+const finSalesEl = $("finSales");
+const finPartsEl = $("finParts");
+const finProfitEl = $("finProfit");
+const finCountEl = $("finCount");
+const finByPayTbody = $("finByPayTbody");
+const finByDayTbody = $("finByDayTbody");
 const openRepairsTbody = $("openRepairsTbody");
 function getCustomer(id){ return customers.find(c=>c.id===id); }
 function getVehicle(id){ return vehicles.find(v=>v.id===id); }
@@ -607,6 +614,8 @@ function renderDashboard(){
     <div class="box"><div class="muted">Total (${monthKey})</div><div class="val">${money(monthTotal)}</div></div>
   `;
 
+  renderFinanceDashboard();
+
   const open = [...workorders].filter(w=>w.status==="OUVERT").sort(byCreatedDesc).slice(0,20);
   if(open.length===0){
     openRepairsTbody.innerHTML = '<tr><td colspan="5" class="muted">Aucune réparation ouverte.</td></tr>';
@@ -631,6 +640,87 @@ function renderDashboard(){
     }).join("");
   }
 }
+
+function renderFinanceDashboard(){
+  try{
+    if(currentRole !== "admin") return;
+    if(!finSalesEl) return;
+
+    const now = new Date();
+    const monthFrom = isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    const monthTo = isoDate(new Date(now.getFullYear(), now.getMonth()+1, 0));
+
+    const monthInv = (invoices||[]).filter(inv=>{
+      const k = invoiceDateKey(inv);
+      return k >= monthFrom && k <= monthTo;
+    });
+
+    let sales=0, parts=0, profit=0;
+    for(const inv of monthInv){
+      const t = getInvoiceTotals(inv);
+      sales += t.sell;
+      parts += t.cost;
+      profit += t.profit;
+    }
+
+    finSalesEl.textContent = money(sales);
+    if(finPartsEl) finPartsEl.textContent = money(parts);
+    if(finProfitEl) finProfitEl.textContent = money(profit);
+    if(finCountEl) finCountEl.textContent = String(monthInv.length);
+
+    // Par méthode (mois)
+    if(finByPayTbody){
+      const map = new Map();
+      for(const inv of monthInv){
+        const k = String(inv.paymentMethod||"").toLowerCase() || "unknown";
+        const cur = map.get(k) || {k, total:0, cost:0, profit:0};
+        const t = getInvoiceTotals(inv);
+        cur.total += t.sell;
+        cur.cost += t.cost;
+        cur.profit += t.profit;
+        map.set(k, cur);
+      }
+      const list=[...map.values()].sort((a,b)=>b.profit-a.profit);
+      finByPayTbody.innerHTML = list.map(r=>`
+        <tr>
+          <td>${safe(invPaymentLabel(r.k))}</td>
+          <td style="text-align:right">${money(r.total)}</td>
+          <td style="text-align:right">${money(r.cost)}</td>
+          <td style="text-align:right"><b>${money(r.profit)}</b></td>
+        </tr>
+      `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+    }
+
+    // Par jour (14 derniers jours)
+    if(finByDayTbody){
+      const dayFrom = new Date(now.getTime() - 13*24*60*60*1000);
+      const map = new Map();
+      for(const inv of (invoices||[])){
+        const d = invoiceDateAsDate(inv);
+        if(d < dayFrom) continue;
+        const k = invoiceDateKey(inv);
+        const cur = map.get(k) || {k, total:0, cost:0, profit:0};
+        const t = getInvoiceTotals(inv);
+        cur.total += t.sell;
+        cur.cost += t.cost;
+        cur.profit += t.profit;
+        map.set(k, cur);
+      }
+      const list=[...map.values()].sort((a,b)=>String(b.k).localeCompare(String(a.k)));
+      finByDayTbody.innerHTML = list.map(r=>`
+        <tr>
+          <td>${safe(r.k)}</td>
+          <td style="text-align:right">${money(r.total)}</td>
+          <td style="text-align:right">${money(r.cost)}</td>
+          <td style="text-align:right"><b>${money(r.profit)}</b></td>
+        </tr>
+      `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+    }
+  }catch(e){
+    console.error("renderFinanceDashboard error:", e);
+  }
+}
+
 
 /* Quick search */
 $("btnQuickSearch").onclick = ()=>runQuickSearch();
