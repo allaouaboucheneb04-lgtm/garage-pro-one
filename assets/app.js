@@ -49,6 +49,15 @@ function normalizeRole(raw) {
   return "";
 }
 
+function escapeHtml(str){
+  return String(str ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function docUserProfile(uid=currentUid){
   return doc(db, "users", uid);
 }
@@ -848,13 +857,46 @@ const promosTbody = $("promosTbody");
 const promoSaved = $("promoSaved");
 const promoTestEmail = $("promoTestEmail");
 const btnPromoSend = $("btnPromoSend");
+	const promoTestPhone = $("promoTestPhone");
+	const btnPromoWhatsApp = $("btnPromoWhatsApp");
+	const promoWaLinks = $("promoWaLinks");
 const promoSendError = $("promoSendError");
 const promoSendOk = $("promoSendOk");
 const promoAudienceInfo = $("promoAudienceInfo");
+	const promoAudiencePhoneInfo = $("promoAudiencePhoneInfo");
 
 function _countCustomersWithEmail(){
   return customers.filter(c=>String(c.email||"").includes("@")).length;
 }
+
+	function _countCustomersWithPhone(){
+	  return customers.filter(c=>String(c.phone||"").trim().length >= 7).length;
+	}
+
+	function _normalizePhoneToE164Digits(raw){
+	  // wa.me veut le numéro en format international sans +
+	  let s = String(raw||"").trim();
+	  if(!s) return "";
+	  // enlève tout sauf chiffres
+	  const digits = s.replace(/\D/g, "");
+	  if(!digits) return "";
+	  // Si déjà 11+ chiffres (ex: 1XXXXXXXXXX) on garde
+	  if(digits.length >= 11) return digits;
+	  // Si 10 chiffres, on assume Canada/USA => +1
+	  if(digits.length === 10) return "1" + digits;
+	  return digits; // dernier recours
+	}
+
+	function _buildPromoText(promo, customer){
+	  const name = (customer && (customer.name || customer.fullName)) ? String(customer.name || customer.fullName) : "";
+	  let text = String(promo.message || "");
+	  if(name) text = text.replaceAll("{name}", name);
+	  if(customer && customer.phone) text = text.replaceAll("{phone}", String(customer.phone));
+	  if(promo.code) text += `\n\nCode promo: ${promo.code}`;
+	  if(promo.validUntil) text += `\nValable jusqu’au: ${String(promo.validUntil).slice(0,10)}`;
+	  text += "\n\nGarage Pro One";
+	  return text;
+	}
 
 function renderPromotions(){
   if(!promosTbody) return;
@@ -867,11 +909,15 @@ function renderPromotions(){
   if(promoAudienceInfo){
     promoAudienceInfo.textContent = `Clients avec email: ${_countCustomersWithEmail()}`;
   }
+	  if(promoAudiencePhoneInfo){
+	    promoAudiencePhoneInfo.textContent = `Clients avec téléphone: ${_countCustomersWithPhone()}`;
+	  }
 
   if(!promotions.length){
     promosTbody.innerHTML = `<tr><td class="muted" colspan="5">Aucune promotion.</td></tr>`;
     selectedPromotionId = null;
     if(btnPromoSend) btnPromoSend.disabled = true;
+	    if(btnPromoWhatsApp) btnPromoWhatsApp.disabled = true;
     return;
   }
 
@@ -894,7 +940,8 @@ function renderPromotions(){
   promosTbody.querySelectorAll("[data-promo-id]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       selectedPromotionId = btn.getAttribute("data-promo-id");
-      if(btnPromoSend) btnPromoSend.disabled = false;
+	      if(btnPromoSend) btnPromoSend.disabled = false;
+	      if(btnPromoWhatsApp) btnPromoWhatsApp.disabled = false;
       renderPromotions();
     });
   });
@@ -927,7 +974,8 @@ if(formPromo){
       sentCount: 0,
     });
     selectedPromotionId = docRef.id;
-    if(btnPromoSend) btnPromoSend.disabled = false;
+	    if(btnPromoSend) btnPromoSend.disabled = false;
+	    if(btnPromoWhatsApp) btnPromoWhatsApp.disabled = false;
     promoSaved.textContent = "Promotion enregistrée. Sélectionnée pour l’envoi.";
     promoSaved.style.display = "";
     formPromo.reset();
@@ -1053,6 +1101,57 @@ if(btnPromoSend){
     }
   });
 }
+
+	// WhatsApp (gratuit): ouvre wa.me avec message pré-rempli
+	if(btnPromoWhatsApp){
+	  btnPromoWhatsApp.addEventListener("click", async ()=>{
+	    promoSendError.style.display = "none";
+	    promoSendOk.style.display = "none";
+	    promoWaLinks.textContent = "";
+	    if(!selectedPromotionId){
+	      alert("Sélectionne une promotion d’abord.");
+	      return;
+	    }
+	    const promo = promotions.find(p=>p.id===selectedPromotionId);
+	    if(!promo){
+	      alert("Promotion introuvable.");
+	      return;
+	    }
+	
+	    // Téléphone de test si rempli, sinon tous les clients avec téléphone
+	    const testPhone = _normalizePhoneToE164Digits(promoTestPhone?.value);
+	    const targets = [];
+	    if(testPhone){
+	      targets.push({ phone: testPhone, name: "Test" });
+	    }else{
+	      customers
+	        .filter(c=>String(c.phone||"").trim().length>=7)
+	        .forEach(c=>{
+	          const ph = _normalizePhoneToE164Digits(c.phone);
+	          if(ph) targets.push({ ...c, phone: ph });
+	        });
+	    }
+
+	    if(!targets.length){
+	      alert("Aucun téléphone trouvé.");
+	      return;
+	    }
+
+	    // WhatsApp ne permet pas un "envoi en masse" automatique gratuitement.
+	    // On génère une liste de liens; tu cliques et tu confirmes l'envoi.
+	    const links = targets.slice(0, 50).map((c, i)=>{
+	      const text = _buildPromoText(promo, c);
+	      const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(text)}`;
+	      return { url, label: c.name || c.fullName || c.phone || `Client ${i+1}` };
+	    });
+
+	    promoWaLinks.innerHTML = `Liens WhatsApp générés: ${links.length}${targets.length>50?" (limite 50 affichés)":""}<br>` +
+	      links.map(l=>`<a href="${l.url}" target="_blank" rel="noopener">Ouvrir: ${escapeHtml(l.label)}</a>`).join("<br>");
+
+	    // Ouvre le 1er automatiquement pour aller vite
+	    window.open(links[0].url, "_blank", "noopener");
+	  });
+	}
 
 /* Settings */
 $("btnSaveSettings").onclick = async ()=>{

@@ -258,8 +258,18 @@
       <input class="input" id="promoTestEmail" type="email" placeholder="ex: toi@gmail.com" />
       <div class="muted" style="font-size:12px; margin-top:8px" id="promoAudienceInfo">Clients avec email: —</div>
       <div class="divider"></div>
-      <button class="btn" id="btnPromoSend" disabled>Envoyer la promotion sélectionnée</button>
-      <div class="alert" id="promoSendError" style="display:none; margin-top:10px"></div>
+	      <button class="btn" id="btnPromoSend" disabled>Envoyer la promotion sélectionnée</button>
+
+	      <div class="divider"></div>
+	      <div class="muted" style="font-size:12px">WhatsApp (gratuit): ça ouvre WhatsApp avec le message prêt. Tu cliques "Envoyer" toi‑même.</div>
+	      <label class="muted" style="font-size:12px; margin-top:8px">Téléphone de test (optionnel)</label>
+	      <input class="input" id="promoTestPhone" placeholder="ex: 5141234567" />
+	      <div class="muted" style="font-size:12px; margin-top:8px" id="promoAudiencePhoneInfo">Clients avec téléphone: —</div>
+	      <div class="divider"></div>
+	      <button class="btn" id="btnPromoWhatsApp" disabled>Ouvrir WhatsApp pour la promotion sélectionnée</button>
+	      <div class="muted" id="promoWaLinks" style="margin-top:8px"></div>
+
+	      <div class="alert" id="promoSendError" style="display:none; margin-top:10px"></div>
       <div class="note" id="promoSendOk" style="display:none; margin-top:10px"></div>
     </div>
   </div>
