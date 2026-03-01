@@ -897,8 +897,90 @@ async function createInvoiceFromForm(e){
     sellTotal += Number(it.price||0) * Number(it.qty||1);
   }
   const profit = sellTotal - costTotal;
+  const ref = String(invRefEl.value||"").trim();
+
+  // Si la référence existe déjà, propose: 1) modifier la facture existante, 2) ajouter au même facture
+  if(ref && !editingInvoiceId){
+    const existing = invoices.find(x => String(x.ref||"").trim() === ref);
+    if(existing){
+      const wantEdit = confirm(`La référence "${ref}" existe déjà.\n\nOK = Modifier cette facture\nAnnuler = Autre option`);
+      if(wantEdit){
+        // Ouvre en mode édition
+        editingInvoiceId = existing.id;
+        openInvoiceForm(true);
+        invCustomerEl.value = existing.customerId || "";
+        const dt = existing.date instanceof Date ? existing.date : (existing.date?.toDate ? existing.date.toDate() : new Date(existing.date));
+        invDateEl.value = isoDate(dt);
+        if(invPurchaseDateEl) invPurchaseDateEl.value = existing.purchaseDate || "";
+        if(invInstallDateEl) invInstallDateEl.value = existing.installDate || "";
+        invRefEl.value = existing.ref || ref;
+        if(invPayMethodEl) invPayMethodEl.value = existing.paymentMethod || "cash";
+        if(invWorkorderEl) invWorkorderEl.value = existing.workorderId || "";
+        invItemsTbody.innerHTML = "";
+        (existing.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
+        recalcInvoiceTotals();
+        showToast("Facture ouverte en modification.");
+        return;
+      }
+
+      const wantMerge = confirm(`Ajouter ces lignes à la facture "${ref}" (même facture) ?`);
+      if(wantMerge){
+        try{
+          const mergedItems = [...(existing.items||[]), ...items];
+          let cTot=0, sTot=0;
+          for(const it of mergedItems){
+            cTot += Number(it.cost||0) * Number(it.qty||1);
+            sTot += Number(it.price||0) * Number(it.qty||1);
+          }
+          const pTot = sTot - cTot;
+
+          // On garde le client de la facture existante (référence unique = 1 facture)
+          const upd = {
+            // garde ref identique
+            ref: ref,
+            customerId: existing.customerId || customerId,
+            customerName: existing.customerName || (customer?.fullName||""),
+            workorderId: existing.workorderId || workorderId || "",
+            workorderLabel: existing.workorderLabel || (workorderId ? workorderDisplay(workorders.find(w=>w.id===workorderId)) : ""),
+            paymentMethod: (invPayMethodEl?.value || existing.paymentMethod || "cash"),
+            date: existing.date || d,
+            purchaseDate: existing.purchaseDate || (invPurchaseDateEl?.value||""),
+            installDate: existing.installDate || (invInstallDateEl?.value||""),
+            items: mergedItems,
+            totals: { cost: cTot, sell: sTot, profit: pTot },
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUid,
+          };
+
+          await updateDoc(doc(colInvoices(), existing.id), upd);
+          openInvoiceForm(false);
+          formInvoice.reset();
+          invItemsTbody.innerHTML = "";
+          ensureInvoiceLine();
+          invDateEl.value = todayISO();
+          if(invWorkorderEl) invWorkorderEl.value = "";
+          if(invPayMethodEl) invPayMethodEl.value = "cash";
+          if(invPurchaseDateEl) invPurchaseDateEl.value = "";
+          if(invInstallDateEl) invInstallDateEl.value = "";
+          recalcInvoiceTotals();
+          showToast("Lignes ajoutées à la facture existante.");
+          return;
+        }catch(err){
+          console.error(err);
+          alert("Erreur ajout au même facture: "+(err?.message||err));
+          return;
+        }
+      }
+
+      // Si l'utilisateur refuse les 2 options, on laisse continuer (créera une 2e facture sans ref, ou changer ref)
+      alert("Change la référence si tu veux créer une nouvelle facture.");
+      return;
+    }
+  }
+
   const payload = {
-    ref: String(invRefEl.value||"").trim(),
+    ref: ref,
+
     paymentMethod: (invPayMethodEl?.value || "cash"),
     customerId,
     customerName: customer?.fullName || "",
