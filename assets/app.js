@@ -49,6 +49,13 @@ function normalizeRole(raw) {
   return "";
 }
 
+
+// Normalize customer email field (supports different schemas)
+function getCustomerEmail(c){
+  const v = ((c && (c.email ?? c.mail ?? c.emailAddress ?? c.email_address ?? c.courriel ?? c.emailClient)) ?? "");
+  return String(v).trim();
+}
+
 function docUserProfile(uid=currentUid){
   return doc(db, "users", uid);
 }
