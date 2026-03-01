@@ -935,34 +935,118 @@ if(formPromo){
   };
 }
 
+// ======= ENVOI PROMO via Firebase Extension (collection "mail") =======
+function escHtml(s){
+  return String(s||"")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+function applyTemplate(str, vars){
+  return String(str||"")
+    .replace(/\{name\}/g, vars.name || "")
+    .replace(/\{phone\}/g, vars.phone || "");
+}
+function buildPromoHtml(promo, vars){
+  const subject = escHtml(applyTemplate(promo.subject, vars));
+  const msg = applyTemplate(promo.message, vars);
+
+  const msgHtml = escHtml(msg).replace(/\n/g,"<br>");
+  const codeHtml = promo.code ? `<p><b>Code promo :</b> ${escHtml(promo.code)}</p>` : "";
+  const validHtml = promo.validUntil ? `<p><b>Valable jusqu’au :</b> ${escHtml(String(promo.validUntil).slice(0,10))}</p>` : "";
+
+  return `
+    <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5">
+      <h2>${subject}</h2>
+      <p>${msgHtml}</p>
+      ${codeHtml}
+      ${validHtml}
+      <hr>
+      <p style="color:#666;font-size:12px">
+        Garage Pro One
+      </p>
+    </div>
+  `;
+}
+
 if(btnPromoSend){
   btnPromoSend.addEventListener("click", async ()=>{
     promoSendError.style.display = "none";
     promoSendOk.style.display = "none";
     if(currentRole !== "admin") return;
+
     if(!selectedPromotionId){
       alert("Sélectionne une promotion.");
       return;
     }
+
+    const promo = promotions.find(p=>p.id === selectedPromotionId);
+    if(!promo){
+      alert("Promotion introuvable. Recharge la page.");
+      return;
+    }
+
     const testEmail = String(promoTestEmail?.value||"").trim();
     const isTest = testEmail.includes("@");
-    const count = _countCustomersWithEmail();
-    const msg = isTest
+
+    // liste destinataires
+    const recipients = isTest
+      ? [{ email: testEmail, name: "Test", phone: "" }]
+      : customers
+          .filter(c=>String(c.email||"").includes("@"))
+          .map(c=>({ email: String(c.email).trim(), name: String(c.name||"").trim(), phone: String(c.phone||"").trim() }));
+
+    const msgConfirm = isTest
       ? `Envoyer un TEST à: ${testEmail} ?`
-      : `Envoyer cette promotion à tous les clients avec email (${count}) ?`;
-    if(!confirm(msg)) return;
+      : `Envoyer cette promotion à tous les clients avec email (${recipients.length}) ?`;
+
+    if(!confirm(msgConfirm)) return;
 
     btnPromoSend.disabled = true;
+
     try{
-      const fn = httpsCallable(functions, "sendPromotionEmail");
-      const res = await fn({ promotionId: selectedPromotionId, testEmail: isTest ? testEmail : "" });
-      const out = res?.data || {};
-      promoSendOk.textContent = `Envoyé: ${out.sent||0} / ${out.total||0}` + (isTest ? " (test)" : "");
+      // ⚠️ Extension attend une collection ROOT nommée "mail"
+      // On fait des batches (max 500 écritures par batch)
+      let total = recipients.length;
+      let sent = 0;
+
+      for(let i=0; i<recipients.length; i+=400){
+        const chunk = recipients.slice(i, i+400);
+        const batch = writeBatch(db);
+
+        chunk.forEach(r=>{
+          const vars = { name: r.name, phone: r.phone };
+          const html = buildPromoHtml(promo, vars);
+
+          const mailRef = doc(collection(db, "mail")); // ROOT "mail"
+          batch.set(mailRef, {
+            to: [r.email],
+            message: {
+              subject: applyTemplate(promo.subject, vars),
+              html
+            },
+            createdAt: isoNow(),
+            createdAtTs: serverTimestamp(),
+            promotionId: selectedPromotionId
+          });
+        });
+
+        await batch.commit();
+        sent += chunk.length;
+      }
+
+      // marque la promo comme envoyée (date + compteur)
+      await updateDoc(doc(colPromotions(), selectedPromotionId), {
+        lastSentAt: isoNow(),
+        lastSentAtTs: serverTimestamp(),
+        sentCount: (promo.sentCount || 0) + (isTest ? 0 : sent)
+      });
+
+      promoSendOk.textContent = `Envoi déclenché: ${sent} / ${total}` + (isTest ? " (test)" : "");
       promoSendOk.style.display = "";
     }catch(err){
       console.warn(err);
-      const msg2 = err?.message || "Erreur lors de l’envoi. Vérifie Cloud Functions + SendGrid.";
-      promoSendError.textContent = msg2;
+      promoSendError.textContent =
+        (err?.message || "Erreur envoi. Vérifie Firestore rules + extension + collection 'mail'.");
       promoSendError.style.display = "";
     }finally{
       btnPromoSend.disabled = false;
