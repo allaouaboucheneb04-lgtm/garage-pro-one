@@ -1,3 +1,17 @@
+
+// ===== Helper: normalizeEmail (added fix) =====
+function normalizeEmail(data){
+  const v =
+    data?.email ??
+    data?.Email ??
+    data?.courriel ??
+    data?.mail ??
+    data?.Mail ??
+    "";
+  return String(v).trim().toLowerCase();
+}
+// ===== End helper =====
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -462,57 +476,25 @@ function subscribeAll(){
     });
   }
 
-  // NOTE: si un seul document a un champ `fullName` avec un type non triable
-  // (ex: map/array), Firestore refuse la requête `orderBy("fullName")`.
-  // Donc on met un handler d'erreur + fallback sans orderBy.
-  unsubCustomers = onSnapshot(
-    query(colCustomers(), orderBy("fullName", "asc")),
-    (snap)=>{
-      // Normalisation: certains clients ont l'email sous Email/courriel/mail...
-      // On force un champ `email` unique utilisé partout (Clients, Promotions, etc.).
-      customers = snap.docs.map(d=>{
-        const data = d.data() || {};
-        return {
-          id: d.id,
-          ...data,
-          fullName: String(data.fullName || data.name || "").trim(),
-          phone: String(data.phone || data.tel || data.mobile || "").trim(),
-          email: normalizeEmail(data),
-          promoSelected: data.promoSelected === true,
-        };
-      });
-      if(currentRole === "admin") renderDashboard();
-      renderClients();
-      if(currentRole === "admin") renderRevenue();
-      if(currentRole === "admin") renderPromotions();
-    },
-    async (err)=>{
-      console.warn('customers onSnapshot error', err);
-      showToast("Erreur lecture clients. Souvent c'est un champ fullName avec un mauvais type dans un client. Je charge sans tri...", true);
-      try{
-        const snap = await getDocs(colCustomers());
-        customers = snap.docs.map(d=>{
-          const data = d.data() || {};
-          return {
-            id: d.id,
-            ...data,
-            fullName: String(data.fullName || data.name || "").trim(),
-            phone: String(data.phone || data.tel || data.mobile || "").trim(),
-            email: normalizeEmail(data),
-            promoSelected: data.promoSelected === true,
-          };
-        });
-        customers.sort((a,b)=>a.fullName.localeCompare(b.fullName));
-        if(currentRole === "admin") renderDashboard();
-        renderClients();
-        if(currentRole === "admin") renderRevenue();
-        if(currentRole === "admin") renderPromotions();
-      }catch(e){
-        console.warn('fallback getDocs customers failed', e);
-        showToast("Impossible de charger les clients (permissions ou règles).", true);
-      }
-    }
-  );
+  unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
+    // Normalisation: certains clients ont l'email sous Email/courriel/mail...
+    // On force un champ `email` unique utilisé partout (Clients, Promotions, etc.).
+    customers = snap.docs.map(d=>{
+      const data = d.data() || {};
+      return {
+        id: d.id,
+        ...data,
+        fullName: String(data.fullName || data.name || "").trim(),
+        phone: String(data.phone || data.tel || data.mobile || "").trim(),
+        email: normalizeEmail(data),
+        promoSelected: data.promoSelected === true,
+      };
+    });
+    if(currentRole === "admin") renderDashboard();
+    renderClients();
+    if(currentRole === "admin") renderRevenue();
+    if(currentRole === "admin") renderPromotions();
+  });
 
   unsubVehicles = onSnapshot(query(colVehicles(), orderBy("createdAt", "desc")), (snap)=>{
     vehicles = snap.docs.map(d=>({id:d.id, ...d.data()}));
