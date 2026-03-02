@@ -297,6 +297,28 @@ modalBody.addEventListener("click", async (e)=>{
     alert("Erreur: action impossible (vérifie les règles Firestore / connexion).");
   }
 });
+
+function _handleModalAction(e){
+  const btn = e.target && e.target.closest ? e.target.closest("button[data-act]") : null;
+  if(!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const act = btn.dataset.act;
+  (async ()=>{
+    try{
+      if(act==="printWo"){
+        await window.__printWorkorder(btn.dataset.id);
+      }else if(act==="setWoStatus"){
+        await window.__setWoStatus(btn.dataset.id, btn.dataset.status);
+      }else if(act==="deleteWo"){
+        await window.__deleteWo(btn.dataset.id);
+      }
+    }catch(err){
+      console.error(err);
+      alert("Erreur: action impossible (vérifie les règles Firestore / connexion).");
+    }
+  })();
+}
 modalBackdrop.addEventListener("click", (e)=>{ if(e.target===modalBackdrop) closeModal(); });
 
 // pour éviter l\'avertissement aria-hidden (focus gardé dans le modal)
@@ -3012,10 +3034,10 @@ function openWorkorderView(workorderId){
         </div>
       </div>
       <div class="row">
-        <button class="btn btn-small" data-act="printWo" data-id="${wo.id}">Imprimer / PDF</button>
-        ${wo.status!=="EN_COURS" ? `<button class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="EN_COURS">Démarrer</button>` : ``}
-        ${wo.status!=="TERMINE" ? `<button class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="TERMINE">Terminer</button>` : `<button class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="OUVERT">Rouvrir</button>`}
-        ${currentRole==="admin" ? `<button class="btn btn-small btn-danger" data-act="deleteWo" data-id="${wo.id}">Supprimer</button>` : ``}
+        <button type="button" class="btn btn-small" data-act="printWo" data-id="${wo.id}">Imprimer / PDF</button>
+        ${wo.status!=="EN_COURS" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="EN_COURS">Démarrer</button>` : ``}
+        ${wo.status!=="TERMINE" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="TERMINE">Terminer</button>` : `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="OUVERT">Rouvrir</button>`}
+        ${currentRole==="admin" ? `<button type="button" class="btn btn-small btn-danger" data-act="deleteWo" data-id="${wo.id}">Supprimer</button>` : ``}
       </div>
     </div>
     <div class="divider"></div>
