@@ -3388,7 +3388,11 @@ async function createInvite(){
     createdAt: serverTimestamp(),
     createdBy: auth.currentUser?.uid || ""
   });
-  alert("Invitation créée ✅\nCode: " + code);
+  await copyText(code);
+  alert("Invitation créée ✅
+Code: " + code + "
+
+(Copié dans le presse-papiers)");
   await loadInvites();
 }
 
@@ -3423,6 +3427,11 @@ async function loadInvites(){
         <td><b>${safe(r.role)}</b></td>
         <td>${status}</td>
         <td class="muted">${safe(created)}</td>
+      
+        <td style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-small" data-act="copyInvite" data-code="${safe(r.code)}" data-email="${safe(r.email)}">Copier lien</button>
+          <button class="btn btn-ghost btn-small" data-act="emailInvite" data-code="${safe(r.code)}" data-email="${safe(r.email)}" data-role="${safe(r.role)}">Envoyer email</button>
+        </td>
       </tr>`;
     }).join("");
   }catch(e){
@@ -3580,3 +3589,96 @@ function wireStaffUI(){
   }
 }
 document.addEventListener("DOMContentLoaded", ()=>{ wireStaffUI(); });
+
+async function copyText(txt){
+  try{
+    await navigator.clipboard.writeText(String(txt||""));
+    return true;
+  }catch(e){
+    try{
+      window.prompt("Copier:", String(txt||""));
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+}
+
+function buildInviteLink(code, email){
+  const base = window.location.origin + window.location.pathname;
+  const h = `#invite=${encodeURIComponent(code||"")}&email=${encodeURIComponent(email||"")}`;
+  return base + h;
+}
+
+async function sendInviteEmail(code, email, role){
+  const link = buildInviteLink(code, email);
+  const subject = "Invitation — Garage Pro One";
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5">
+    <h2>Invitation Garage Pro One</h2>
+    <p>Bonjour,</p>
+    <p>Vous avez été invité en tant que <b>${safe(role||"mechanic")}</b>.</p>
+    <p><b>Lien direct:</b><br/><a href="${link}">${link}</a></p>
+    <p><b>Code invitation:</b> <code>${safe(code)}</code></p>
+    <p>Si le lien ne fonctionne pas, ouvrez le site puis collez le code dans “Créer un compte (invitation)”.</p>
+    <hr/>
+    <small>Garage Pro One — Montréal</small>
+  </div>`;
+  await addDoc(collection(db,"mail"), {
+    to: email,
+    message: { subject, html },
+    createdAt: serverTimestamp()
+  });
+  alert("Email envoyé ✅");
+}
+
+function wireInvitesActions(){
+  const tbody = document.getElementById("invitesTbody");
+  if(!tbody) return;
+  const handler = (ev)=>{
+    const btn = ev.target?.closest?.("[data-act]");
+    if(!btn) return;
+    const act = btn.getAttribute("data-act");
+    if(act==="copyInvite"){
+      const code = btn.getAttribute("data-code")||"";
+      const email = btn.getAttribute("data-email")||"";
+      const link = buildInviteLink(code, email);
+      copyText(link).then(()=>alert("Lien copié ✅"));
+    }
+    if(act==="emailInvite"){
+      const code = btn.getAttribute("data-code")||"";
+      const email = btn.getAttribute("data-email")||"";
+      const role = btn.getAttribute("data-role")||"mechanic";
+      sendInviteEmail(code, email, role).catch(e=>{console.error(e); alert("Erreur envoi email");});
+    }
+  };
+  tbody.addEventListener("click", handler);
+  tbody.addEventListener("touchend", (e)=>{ handler(e); }, {passive:true});
+}
+document.addEventListener("DOMContentLoaded", ()=>{ wireInvitesActions(); });
+
+function parseHashParams(){
+  const h = (window.location.hash||"").replace(/^#/, "");
+  const out = {};
+  h.split("&").forEach(part=>{
+    const [k,v] = part.split("=");
+    if(!k) return;
+    out[decodeURIComponent(k)] = decodeURIComponent(v||"");
+  });
+  return out;
+}
+
+function applyInviteFromHash(){
+  const p = parseHashParams();
+  if(!p.invite && !p.email) return;
+  const codeEl = document.getElementById("regInviteCode");
+  const emailEl = document.getElementById("regEmail");
+  if(codeEl && p.invite) codeEl.value = p.invite;
+  if(emailEl && p.email) emailEl.value = p.email;
+
+  // scroll to register section
+  const sec = document.getElementById("registerInviteSection");
+  if(sec) sec.scrollIntoView({behavior:"smooth", block:"start"});
+}
+window.addEventListener("hashchange", ()=>applyInviteFromHash());
+document.addEventListener("DOMContentLoaded", ()=>applyInviteFromHash());
