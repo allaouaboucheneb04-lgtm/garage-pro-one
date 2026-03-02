@@ -46,6 +46,10 @@ let currentRole = "unknown";
 let currentUserName = "";
 let unsubProfile = null;
 let mechanics = [];
+let unsubStaffLive = null;
+let unsubInvitesLive = null;
+let staffLiveRows = [];
+let invitesLiveRows = [];
 
 let roleNeedsSetup = false;
 let roleSetupShown = false;
@@ -578,6 +582,20 @@ function subscribeAll(){
       promotions = snap.docs.map(d=>({id:d.id, ...d.data()}));
       renderPromotions();
     });
+    // Staff list (admin only) - realtime
+    if(unsubStaffLive) try{unsubStaffLive();}catch(e){}
+    unsubStaffLive = onSnapshot(query(collection(db,"staff"), orderBy("createdAt","desc"), limit(200)), (snap)=>{
+      staffLiveRows = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
+      renderStaffRows(staffLiveRows);
+    });
+
+    // Invites list (admin only) - realtime
+    if(unsubInvitesLive) try{unsubInvitesLive();}catch(e){}
+    unsubInvitesLive = onSnapshot(query(collection(db,"invites"), orderBy("createdAt","desc"), limit(200)), (snap)=>{
+      invitesLiveRows = snap.docs.map(d=>({code:d.id, ...(d.data()||{})}));
+      renderInviteRows(invitesLiveRows);
+    });
+
   }
 
   unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
@@ -651,13 +669,16 @@ function subscribeAll(){
 }
 
 function unsubscribeAll(){
-  if(unsubSettings) unsubSettings();
-  if(unsubCustomers) unsubCustomers();
-  if(unsubVehicles) unsubVehicles();
-  if(unsubWorkorders) unsubWorkorders();
-  if(unsubPromotions) unsubPromotions();
-  if(unsubInvoices) unsubInvoices();
+  if(unsubSettings) try{unsubSettings();}catch(e){}
+  if(unsubCustomers) try{unsubCustomers();}catch(e){}
+  if(unsubVehicles) try{unsubVehicles();}catch(e){}
+  if(unsubWorkorders) try{unsubWorkorders();}catch(e){}
+  if(unsubPromotions) try{unsubPromotions();}catch(e){}
+  if(unsubInvoices) try{unsubInvoices();}catch(e){}
+  if(unsubStaffLive) try{unsubStaffLive();}catch(e){}
+  if(unsubInvitesLive) try{unsubInvitesLive();}catch(e){}
   unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = unsubInvoices = null;
+  unsubStaffLive = unsubInvitesLive = null;
 }
 
 /* ============
@@ -3546,35 +3567,96 @@ async function sendInviteEmail(code, email, role){
   try{ await logEvent("invite_email_sent",{code,email,role,link}); }catch(e){}
 }
 
+
+function renderStaffRows(rows){
+  const tbody = $("staffTbody");
+  if(!tbody) return;
+  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="5">Admin seulement.</td></tr>'; return; }
+  if(!rows || rows.length===0){
+    tbody.innerHTML = '<tr><td class="muted" colspan="5">Aucun employé.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r=>{
+    const active = (r.disabled===true) ? "Non" : "Oui";
+    const isSelf = (r.uid === currentUid);
+    const lockNote = isSelf ? '<span class="badge" style="margin-left:6px">Vous</span>' : '';
+    return `<tr>
+      <td>${safe(r.fullName||"")}${lockNote}</td>
+      <td>${safe(r.email||"")}</td>
+      <td>${safe(r.role||"")}</td>
+      <td>${active}</td>
+      <td style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-small" data-act="toggleDisabled" data-uid="${safe(r.uid)}" data-disabled="${r.disabled===true}" ${isSelf ? "disabled" : ""}>${r.disabled===true ? "Activer" : "Désactiver"}</button>
+        <button class="btn btn-ghost btn-small" data-act="makeAdmin" data-uid="${safe(r.uid)}" ${isSelf ? "disabled" : ""}>Admin</button>
+        <button class="btn btn-ghost btn-small" data-act="makeMech" data-uid="${safe(r.uid)}" ${isSelf ? "disabled" : ""}>Mécano</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function renderInviteRows(rows){
+  const tbody = $("invitesTbody");
+  if(!tbody) return;
+  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="6">Admin seulement.</td></tr>'; return; }
+  if(!rows || rows.length===0){
+    tbody.innerHTML = '<tr><td class="muted" colspan="6">Aucune invitation.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r=>{
+    const used = r.used ? "Oui" : "Non";
+    const createdAt = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toLocaleString() : "";
+    return `<tr>
+      <td>${safe(r.code||"")}</td>
+      <td>${safe(r.email||"")}</td>
+      <td>${safe(r.role||"")}</td>
+      <td>${used}</td>
+      <td>${safe(createdAt)}</td>
+      <td>
+        <button class="btn btn-ghost btn-small" data-act="deleteInvite" data-code="${safe(r.code||"")}">Supprimer</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
 async function loadStaffList(){
   const tbody = $("staffTbody");
   if(!tbody) return;
   if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="5">Admin seulement.</td></tr>'; return; }
+  // Prefer live data when available
+  if(staffLiveRows && staffLiveRows.length){
+    renderStaffRows(staffLiveRows);
+    return;
+  }
   tbody.innerHTML = '<tr><td class="muted" colspan="5">Chargement...</td></tr>';
   try{
     const snap = await getDocs(query(collection(db,"staff"), orderBy("createdAt","desc"), limit(200)));
     const rows = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
-    if(rows.length===0){
-      tbody.innerHTML = '<tr><td class="muted" colspan="5">Aucun employé.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map(r=>{
-      const active = (r.disabled===true) ? "Non" : "Oui";
-      return `<tr>
-        <td>${safe(r.fullName||"")}</td>
-        <td>${safe(r.email||"")}</td>
-        <td>${safe(r.role||"")}</td>
-        <td>${active}</td>
-        <td style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-small" data-act="toggleDisabled" data-uid="${safe(r.uid)}" data-disabled="${r.disabled===true}">${r.disabled===true ? "Activer" : "Désactiver"}</button>
-          <button class="btn btn-ghost btn-small" data-act="makeAdmin" data-uid="${safe(r.uid)}">Admin</button>
-          <button class="btn btn-ghost btn-small" data-act="makeMech" data-uid="${safe(r.uid)}">Mécano</button>
-        </td>
-      </tr>`;
-    }).join("");
+    renderStaffRows(rows);
   }catch(e){
     console.error(e);
     tbody.innerHTML = '<tr><td class="muted" colspan="5">Erreur.</td></tr>';
+  }
+}
+
+
+async function countActiveAdmins(){
+  // count admins that are NOT disabled (disabled != true)
+  const snap = await getDocs(query(collection(db,"staff"), where("role","==","admin"), limit(200)));
+  const admins = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
+  return admins.filter(a => a.disabled !== true).length;
+}
+
+async function guardNotLastAdmin(targetUid, actionLabel){
+  // Only needed if target is currently an active admin
+  const targetSnap = await getDoc(doc(db,"staff", targetUid));
+  if(!targetSnap.exists()) return;
+  const t = targetSnap.data()||{};
+  const targetIsActiveAdmin = (String(t.role||"").toLowerCase()==="admin" && t.disabled !== true);
+  if(!targetIsActiveAdmin) return;
+
+  const n = await countActiveAdmins();
+  if(n <= 1){
+    throw new Error("Action refusée: impossible de " + actionLabel + " le dernier admin actif.");
   }
 }
 

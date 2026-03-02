@@ -16,7 +16,6 @@ service cloud.firestore {
     function isAdmin() { return signedIn() && role() == "admin"; }
     function isMech()  { return signedIn() && role() == "mechanic"; }
 
-    
     function inviteDoc(code) {
       return /databases/$(database)/documents/invites/$(code);
     }
@@ -27,21 +26,20 @@ service cloud.firestore {
         && lower(get(inviteDoc(code)).data.email) == lower(email)
         && lower(get(inviteDoc(code)).data.role) == lower(roleStr);
     }
-// USERS (optional profile; keep minimal access)
+
+    // USERS (optional profile; minimal)
     match /users/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
       allow create: if signedIn() && request.auth.uid == uid;
       allow update, delete: if isAdmin();
     }
 
-    // STAFF (employés)
+    // STAFF (employees)
     match /staff/{uid} {
       // Admin can read all; staff can read self
       allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
       allow list: if isAdmin();
-
-      // Admin can manage all
-      allow update, delete: if isAdmin();
 
       // Create:
       // - Admin can create staff
@@ -56,22 +54,23 @@ service cloud.firestore {
           && request.resource.data.disabled == false
           && validInviteForStaff(request.resource.data.inviteCode, request.resource.data.email, request.resource.data.role)
         );
+
+      // Admin can manage staff, but cannot delete/update THEIR OWN staff doc (anti-lockout)
+      allow update, delete: if isAdmin() && request.auth.uid != uid;
     }
 
     // INVITES
     match /invites/{code} {
-      // IMPORTANT:
-      // - allow GET without auth so invited users can validate code before creating account
-      // - forbid LIST for non-admin to prevent enumeration
+      // allow GET without auth so invited users can validate code before creating account
+      // forbid LIST for non-admin to prevent enumeration
       allow get: if true;
       allow list: if isAdmin();
 
-      // Admin can create/delete invites
       allow create, delete: if isAdmin();
 
       // Update:
       // - Admin can update any invite
-      // - Newly created invited user can mark THEIR invite as used (one-way)
+      // - Invited user can mark THEIR invite as used (one-way)
       allow update: if isAdmin()
         || (
           signedIn()
@@ -84,7 +83,7 @@ service cloud.firestore {
         );
     }
 
-match /customers/{id} {
+    match /customers/{id} {
       allow read: if signedIn();
       allow create, update, delete: if isAdmin();
     }
@@ -133,9 +132,10 @@ match /customers/{id} {
       allow read, create, update, delete: if isAdmin();
     }
 
-    // LOGS
+    // LOGS (optional)
     match /logs/{id} {
-      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow get: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow list: if isAdmin();
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if isAdmin();
     }
