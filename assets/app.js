@@ -2738,17 +2738,27 @@ function openVehicleForm(vehicleId=null, customerId=null){
       <select name="bodyType" id="bodyType">
         ${[
           {v:"",t:"—"},
+          // Voitures
           {v:"Coupe",t:"Coupé"},
           {v:"Berline",t:"Berline"},
+          {v:"Hatchback",t:"Hatchback"},
+          {v:"Cabriolet",t:"Cabriolet"},
+          {v:"Wagon",t:"Familiale / Wagon"},
+          // Camions / utilitaires
           {v:"VUS",t:"VUS / SUV"},
           {v:"Pickup",t:"Pick-up"},
           {v:"Van",t:"Van / Minivan"},
+          {v:"Fourgon",t:"Fourgon / Cargo"},
+          {v:"Camion",t:"Camion (commercial)"},
+          {v:"ChassisCabine",t:"Châssis-cabine"},
+          {v:"Bus",t:"Bus / Minibus"},
+          {v:"Remorque",t:"Remorque / Trailer"},
           {v:"Autre",t:"Autre"},
         ].map(o=>`<option value="${o.v}" ${String(v.bodyType||"")===o.v?"selected":""}>${o.t}</option>`).join("")}
       </select>
 
       <div id="seatsWrap" style="display:none">
-        <label>Nombre de places (si van)</label>
+        <label>Nombre de places (si van / bus)</label>
         <input name="seats" inputmode="numeric" value="${safe(v.seats||"")}" placeholder="ex: 7" />
       </div>
 
@@ -2761,13 +2771,14 @@ function openVehicleForm(vehicleId=null, customerId=null){
     </form>
   `);
 
-  // show/hide seats when Van
+  // show/hide seats when Van / Bus
   const toggleSeats = ()=>{
     const bt = $("bodyType")?.value || "";
     const wrap = $("seatsWrap");
     if(!wrap) return;
-    wrap.style.display = (bt === "Van") ? "" : "none";
-    if(bt !== "Van"){
+    const seatTypes = ["Van","Bus"]; 
+    wrap.style.display = (seatTypes.includes(bt)) ? "" : "none";
+    if(!seatTypes.includes(bt)){
       const inp = wrap.querySelector('input[name="seats"]');
       if(inp) inp.value = "";
     }
@@ -4103,6 +4114,59 @@ document.addEventListener('click', async (e) => {
 
 // ===== VIN BARCODE SCAN (Quagga2) =====
 let _vinScanActive = false;
+let _vinTorchOn = false;
+
+function _getActiveTrackSafe(){
+  try{
+    if(window.Quagga && Quagga.CameraAccess && typeof Quagga.CameraAccess.getActiveTrack === 'function'){
+      return Quagga.CameraAccess.getActiveTrack();
+    }
+  }catch(e){ /* ignore */ }
+  return null;
+}
+
+function _trackTorchSupported(track){
+  try{
+    if(!track || typeof track.getCapabilities !== 'function') return false;
+    const caps = track.getCapabilities();
+    return !!(caps && (caps.torch === true || caps.torch));
+  }catch(e){
+    return false;
+  }
+}
+
+async function _setTrackTorch(track, on){
+  if(!track || typeof track.applyConstraints !== 'function') return false;
+  try{
+    await track.applyConstraints({ advanced: [{ torch: !!on }] });
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+function _wireTorchButton(btnId, getState, setState){
+  const btn = document.getElementById(btnId);
+  if(!btn) return;
+  const track = _getActiveTrackSafe();
+  if(!_trackTorchSupported(track)){
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = '';
+  const render = ()=>{
+    btn.textContent = getState() ? 'Lampe ✅' : 'Lampe';
+  };
+  render();
+  btn.onclick = async ()=>{
+    const next = !getState();
+    const ok = await _setTrackTorch(_getActiveTrackSafe(), next);
+    if(ok){
+      setState(next);
+      render();
+    }
+  };
+}
 
 // PRO: debounce auto-decode when VIN reaches 17 chars (no need to click "Remplir via VIN")
 const _vinAutoTimers = new WeakMap();
@@ -4288,6 +4352,10 @@ async function startVinScanner(onResult){
             }
           }
         }catch(e){ /* ignore */ }
+
+        // PRO: torch / flash toggle (best effort)
+        _vinTorchOn = false;
+        _wireTorchButton('btnToggleTorchVin', ()=>_vinTorchOn, (v)=>{ _vinTorchOn = v; });
       });
 
       const handler = (data)=>{
@@ -4296,8 +4364,10 @@ async function startVinScanner(onResult){
         if(vin.length < 8) return;
         // stop quickly to avoid multiple detections
         Quagga.offDetected(handler);
+        try{ _setTrackTorch(_getActiveTrackSafe(), false); }catch(e){}
         try{ Quagga.stop(); }catch(e){}
         _vinScanActive = false;
+        _vinTorchOn = false;
         closeVinScanModal();
         onResult && onResult(vin);
         resolve(vin);
@@ -4308,8 +4378,11 @@ async function startVinScanner(onResult){
       const closeBtn = document.getElementById("btnCloseVinScan");
       if(closeBtn){
         closeBtn.onclick = ()=>{
+          // turn off torch if possible
+          try{ _setTrackTorch(_getActiveTrackSafe(), false); }catch(e){}
           try{ Quagga.stop(); }catch(e){}
           _vinScanActive = false;
+          _vinTorchOn = false;
           closeVinScanModal();
           resolve(null);
         };
@@ -4324,8 +4397,10 @@ async function startVinScanner(onResult){
           try{
             const vin = await _ocrVinFromViewport();
             // stop camera after OCR
+            try{ _setTrackTorch(_getActiveTrackSafe(), false); }catch(e){}
             try{ Quagga.stop(); }catch(e){}
             _vinScanActive = false;
+            _vinTorchOn = false;
             closeVinScanModal();
             onResult && onResult(vin);
             resolve(vin);
@@ -4387,6 +4462,7 @@ document.addEventListener('input', (e)=>{
 
 // ===== PARTS / INVENTORY BARCODE SCAN (Quagga2) =====
 let _barcodeScanActive = false;
+let _barcodeTorchOn = false;
 
 function _openBarcodeScanModal(title){
   const m = document.getElementById('barcodeScanModal');
@@ -4455,6 +4531,10 @@ async function startBarcodeScanner({ title='Scanner code‑barres', readers=["ea
             }
           }
         }catch(e){ /* ignore */ }
+
+        // torch / flash toggle (best effort)
+        _barcodeTorchOn = false;
+        _wireTorchButton('btnToggleTorchBarcode', ()=>_barcodeTorchOn, (v)=>{ _barcodeTorchOn = v; });
       });
 
       const handler = (data)=>{
@@ -4462,8 +4542,10 @@ async function startBarcodeScanner({ title='Scanner code‑barres', readers=["ea
         const cleaned = code.trim();
         if(cleaned.length < 6) return;
         Quagga.offDetected(handler);
+        try{ _setTrackTorch(_getActiveTrackSafe(), false); }catch(e){}
         try{ Quagga.stop(); }catch(e){}
         _barcodeScanActive = false;
+        _barcodeTorchOn = false;
         _closeBarcodeScanModal();
         onResult && onResult(cleaned);
         resolve(cleaned);
@@ -4474,8 +4556,10 @@ async function startBarcodeScanner({ title='Scanner code‑barres', readers=["ea
       const closeBtn = document.getElementById('btnCloseBarcodeScan');
       if(closeBtn){
         closeBtn.onclick = ()=>{
+          try{ _setTrackTorch(_getActiveTrackSafe(), false); }catch(e){}
           try{ Quagga.stop(); }catch(e){}
           _barcodeScanActive = false;
+          _barcodeTorchOn = false;
           _closeBarcodeScanModal();
           resolve(null);
         };

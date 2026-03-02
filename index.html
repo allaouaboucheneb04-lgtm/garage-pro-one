@@ -23,7 +23,10 @@
     <div class="card">
       <div class="row-between" style="gap:10px">
         <h2 style="margin:0" id="barcodeScanTitle">Scanner code‑barres</h2>
-        <button class="btn btn-ghost btn-small" id="btnCloseBarcodeScan" type="button">Fermer</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-small" id="btnToggleTorchBarcode" type="button" title="Lampe (si supportée)">Lampe</button>
+          <button class="btn btn-ghost btn-small" id="btnCloseBarcodeScan" type="button">Fermer</button>
+        </div>
       </div>
       <div class="divider"></div>
       <div id="barcodeScanViewport" class="vin-viewport"></div>
@@ -1049,6 +1052,7 @@
       <div class="row-between" style="gap:10px">
         <h2 style="margin:0">Scanner VIN (code-barres)</h2>
         <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-small" id="btnToggleTorchVin" type="button" title="Lampe (si supportée)">Lampe</button>
           <button class="btn btn-ghost btn-small" id="btnVinOcr" type="button" title="Lecture VIN par photo (beta)">Lire VIN (photo)</button>
           <button class="btn btn-ghost btn-small" id="btnCloseVinScan" type="button">Fermer</button>
         </div>
