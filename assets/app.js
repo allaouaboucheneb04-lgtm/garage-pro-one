@@ -278,6 +278,25 @@ const modalTitle = $("modalTitle");
 const modalBody = $("modalBody");
 const btnModalClose = $("btnModalClose");
 btnModalClose.onclick = closeModal;
+
+// Delegation click (iOS Safari peut ignorer onclick dans du HTML injecté)
+modalBody.addEventListener("click", async (e)=>{
+  const btn = e.target.closest("button[data-act]");
+  if(!btn) return;
+  const act = btn.dataset.act;
+  try{
+    if(act==="printWo"){
+      await window.__printWorkorder(btn.dataset.id);
+    }else if(act==="setWoStatus"){
+      await window.__setWoStatus(btn.dataset.id, btn.dataset.status);
+    }else if(act==="deleteWo"){
+      await window.__deleteWo(btn.dataset.id);
+    }
+  }catch(err){
+    console.error(err);
+    alert("Erreur: action impossible (vérifie les règles Firestore / connexion).");
+  }
+});
 modalBackdrop.addEventListener("click", (e)=>{ if(e.target===modalBackdrop) closeModal(); });
 
 // pour éviter l\'avertissement aria-hidden (focus gardé dans le modal)
