@@ -13,15 +13,8 @@ function normalizeEmail(data){
 // ===== End helper =====
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, signOut
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, query, where, orderBy, limit, getDocs,
-  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
@@ -74,6 +67,10 @@ function docUserProfile(uid=currentUid){
   return doc(db, "users", uid);
 }
 
+function docStaffProfile(uid=currentUid){
+  return doc(db, "staff", uid);
+}
+
 async function ensureUserProfile(_user){
   // IMPORTANT: with your Firestore rules, ONLY an admin can create/update /users/{uid}.
   // So we do NOT auto-create anything here.
@@ -83,23 +80,29 @@ async function ensureUserProfile(_user){
 async function loadRole(){
   if(!currentUid) return;
   try{
-    const snap = await getDoc(docUserProfile());
+    const snap = await getDoc(docStaffProfile());
     if(!snap.exists()){
       currentRole = "unknown";
       currentUserName = "";
       applyRoleUI();
-
-      // Without this doc, your rules cannot compute role(), so the user will be blocked.
       alert(
-        "Compte non configuré par l’admin.\n\n"+
-        "Demande à l’admin de créer : users/"+currentUid+"\n"+
-        "avec au minimum : { role: 'mechanic' (ou 'admin'), name: '...' }.\n\n"+
+        "Compte non autorisé (staff manquant).
+
+"+
+        "Demande à l’admin de t’envoyer une invitation, puis crée ton compte via le code.
+
+"+
         "UID: "+currentUid
       );
       await signOut(auth);
       return;
     }
     const d = snap.data() || {};
+    if(d.disabled === true){
+      alert("Compte désactivé. Contacte l’admin.");
+      await signOut(auth);
+      return;
+    }
     const normalized = normalizeRole(d.role);
     if (!normalized) {
       roleNeedsSetup = true;
@@ -108,7 +111,8 @@ async function loadRole(){
       roleNeedsSetup = false;
       currentRole = normalized;
     }
-    currentUserName = d.name || d.email || "";
+    currentUserName = d.fullName || d.name || d.email || auth.currentUser.email || "";
+    window.currentRole = currentRole;
   }catch(e){
     console.warn("loadRole failed", e);
     currentRole = "unknown";
@@ -148,9 +152,9 @@ async function loadMechanics(){
   mechanics = [];
   if(currentRole !== "admin") return;
   try{
-    const snap = await getDocs(query(collection(db, "users"), where("role","==","mechanic")));
+    const snap = await getDocs(query(collection(db, "staff"), where("role","==","mechanic")));
     mechanics = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}))
-      .map(u=>({uid:u.uid, name:u.name || u.email || u.uid, email:u.email||""}));
+      .map(u=>({uid:u.uid, name:u.fullName || u.name || u.email || u.uid, email:u.email||""}));
   }catch(e){
     console.warn("loadMechanics failed", e);
   }
@@ -3174,11 +3178,11 @@ onAuthStateChanged(auth, async (user)=>{
     $("navAuthed").style.display = "";
 
     if(unsubProfile) try{unsubProfile();}catch(e){}
-    unsubProfile = onSnapshot(docUserProfile(), (snap)=>{
+    unsubProfile = onSnapshot(docStaffProfile(), (snap)=>{
       if(snap.exists()){
         const d = snap.data();
-        currentRole = (d.role === "admin") ? "admin" : "mechanic";
-        currentUserName = d.name || d.email || "";
+        currentRole = (d.role === "admin") ? "admin" : "mechanic"; window.currentRole = currentRole; if(d.disabled===true){ alert("Compte désactivé."); signOut(auth); return; }
+        currentUserName = d.fullName || d.name || d.email || "";
         applyRoleUI();
       }
     });
@@ -3367,3 +3371,339 @@ function toast(msg){
   setTimeout(()=>{ el.classList.add("show"); }, 10);
   setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(), 250); }, 2200);
 }
+
+async function copyText(txt){
+  try{ await navigator.clipboard.writeText(String(txt||"")); return true; }
+  catch(e){ try{ window.prompt("Copier:", String(txt||"")); return true; }catch(_){ return false; } }
+}
+function buildInviteLink(code, email){
+  const base = window.location.origin + window.location.pathname;
+  return base + `#invite=${encodeURIComponent(code||"")}&email=${encodeURIComponent(email||"")}`;
+}
+function parseHashParams(){
+  const h = (window.location.hash||"").replace(/^#/, "");
+  const out = {};
+  h.split("&").forEach(part=>{
+    const [k,v] = part.split("=");
+    if(!k) return;
+    out[decodeURIComponent(k)] = decodeURIComponent(v||"");
+  });
+  return out;
+}
+
+async function registerWithInvite(fullName, code, email, password){
+  const invRef = doc(db,"invites",code);
+  const invSnap = await getDoc(invRef);
+  if(!invSnap.exists()) throw new Error("Code invitation invalide");
+  const inv = invSnap.data()||{};
+  if(String(inv.email||"").toLowerCase() !== String(email||"").toLowerCase()) throw new Error("Invitation pour un autre email");
+  if(inv.used) throw new Error("Invitation déjà utilisée");
+  const role = String(inv.role||"mechanic");
+
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const uid = cred.user.uid;
+
+  // Create staff profile for this user
+  await setDoc(doc(db,"staff",uid), {
+    fullName,
+    email,
+    role,
+    inviteCode: code,
+    disabled: false,
+    createdAt: serverTimestamp()
+  });
+
+  await updateDoc(invRef, { used:true, usedBy:uid, usedAt:serverTimestamp() });
+
+  try{ await logEvent("account_created",{inviteCode:code, role}); }catch(e){}
+}
+
+function wireAuthTabs(){
+  const tabLogin = $("tabLogin");
+  const tabReg = $("tabRegister");
+  const fLogin = $("formLogin");
+  const fReg = $("formRegisterInvite");
+  if(!tabLogin || !tabReg || !fLogin || !fReg) return;
+
+  tabLogin.onclick = ()=>{
+    tabLogin.classList.add("active"); tabReg.classList.remove("active");
+    fLogin.style.display = ""; fReg.style.display = "none";
+  };
+  tabReg.onclick = ()=>{
+    tabReg.classList.add("active"); tabLogin.classList.remove("active");
+    fReg.style.display = ""; fLogin.style.display = "none";
+    const p = parseHashParams();
+    if(p.invite) fReg.inviteCode.value = p.invite;
+    if(p.email) fReg.email.value = p.email;
+  };
+
+  // default: login
+  tabLogin.onclick();
+
+  // if hash has invite, auto open register
+  const p = parseHashParams();
+  if(p.invite || p.email) tabReg.onclick();
+
+  fReg.onsubmit = async (ev)=>{
+    ev.preventDefault();
+    const fullName = String(fReg.fullName.value||"").trim();
+    const code = String(fReg.inviteCode.value||"").trim();
+    const email = String(fReg.email.value||"").trim().toLowerCase();
+    const password = String(fReg.password.value||"").trim();
+    if(password.length < 6) return alert("Mot de passe: minimum 6 caractères");
+    try{
+      await registerWithInvite(fullName, code, email, password);
+      alert("Compte créé ✅");
+      // clean hash
+      history.replaceState(null, "", window.location.pathname);
+    }catch(e){
+      console.error(e);
+      alert("Erreur création compte: " + (e.message||e));
+    }
+  };
+}
+document.addEventListener("DOMContentLoaded", ()=>wireAuthTabs());
+
+async function logEvent(type, data){
+  try{
+    if(!auth.currentUser) return;
+    await addDoc(collection(db,"logs"), {
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email || "",
+      type: String(type||""),
+      data: data || {},
+      createdAt: serverTimestamp()
+    });
+  }catch(e){
+    console.warn("logEvent failed", e);
+  }
+}
+
+async function createInviteCode(email, role){
+  const code = "GP-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+  await setDoc(doc(db,"invites",code), {
+    email: String(email||"").toLowerCase(),
+    role: String(role||"mechanic"),
+    used: false,
+    createdAt: serverTimestamp()
+  });
+  try{ await logEvent("invite_created",{code,email,role}); }catch(e){}
+  return code;
+}
+
+async function loadInvites(){
+  const tbody = $("invitesTbody");
+  if(!tbody) return;
+  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="6">Admin seulement.</td></tr>'; return; }
+  tbody.innerHTML = '<tr><td class="muted" colspan="6">Chargement...</td></tr>';
+  try{
+    const snap = await getDocs(query(collection(db,"invites"), orderBy("createdAt","desc"), limit(100)));
+    const rows = [];
+    snap.forEach(d=>{
+      const x=d.data()||{};
+      rows.push({code:d.id, ...x});
+    });
+    if(rows.length===0){
+      tbody.innerHTML = '<tr><td class="muted" colspan="6">Aucune invitation.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r=>{
+      const used = r.used ? "Oui" : "Non";
+      const dt = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : "—";
+      const link = buildInviteLink(r.code, r.email);
+      return `<tr>
+        <td><code>${safe(r.code)}</code></td>
+        <td>${safe(r.email||"")}</td>
+        <td>${safe(r.role||"")}</td>
+        <td>${used}</td>
+        <td class="muted">${safe(dt)}</td>
+        <td style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-small" data-act="copyInvite" data-link="${safe(link)}">Copier lien</button>
+          <button class="btn btn-ghost btn-small" data-act="emailInvite" data-code="${safe(r.code)}" data-email="${safe(r.email)}" data-role="${safe(r.role)}">Envoyer email</button>
+        </td>
+      </tr>`;
+    }).join("");
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = '<tr><td class="muted" colspan="6">Erreur.</td></tr>';
+  }
+}
+
+async function sendInviteEmail(code, email, role){
+  const link = buildInviteLink(code, email);
+  const subject = "Invitation — Garage Pro One";
+  const html = `
+  <div style="font-family:Arial,sans-serif;line-height:1.5">
+    <h2>Invitation Garage Pro One</h2>
+    <p>Bonjour,</p>
+    <p>Vous avez été invité en tant que <b>${safe(role||"mechanic")}</b>.</p>
+    <p><b>Lien direct:</b><br/><a href="${link}">${link}</a></p>
+    <p><b>Code invitation:</b> <code>${safe(code)}</code></p>
+    <p>Si le lien ne fonctionne pas, ouvrez le site puis collez le code dans “Créer un compte (invitation)”.</p>
+    <hr/>
+    <small>Garage Pro One — Montréal</small>
+  </div>`;
+  await addDoc(collection(db,"mail"), { to: email, message: { subject, html }, createdAt: serverTimestamp() });
+  try{ await logEvent("invite_email_sent",{code,email,role,link}); }catch(e){}
+}
+
+async function loadStaffList(){
+  const tbody = $("staffTbody");
+  if(!tbody) return;
+  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="5">Admin seulement.</td></tr>'; return; }
+  tbody.innerHTML = '<tr><td class="muted" colspan="5">Chargement...</td></tr>';
+  try{
+    const snap = await getDocs(query(collection(db,"staff"), orderBy("createdAt","desc"), limit(200)));
+    const rows = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
+    if(rows.length===0){
+      tbody.innerHTML = '<tr><td class="muted" colspan="5">Aucun employé.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r=>{
+      const active = (r.disabled===true) ? "Non" : "Oui";
+      return `<tr>
+        <td>${safe(r.fullName||"")}</td>
+        <td>${safe(r.email||"")}</td>
+        <td>${safe(r.role||"")}</td>
+        <td>${active}</td>
+        <td style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-small" data-act="toggleDisabled" data-uid="${safe(r.uid)}" data-disabled="${r.disabled===true}">${r.disabled===true ? "Activer" : "Désactiver"}</button>
+          <button class="btn btn-ghost btn-small" data-act="makeAdmin" data-uid="${safe(r.uid)}">Admin</button>
+          <button class="btn btn-ghost btn-small" data-act="makeMech" data-uid="${safe(r.uid)}">Mécano</button>
+        </td>
+      </tr>`;
+    }).join("");
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = '<tr><td class="muted" colspan="5">Erreur.</td></tr>';
+  }
+}
+
+async function setStaffDisabled(uid, disabled){
+  await updateDoc(doc(db,"staff",uid), { disabled: !!disabled, updatedAt: serverTimestamp() });
+  try{ await logEvent("staff_disabled_changed",{targetUid:uid, disabled:!!disabled}); }catch(e){}
+}
+async function setStaffRole(uid, role){
+  await updateDoc(doc(db,"staff",uid), { role: String(role), updatedAt: serverTimestamp() });
+  try{ await logEvent("staff_role_changed",{targetUid:uid, role:String(role)}); }catch(e){}
+}
+
+function labelLogType(t){
+  const m = {
+    invite_created: "Invitation créée",
+    invite_email_sent: "Invitation email envoyé",
+    account_created: "Compte créé",
+    staff_role_changed: "Rôle changé",
+    staff_disabled_changed: "Statut employé",
+    workorder_status: "Statut réparation",
+    invoice_saved: "Facture sauvegardée"
+  };
+  return m[t] || t || "—";
+}
+async function loadLogs(){
+  const tbody = $("logsTbody");
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td class="muted" colspan="4">Chargement...</td></tr>';
+  try{
+    const typeFilter = String($("logsFilterType")?.value||"");
+    let q = query(collection(db,"logs"), orderBy("createdAt","desc"), limit(80));
+    if(currentRole !== "admin" && auth.currentUser){
+      q = query(collection(db,"logs"), where("uid","==",auth.currentUser.uid), orderBy("createdAt","desc"), limit(80));
+    }
+    const snap = await getDocs(q);
+    const rows=[];
+    snap.forEach(d=>{
+      const x=d.data()||{};
+      if(typeFilter && x.type !== typeFilter) return;
+      rows.push(x);
+    });
+    if(rows.length===0){
+      tbody.innerHTML = '<tr><td class="muted" colspan="4">Aucun log.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r=>{
+      const dt = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : "—";
+      const details = safe(JSON.stringify(r.data||{}));
+      return `<tr>
+        <td class="muted">${safe(dt)}</td>
+        <td>${safe(r.email||"")}</td>
+        <td><b>${safe(labelLogType(r.type))}</b></td>
+        <td><code style="white-space:pre-wrap">${details}</code></td>
+      </tr>`;
+    }).join("");
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = '<tr><td class="muted" colspan="4">Erreur chargement logs.</td></tr>';
+  }
+}
+
+function wireEmployeesUI(){
+  const btnCreate = $("btnCreateInvite");
+  if(btnCreate){
+    btnCreate.onclick = async ()=>{
+      const email = String($("inviteEmail").value||"").trim().toLowerCase();
+      const role = String($("inviteRole").value||"mechanic");
+      if(!email.includes("@")) return alert("Email invalide");
+      try{
+        const code = await createInviteCode(email, role);
+        const link = buildInviteLink(code, email);
+        $("inviteCreatedInfo").textContent = "Code: "+code;
+        $("btnCopyInviteLink").style.display = "";
+        $("btnSendInviteEmail").style.display = "";
+        $("btnCopyInviteLink").onclick = ()=>copyText(link).then(()=>alert("Lien copié ✅"));
+        $("btnSendInviteEmail").onclick = ()=>sendInviteEmail(code, email, role).then(()=>alert("Email envoyé ✅")).catch(e=>{console.error(e); alert("Erreur envoi email");});
+        await loadInvites();
+      }catch(e){
+        console.error(e);
+        alert("Erreur création invitation");
+      }
+    };
+  }
+
+  const invitesT = $("invitesTbody");
+  if(invitesT){
+    invitesT.addEventListener("click",(ev)=>{
+      const btn = ev.target.closest("[data-act]");
+      if(!btn) return;
+      const act = btn.getAttribute("data-act");
+      if(act==="copyInvite"){
+        const link = btn.getAttribute("data-link")||"";
+        copyText(link).then(()=>alert("Lien copié ✅"));
+      }
+      if(act==="emailInvite"){
+        const code = btn.getAttribute("data-code")||"";
+        const email = btn.getAttribute("data-email")||"";
+        const role = btn.getAttribute("data-role")||"mechanic";
+        sendInviteEmail(code, email, role).then(()=>alert("Email envoyé ✅")).catch(e=>{console.error(e); alert("Erreur email");});
+      }
+    });
+  }
+
+  const staffT = $("staffTbody");
+  if(staffT){
+    staffT.addEventListener("click",(ev)=>{
+      const btn = ev.target.closest("[data-act]");
+      if(!btn) return;
+      const act = btn.getAttribute("data-act");
+      const uid = btn.getAttribute("data-uid")||"";
+      if(!uid) return;
+      if(act==="toggleDisabled"){
+        const cur = btn.getAttribute("data-disabled")==="true";
+        setStaffDisabled(uid, !cur).then(()=>loadStaffList());
+      }
+      if(act==="makeAdmin"){
+        setStaffRole(uid, "admin").then(()=>loadStaffList());
+      }
+      if(act==="makeMech"){
+        setStaffRole(uid, "mechanic").then(()=>loadStaffList());
+      }
+    });
+  }
+
+  const btnLogs = $("btnRefreshLogs");
+  if(btnLogs) btnLogs.onclick = ()=>loadLogs();
+  const sel = $("logsFilterType");
+  if(sel) sel.onchange = ()=>loadLogs();
+}
+
+document.addEventListener("DOMContentLoaded", ()=>wireEmployeesUI());

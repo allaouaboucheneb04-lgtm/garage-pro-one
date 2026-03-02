@@ -4,37 +4,53 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
+    // staff doc of current user (no loops)
+    function myStaffDoc() {
+      return /databases/$(database)/documents/staff/$(request.auth.uid);
+    }
+
     function role() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return exists(myStaffDoc()) ? get(myStaffDoc()).data.role : null;
     }
 
     function isAdmin() { return signedIn() && role() == "admin"; }
     function isMech()  { return signedIn() && role() == "mechanic"; }
 
+    // USERS (optional profile; keep minimal access)
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // STAFF (employees)
+    match /staff/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // INVITES
+    match /invites/{code} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /customers/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /vehicles/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /workorders/{id} {
       allow read: if isAdmin()
         || (isMech() && resource.data.assignedTo == request.auth.uid);
 
-      // admin crée les réparations
       allow create: if isAdmin();
 
-      // admin modifie tout
-      // mécanicien modifie seulement ses réparations (sans pouvoir changer assignedTo)
       allow update: if isAdmin()
         || (isMech()
             && resource.data.assignedTo == request.auth.uid
@@ -45,21 +61,34 @@ service cloud.firestore {
 
     match /appointments/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /promotions/{id} {
-      allow read, write: if isAdmin();
+      allow read, create, update, delete: if isAdmin();
     }
 
+    match /invoices/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // meta/settings/counters
     match /meta/{id} {
-      allow read, write: if isAdmin();
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
-
-    // Queue email (Firebase Extension "Trigger Email from Firestore")
+    // Email queue (Trigger Email from Firestore extension)
     match /mail/{id} {
       allow read, create, update, delete: if isAdmin();
+    }
+
+    // LOGS
+    match /logs/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
   }
 }

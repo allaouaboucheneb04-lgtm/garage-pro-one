@@ -36,7 +36,7 @@
 <div class="tabs no-print">
 <button class="tab active" id="tabLogin">Se connecter</button>
 <!-- Création de compte désactivée dans l'app : comptes via Firebase Auth + /users/{uid} créé par admin -->
-<button class="tab" id="tabRegister" style="display:none;">Créer compte</button>
+<button class="tab" id="tabRegister">Créer un compte (invitation)</button>
 </div>
 <div class="alert" id="authError" style="display:none; margin-top:12px;"></div>
 <div class="note" id="authOk" style="display:none; margin-top:12px;"></div>
@@ -48,6 +48,22 @@
 <button class="btn btn-primary" type="submit">Se connecter</button>
 <button class="btn btn-ghost" id="btnForgot" type="button">Mot de passe oublié</button>
 </form>
+
+<form class="form" id="formRegisterInvite" style="margin-top:12px; display:none;">
+<label>Nom complet</label>
+<input name="fullName" placeholder="Nom Prénom" required />
+<label>Code invitation</label>
+<input name="inviteCode" placeholder="Ex: GP-AB12CD" required />
+<label>Email</label>
+<input name="email" placeholder="email@exemple.com" required type="email" />
+<label>Mot de passe</label>
+<input name="password" placeholder="••••••••" required type="password" />
+<div class="row" style="margin-top:12px">
+<button class="btn btn-primary" type="submit">Créer mon compte</button>
+</div>
+<small class="muted">Le rôle est appliqué automatiquement selon le code invitation.</small>
+</form>
+
 <form class="form" id="formRegister" style="margin-top:12px; display:none;">
 <label>Email</label>
 <input name="email" placeholder="ex: toi@gmail.com" required="" type="email"/>
@@ -715,6 +731,95 @@
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
 </input></form>
+
+<div class="divider"></div>
+<h3>Employés</h3>
+<div class="box">
+  <div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px">
+    <div>
+      <label>Email employé</label>
+      <input class="input" id="inviteEmail" placeholder="mecano@email.com" type="email"/>
+    </div>
+    <div>
+      <label>Rôle</label>
+      <select class="input" id="inviteRole">
+        <option value="mechanic">Mécanicien</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+  </div>
+  <div class="row" style="margin-top:10px;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-primary" id="btnCreateInvite">Créer invitation</button>
+    <button class="btn btn-ghost" id="btnCopyInviteLink" style="display:none">Copier lien</button>
+    <button class="btn btn-ghost" id="btnSendInviteEmail" style="display:none">Envoyer email</button>
+    <span class="muted" id="inviteCreatedInfo"></span>
+  </div>
+</div>
+
+<div class="box" style="margin-top:12px">
+  <h4 style="margin:0 0 8px 0">Invitations</h4>
+  <div style="overflow:auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Code</th><th>Email</th><th>Rôle</th><th>Utilisée</th><th>Créée</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="invitesTbody">
+        <tr><td class="muted" colspan="6">Aucune invitation.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="box" style="margin-top:12px">
+  <h4 style="margin:0 0 8px 0">Liste employés</h4>
+  <div style="overflow:auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nom</th><th>Email</th><th>Rôle</th><th>Actif</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="staffTbody">
+        <tr><td class="muted" colspan="5">Aucun employé.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="box" style="margin-top:12px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+    <h4 style="margin:0">Historique</h4>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="input" id="logsFilterType" style="max-width:220px">
+        <option value="">Tous</option>
+        <option value="invite_created">Invitation créée</option>
+        <option value="invite_email_sent">Invitation email envoyé</option>
+        <option value="account_created">Compte créé</option>
+        <option value="staff_role_changed">Rôle changé</option>
+        <option value="staff_disabled_changed">Statut employé</option>
+        <option value="workorder_status">Statut réparation</option>
+        <option value="invoice_saved">Facture sauvegardée</option>
+      </select>
+      <button class="btn btn-ghost btn-small" id="btnRefreshLogs">Rafraîchir</button>
+    </div>
+  </div>
+  <small class="muted">Admin voit tout. Mécanicien voit seulement ses actions.</small>
+  <div style="overflow:auto;margin-top:10px">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Employé</th><th>Action</th><th>Détails</th>
+        </tr>
+      </thead>
+      <tbody id="logsTbody">
+        <tr><td class="muted" colspan="4">Aucun log.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <div class="divider"></div>
 <h3>Sauvegarde</h3>
 <div class="row">
