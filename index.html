@@ -275,7 +275,7 @@
 <button class="btn" id="btnRevApply">Appliquer</button>
 </div>
 </div>
-<div class="grid" style="grid-template-columns: repeat(9, minmax(0,1fr)); gap:12px; margin-top:14px">
+<div class="grid" style="grid-template-columns: repeat(10, minmax(0,1fr)); gap:12px; margin-top:14px">
 <div class="box">
 <div class="muted">Total période</div>
 <div class="val" id="revTotal">$0.00</div>
@@ -394,7 +394,7 @@
   <div class="box" id="invoiceFormBox" style="display:none">
     <h3 style="margin-top:0">Nouvelle facture</h3>
     <form class="form" id="formInvoice">
-      <div class="grid" style="grid-template-columns: repeat(9, minmax(0,1fr)); gap:12px">
+      <div class="grid" style="grid-template-columns: repeat(10, minmax(0,1fr)); gap:12px">
         <div>
           <label>Client</label>
           <select class="input" id="invCustomer" required></select>
@@ -486,7 +486,7 @@
   </div>
 
   <!-- Summary -->
-  <div class="grid" style="grid-template-columns: repeat(9, minmax(0,1fr)); gap:12px; margin-top:14px">
+  <div class="grid" style="grid-template-columns: repeat(10, minmax(0,1fr)); gap:12px; margin-top:14px">
     <div class="box">
       <div class="muted">Factures (30 derniers jours)</div>
       <div class="val" id="inv30Count">0</div>
@@ -705,6 +705,8 @@
 <input id="setGaragePhone" class="input" placeholder="(514) 000-0000" />
 <label>Email</label>
 <input id="setGarageEmail" class="input" placeholder="contact@garage.com" />
+<label>Nom pour signature</label>
+<input id="setSignatureName" class="input" placeholder="Nom du responsable" />
 <small class="muted">Ces informations s’affichent automatiquement sur les factures.</small>
 <div class="divider"></div>
 

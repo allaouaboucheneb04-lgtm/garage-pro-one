@@ -17,11 +17,8 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, query, where, orderBy, limit, getDocs,
-  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from ""https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
@@ -404,7 +401,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"Montréal, QC", garagePhone:"", garageEmail:"" };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"Montréal, QC", garagePhone:"", garageEmail:"", signatureName:"" };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -1249,6 +1246,26 @@ async function createInvoiceFromForm(e){
     alert("Erreur enregistrement facture: "+(err?.message||err));
   }
 }
+  // Référence auto si vide (compteur dans meta/counters)
+  let refVal = String(invRefEl?.value || "").trim();
+  if(!refVal){
+    try{
+      const cRef = doc(db, "meta", "counters");
+      refVal = await runTransaction(db, async (tx)=>{
+        const snap = await tx.get(cRef);
+        const cur = (snap.exists() && snap.data().invoiceSeq) ? Number(snap.data().invoiceSeq) : 0;
+        const next = cur + 1;
+        tx.set(cRef, { invoiceSeq: next, updatedAt: serverTimestamp() }, { merge:true });
+        return String(next);
+      });
+      if(invRefEl) invRefEl.value = refVal;
+    }catch(e){
+      // fallback
+      refVal = String(Date.now());
+      if(invRefEl) invRefEl.value = refVal;
+    }
+  }
+
 
 async function deleteInvoice(id){
   if(!confirm("Supprimer cette facture ?")) return;
@@ -2227,11 +2244,12 @@ $("btnSaveSettings").onclick = async ()=>{
   const garageAddress = String($("setGarageAddress")?.value||"").trim();
   const garagePhone = String($("setGaragePhone")?.value||"").trim();
   const garageEmail = String($("setGarageEmail")?.value||"").trim();
+  const signatureName = String($("setSignatureName")?.value||"").trim();
   if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || !isFinite(laborRate) || tps<0 || tvq<0 || cardFee<0 || laborRate<0){
     alert("TPS/TVQ invalides.");
     return;
   }
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, updatedAt: serverTimestamp() }, { merge:true });
+  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, signatureName, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
 function renderSettings(){
@@ -3183,4 +3201,73 @@ function renderInvoicePrint(){
       `;
     }
   }
+}
+
+async function sendInvoiceEmail(){
+  const to = String(invEmailEl?.value || "").trim();
+  if(!to){
+    alert("Ajoute l'email du client avant d'envoyer.");
+    return;
+  }
+  const ref = String(invRefEl?.value || "").trim() || "Facture";
+  const date = String(invDateEl?.value || "");
+  const pay = invPaymentLabel(invPayMethodEl?.value||"cash");
+  const items = readInvoiceItems();
+
+  // Totaux
+  const costTotal = items.reduce((s,it)=> s + Number(it.cost||0)*Number(it.qty||1), 0);
+  const sellTotal = items.reduce((s,it)=> s + Number(it.price||0)*Number(it.qty||1), 0);
+  const hours = Math.max(0, Number(invHoursEl?.value || 0));
+  const labor = hours>0 ? (hours*Number(settings.laborRate||0)) : Math.max(0, Number(invLaborEl?.value || 0));
+  const sub = sellTotal + labor;
+  const tax = sub * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0));
+  const grand = sub + tax;
+  const cardFee = (String(invPayMethodEl?.value||"").toLowerCase()==="card") ? (grand*Number(settings.cardFeeRate||0)) : 0;
+  const net = sub - costTotal - cardFee;
+
+  const rows = items.map(it=>`<tr>
+    <td style="padding:6px 8px;border-bottom:1px solid #eee">${safe(it.name||"")}</td>
+    <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${safe(String(it.qty??1))}</td>
+    <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${money(Number(it.price||0))}</td>
+  </tr>`).join("");
+
+  const html = `
+  <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:720px">
+    <h2 style="margin:0 0 6px 0">${safe(settings.garageName||"Garage")}</h2>
+    <div style="color:#666;margin-bottom:14px">${safe(settings.garageAddress||"")}</div>
+    <h3 style="margin:0 0 8px 0">Facture #${safe(ref)}</h3>
+    <div style="color:#666;margin-bottom:10px">Date: ${safe(date)} • Paiement: ${safe(pay)}</div>
+    <div style="margin:12px 0"><b>Client:</b> ${safe(String(invCustomerEl?.value||"").trim())}</div>
+
+    <table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:10px;overflow:hidden">
+      <thead>
+        <tr style="background:#f7f7f7">
+          <th style="text-align:left;padding:8px">Pièce / service</th>
+          <th style="text-align:right;padding:8px">Qté</th>
+          <th style="text-align:right;padding:8px">Prix</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div></div>
+      <div>
+        <div style="display:flex;justify-content:space-between"><span>Sous-total</span><b>${money(sub)}</b></div>
+        <div style="display:flex;justify-content:space-between;color:#666"><span>Taxes</span><b>${money(tax)}</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Total</span><b>${money(grand)}</b></div>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;color:#666">Merci.</div>
+    <div style="margin-top:8px"><b>${safe(settings.signatureName||"")}</b></div>
+  </div>`;
+
+  await addDoc(collection(db, "mail"), {
+    to,
+    message: { subject: `Facture #${ref} - ${settings.garageName||"Garage"}`, html },
+    createdAt: serverTimestamp()
+  });
+
+  alert("Email ajouté à la file d'envoi ✅");
 }
