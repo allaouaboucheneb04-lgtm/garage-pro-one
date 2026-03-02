@@ -2965,6 +2965,16 @@ function openWorkorderForm(vehicleId){
 async function setWorkorderStatus(id, status){
   const ref = docWorkorder(id);
   await updateDoc(ref, { status, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid });
+
+  // Update local cache immediately (meilleure UX + évite impression "ça marche pas")
+  const wo = workorders.find(w=>w.id===id);
+  if(wo){
+    wo.status = status;
+    wo.updatedAt = isoNow();
+    wo.updatedBy = currentUid;
+  }
+  try{ renderRepairs(); }catch(e){}
+  try{ renderDashboard(); }catch(e){}
 }
 
 async function toggleWorkorderStatus(id, next){
@@ -3002,10 +3012,10 @@ function openWorkorderView(workorderId){
         </div>
       </div>
       <div class="row">
-        <button class="btn btn-small" onclick="window.__printWorkorder('${wo.id}')">Imprimer / PDF</button>
-        ${wo.status!=="EN_COURS" ? `<button class="btn btn-small btn-ghost" onclick="window.__setWoStatus('${wo.id}', 'EN_COURS')">Démarrer</button>` : ``}
-        ${wo.status!=="TERMINE" ? `<button class="btn btn-small btn-ghost" onclick="window.__setWoStatus('${wo.id}', 'TERMINE')">Terminer</button>` : `<button class="btn btn-small btn-ghost" onclick="window.__setWoStatus('${wo.id}', 'OUVERT')">Rouvrir</button>`}
-        ${currentRole==="admin" ? `<button class="btn btn-small btn-danger" onclick="window.__deleteWo('${wo.id}')">Supprimer</button>` : ``}
+        <button class="btn btn-small" data-act="printWo" data-id="${wo.id}">Imprimer / PDF</button>
+        ${wo.status!=="EN_COURS" ? `<button class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="EN_COURS">Démarrer</button>` : ``}
+        ${wo.status!=="TERMINE" ? `<button class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="TERMINE">Terminer</button>` : `<button class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="OUVERT">Rouvrir</button>`}
+        ${currentRole==="admin" ? `<button class="btn btn-small btn-danger" data-act="deleteWo" data-id="${wo.id}">Supprimer</button>` : ``}
       </div>
     </div>
     <div class="divider"></div>
@@ -3045,7 +3055,7 @@ function openWorkorderView(workorderId){
     ${wo.notes ? `<h3>Notes</h3><div class="note">${safe(wo.notes).replace(/\n/g,'<br>')}</div>` : ""}
   `);
 }
-window.__setWoStatus = async (id, next)=>{ await setWorkorderStatus(id, next); closeModal(); };
+window.__setWoStatus = async (id, next)=>{ await setWorkorderStatus(id, next); closeModal(); try{ toast("Statut mis à jour ✅"); }catch(e){} };
 window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
 
 /* Print */
@@ -3326,3 +3336,12 @@ if(btnInvPdf) btnInvPdf.addEventListener("click", ()=>{
     w.document.close();
   }catch(e){ console.error(e); window.print(); }
 });
+
+function toast(msg){
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>{ el.classList.add("show"); }, 10);
+  setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(), 250); }, 2200);
+}
