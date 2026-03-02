@@ -178,9 +178,34 @@ body.modal-open{overflow:hidden}
 .print-box{border:1px solid #e5e7eb;border-radius:12px;padding:10px}
 .print-totals{display:grid;grid-template-columns:1fr 320px;gap:12px;margin-top:12px}
 @media print{
-  .no-print, header, footer, nav, .modal-backdrop, .toast { display:none !important; }
-  main.container > section { display:none !important; }
-  #invPrintArea{display:block !important;}
-  body{background:#fff}
-  .table th,.table td{font-size:12px}
+  header,
+  footer,
+  nav,
+  .btn,
+  .no-print,
+  .modal,
+  .modal-backdrop,
+  .toast{
+    display:none !important;
+  }
+
+  /* Afficher uniquement la zone facture */
+  #invPrintArea{
+    display:block !important;
+  }
+
+  /* iOS Safari: éviter blocage scroll après impression */
+  html, body{
+    height:auto !important;
+    overflow:visible !important;
+  }
+
+  body{
+    background:#fff !important;
+  }
+
+  .table th,.table td{
+    font-size:12px;
+  }
 }
+

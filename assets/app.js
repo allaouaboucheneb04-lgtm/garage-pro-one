@@ -3255,3 +3255,14 @@ async function sendInvoiceEmail(){
 
   alert("Email ajouté à la file d'envoi ✅");
 }
+
+// iOS Safari: parfois après window.print(), le scroll se bloque.
+// On force un reset léger.
+window.addEventListener("afterprint", ()=>{
+  try{
+    document.documentElement.style.overflow = "auto";
+    document.body.style.overflow = "auto";
+    document.body.style.height = "auto";
+    window.scrollTo(0, window.scrollY);
+  }catch(e){}
+});
