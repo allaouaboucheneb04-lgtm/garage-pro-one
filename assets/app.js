@@ -930,8 +930,16 @@ const promoSelCount = $("promoSelCount");
 const btnPromoSelectAll = $("btnPromoSelectAll");
 const btnPromoSelectHasEmail = $("btnPromoSelectHasEmail");
 const btnPromoSelectNone = $("btnPromoSelectNone");
+const btnFilterUnpaid = $("btnFilterUnpaid");
+const btnFilterAll = $("btnFilterAll");
+const unpaidCountEl = $("unpaidCount");
+let clientPayFilter = "all"; // all | unpaid
+
 $("btnClientsSearch").onclick = ()=>renderClients();
 $("btnClientsClear").onclick = ()=>{ $("clientsSearch").value=""; renderClients(); };
+if(btnFilterUnpaid) btnFilterUnpaid.onclick = ()=>{ clientPayFilter="unpaid"; renderClients(); };
+if(btnFilterAll) btnFilterAll.onclick = ()=>{ clientPayFilter="all"; renderClients(); };
+
 
 if(btnPromoSelectAll) btnPromoSelectAll.onclick = ()=>window.__promoSelectAll(true);
 if(btnPromoSelectHasEmail) btnPromoSelectHasEmail.onclick = ()=>window.__promoSelectHasEmail();
@@ -1959,6 +1967,52 @@ window.__promoSelectHasEmail = async ()=>{
   }
 };
 
+
+function _isPaidCustomer(c){
+  const ps = String(c?.paymentStatus ?? "").trim().toLowerCase();
+  if(ps==="paid" || ps==="paye" || ps==="payé") return true;
+  if(ps==="unpaid" || ps==="nonpaye" || ps==="non payé" || ps==="nonpayé") return false;
+  if(typeof c?.isPaid === "boolean") return c.isPaid;
+  if(typeof c?.paid === "boolean") return c.paid;
+  // Par défaut: payé (on n'affiche pas comme "non payé" si pas défini)
+  return true;
+}
+
+window.__setCustomerPaid = async (customerId, isPaid)=>{
+  try{
+    await updateDoc(doc(colCustomers(), customerId), {
+      paymentStatus: isPaid ? "paid" : "unpaid",
+      paidAt: isPaid ? serverTimestamp() : null,
+      updatedAt: serverTimestamp(),
+    });
+  }catch(e){
+
+  }
+};
+
+window.__emailPaymentRequest = (customerId)=>{
+  const c = customers.find(x=>x.id===customerId);
+  if(!c) return;
+  const email = (c.email||"").trim();
+  if(!email){
+    alert("Ce client n'a pas d'email.");
+    return;
+  }
+  const subject = `Paiement en attente — Garage Pro One`;
+  const body =
+`Bonjour ${c.fullName||""},
+
+Votre paiement est en attente chez Garage Pro One.
+
+Merci de nous contacter ou de passer au garage pour régler votre facture.
+Téléphone: (ajoute ton numéro ici)
+
+Merci,
+Garage Pro One`;
+  const url = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = url;
+};
+
 function renderClients(){
   const q = ($("clientsSearch").value||"").trim().toLowerCase();
   let list = [...customers].sort((a,b)=> String(a.fullName||"").localeCompare(String(b.fullName||""), 'fr'));
@@ -1969,20 +2023,38 @@ function renderClients(){
       (c.email||"").toLowerCase().includes(q)
     );
   }
+
+  // Compteur non-payés (sur tous les clients)
+  const unpaidTotal = customers.filter(c=>!_isPaidCustomer(c)).length;
+  if(unpaidCountEl) unpaidCountEl.textContent = `${unpaidTotal} non payé(s)`;
+
+  // Filtre: non payés
+  if(clientPayFilter==="unpaid"){
+    list = list.filter(c=>!_isPaidCustomer(c));
+  }
   clientsCount.textContent = `${list.length} client(s)`;
   if(promoSelCount){
     const sel = customers.filter(c=>c && c.promoSelected===true).length;
     promoSelCount.textContent = `${sel} sélectionné(s)`;
   }
   if(list.length===0){
-    clientsTbody.innerHTML = '<tr><td colspan="5" class="muted">Aucun client.</td></tr>';
+    clientsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucun client.</td></tr>';
     return;
   }
-  clientsTbody.innerHTML = list.map(c=>`
+  clientsTbody.innerHTML = list.map(c=>{
+    const isPaid = _isPaidCustomer(c);
+    const payLabel = isPaid ? "Payé" : "Non payé";
+    const payClass = isPaid ? "pill good" : "pill bad";
+    const toggleBtn = isPaid
+      ? `<button class="btn btn-small btn-ghost" onclick="window.__setCustomerPaid('${c.id}', false)">Marquer non payé</button>`
+      : `<button class="btn btn-small btn-primary" onclick="window.__setCustomerPaid('${c.id}', true)">Marquer payé</button>`;
+    const emailBtn = `<button class="btn btn-small" onclick="window.__emailPaymentRequest('${c.id}')">Email paiement</button>`;
+    return `
     <tr>
       <td>${safe(c.fullName)}</td>
       <td>${safe(c.phone||"")}</td>
       <td>${safe(c.email||"")}</td>
+      <td class="nowrap"><span class="${payClass}">${payLabel}</span></td>
       <td class="nowrap">
         <label class="row" style="gap:6px; align-items:center">
           <input type="checkbox" ${c.promoSelected ? "checked" : ""} onchange="window.__togglePromoSelected('${c.id}', this.checked)">
@@ -1990,11 +2062,14 @@ function renderClients(){
         </label>
       </td>
       <td class="nowrap">
+        ${(!isPaid ? emailBtn : "")}
+        ${toggleBtn}
         <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
         <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
       </td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function openClientStats(customerId){
