@@ -404,7 +404,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80 };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"Montréal, QC", garagePhone:"", garageEmail:"" };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -2223,11 +2223,15 @@ $("btnSaveSettings").onclick = async ()=>{
   const tvq = parseFloat(String($("setTvq").value).replace(',','.'))/100;
   const cardFee = parseFloat(String($("setCardFee").value||"0").replace(',','.'))/100;
   const laborRate = parseFloat(String($("setLaborRate")?.value||"0").replace(',','.'));
+  const garageName = String($("setGarageName")?.value||"").trim();
+  const garageAddress = String($("setGarageAddress")?.value||"").trim();
+  const garagePhone = String($("setGaragePhone")?.value||"").trim();
+  const garageEmail = String($("setGarageEmail")?.value||"").trim();
   if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || !isFinite(laborRate) || tps<0 || tvq<0 || cardFee<0 || laborRate<0){
     alert("TPS/TVQ invalides.");
     return;
   }
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, updatedAt: serverTimestamp() }, { merge:true });
+  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
 function renderSettings(){
@@ -3125,3 +3129,58 @@ onAuthStateChanged(auth, async (user)=>{
     showAuthMessage("", "");
   }
 });
+
+// PWA service worker
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
+  });
+}
+
+function renderInvoicePrint(){
+  const area = document.getElementById("invPrintArea") || document.getElementById("invPrint") || document.getElementById("invoicePrint");
+  if(!area) return;
+  // Inject a lightweight header block if not present
+  if(!area.querySelector(".invoice-meta")){
+    const meta = document.createElement("div");
+    meta.className = "invoice-meta";
+    meta.innerHTML = `
+      <div class="invoice-box">
+        <h4>Garage</h4>
+        <div><b>${safe(settings.garageName||"")}</b></div>
+        <div class="muted">${safe(settings.garageAddress||"")}</div>
+        <div class="muted">${safe(settings.garagePhone||"")}</div>
+        <div class="muted">${safe(settings.garageEmail||"")}</div>
+      </div>
+      <div class="invoice-box">
+        <h4>Client</h4>
+        <div><b>${safe(document.getElementById("invCustomer")?.value||"")}</b></div>
+        <div class="muted">${safe(document.getElementById("invRef")?.value ? ("Réf: "+document.getElementById("invRef").value) : "")}</div>
+        <div class="muted">${safe(document.getElementById("invDate")?.value ? ("Date: "+document.getElementById("invDate").value) : "")}</div>
+        <div class="muted">${safe(document.getElementById("invPayMethod")?.value ? ("Paiement: "+invPaymentLabel(document.getElementById("invPayMethod").value)) : "")}</div>
+      </div>
+    `;
+    area.prepend(meta);
+  }else{
+    // Update existing meta blocks
+    const b = area.querySelectorAll(".invoice-box");
+    if(b[0]){
+      b[0].innerHTML = `
+        <h4>Garage</h4>
+        <div><b>${safe(settings.garageName||"")}</b></div>
+        <div class="muted">${safe(settings.garageAddress||"")}</div>
+        <div class="muted">${safe(settings.garagePhone||"")}</div>
+        <div class="muted">${safe(settings.garageEmail||"")}</div>
+      `;
+    }
+    if(b[1]){
+      b[1].innerHTML = `
+        <h4>Client</h4>
+        <div><b>${safe(document.getElementById("invCustomer")?.value||"")}</b></div>
+        <div class="muted">${safe(document.getElementById("invRef")?.value ? ("Réf: "+document.getElementById("invRef").value) : "")}</div>
+        <div class="muted">${safe(document.getElementById("invDate")?.value ? ("Date: "+document.getElementById("invDate").value) : "")}</div>
+        <div class="muted">${safe(document.getElementById("invPayMethod")?.value ? ("Paiement: "+invPaymentLabel(document.getElementById("invPayMethod").value)) : "")}</div>
+      `;
+    }
+  }
+}

@@ -6,6 +6,12 @@
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <title>Garage Pro One — Synchro iPhone + PC</title>
 
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0f19">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
@@ -688,6 +694,20 @@
 <input id="setTps" inputmode="decimal" placeholder="5">
 <label>TVQ (%)</label>
 <input id="setTvq" inputmode="decimal" placeholder="9.975"/>
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Infos garage (facture)</h3>
+<label>Nom du garage</label>
+<input id="setGarageName" class="input" placeholder="Garage Pro One" />
+<label>Adresse</label>
+<input id="setGarageAddress" class="input" placeholder="Montréal, QC" />
+<label>Téléphone</label>
+<input id="setGaragePhone" class="input" placeholder="(514) 000-0000" />
+<label>Email</label>
+<input id="setGarageEmail" class="input" placeholder="contact@garage.com" />
+<small class="muted">Ces informations s’affichent automatiquement sur les factures.</small>
+<div class="divider"></div>
+
 <label>Frais carte (%)</label>
 <input id="setCardFee" inputmode="decimal" placeholder="2.5"/>
 <small class="muted">Appliqué seulement si paiement = Carte.</small>
@@ -768,6 +788,18 @@
       </div>
     </div>
   </div>
+</div>
+
+
+<div id="invPrintArea" class="print-area" style="display:none">
+  <div class="invoice-head">
+    <img src="assets/logo.png" class="invoice-logo" alt="Garage Pro One"/>
+    <div class="invoice-head-text">
+      <h2 style="margin:0">Facture</h2>
+      <div class="muted">Garage Pro One</div>
+    </div>
+  </div>
+  <div class="muted">Utilise “Imprimer / PDF” pour enregistrer en PDF.</div>
 </div>
 
 </body>
