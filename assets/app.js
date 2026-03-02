@@ -2619,7 +2619,11 @@ async function deleteVehicle(id){
 
 function openVehicleForm(vehicleId=null, customerId=null){
   const editing = !!vehicleId;
-  const v = editing ? vehicles.find(x=>x.id===vehicleId) : {make:"",model:"",year:"",plate:"",vin:"",currentKm:"",notes:"",customerId};
+  const v = editing ? vehicles.find(x=>x.id===vehicleId) : {
+    make:"",model:"",year:"",plate:"",vin:"",currentKm:"",notes:"",
+    cylinders:"", engineType:"", bodyType:"", seats:"",
+    customerId
+  };
   if(editing && !v){ alert("Véhicule introuvable."); return; }
   const c = customers.find(x=>x.id===customerId);
   if(!c){ alert("Client introuvable."); return; }
@@ -2641,6 +2645,46 @@ function openVehicleForm(vehicleId=null, customerId=null){
       <input name="vin" value="${safe(v.vin||"")}" />
       <label>Kilométrage actuel</label>
       <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
+
+      <div class="divider"></div>
+      <h3 style="margin:0">Infos véhicule</h3>
+      <div class="muted" style="margin-top:6px">Ces infos aident pour le suivi et les rapports.</div>
+
+      <label>Type de moteur</label>
+      <select name="engineType">
+        ${[
+          {v:"",t:"—"},
+          {v:"Essence",t:"Essence"},
+          {v:"Diesel",t:"Diesel"},
+          {v:"Hybride",t:"Hybride"},
+          {v:"Électrique",t:"Électrique"},
+          {v:"Autre",t:"Autre"},
+        ].map(o=>`<option value="${o.v}" ${String(v.engineType||"")===o.v?"selected":""}>${o.t}</option>`).join("")}
+      </select>
+
+      <label>Nombre de cylindres</label>
+      <select name="cylinders">
+        ${["", "3", "4", "5", "6", "8", "10", "12"].map(n=>`<option value="${n}" ${String(v.cylinders||"")===n?"selected":""}>${n? n+" cylindres":"—"}</option>`).join("")}
+      </select>
+
+      <label>Type de véhicule</label>
+      <select name="bodyType" id="bodyType">
+        ${[
+          {v:"",t:"—"},
+          {v:"Coupe",t:"Coupé"},
+          {v:"Berline",t:"Berline"},
+          {v:"VUS",t:"VUS / SUV"},
+          {v:"Pickup",t:"Pick-up"},
+          {v:"Van",t:"Van / Minivan"},
+          {v:"Autre",t:"Autre"},
+        ].map(o=>`<option value="${o.v}" ${String(v.bodyType||"")===o.v?"selected":""}>${o.t}</option>`).join("")}
+      </select>
+
+      <div id="seatsWrap" style="display:none">
+        <label>Nombre de places (si van)</label>
+        <input name="seats" inputmode="numeric" value="${safe(v.seats||"")}" placeholder="ex: 7" />
+      </div>
+
       <label>Notes</label>
       <textarea name="notes" rows="4">${safe(v.notes||"")}</textarea>
       <div class="row-between">
@@ -2649,6 +2693,20 @@ function openVehicleForm(vehicleId=null, customerId=null){
       </div>
     </form>
   `);
+
+  // show/hide seats when Van
+  const toggleSeats = ()=>{
+    const bt = $("bodyType")?.value || "";
+    const wrap = $("seatsWrap");
+    if(!wrap) return;
+    wrap.style.display = (bt === "Van") ? "" : "none";
+    if(bt !== "Van"){
+      const inp = wrap.querySelector('input[name="seats"]');
+      if(inp) inp.value = "";
+    }
+  };
+  $("bodyType").addEventListener("change", toggleSeats);
+  toggleSeats();
 
   $("vehicleForm").onsubmit = async (e)=>{
     e.preventDefault();
@@ -2659,6 +2717,10 @@ function openVehicleForm(vehicleId=null, customerId=null){
     const plate = String(fd.get("plate")||"").trim();
     const vin = String(fd.get("vin")||"").trim();
     const currentKm = String(fd.get("currentKm")||"").trim();
+    const engineType = String(fd.get("engineType")||"").trim();
+    const cylinders = String(fd.get("cylinders")||"").trim();
+    const bodyType = String(fd.get("bodyType")||"").trim();
+    const seats = String(fd.get("seats")||"").trim();
     const notes = String(fd.get("notes")||"").trim();
     const err = $("vehicleError");
     if(!make || !model){
@@ -2666,9 +2728,15 @@ function openVehicleForm(vehicleId=null, customerId=null){
       err.textContent = "Marque et modèle sont obligatoires.";
       return;
     }
+    if(bodyType === "Van" && seats && !String(seats).match(/^\d+$/)){
+      err.style.display="";
+      err.textContent = "Nombre de places doit être un nombre (ex: 7).";
+      return;
+    }
     try{
-      if(editing) await updateVehicle(vehicleId, {make,model,year,plate,vin,currentKm,notes});
-      else await createVehicle(customerId, {make,model,year,plate,vin,currentKm,notes});
+      const payload = {make,model,year,plate,vin,currentKm,engineType,cylinders,bodyType,seats:(bodyType==="Van"?seats:""),notes};
+      if(editing) await updateVehicle(vehicleId, payload);
+      else await createVehicle(customerId, payload);
       closeModal();
     }catch(ex){
       alert("Erreur sauvegarde véhicule.");
@@ -2696,6 +2764,11 @@ function openVehicleView(vehicleId){
   }).join("") : `<tr><td colspan="5" class="muted">Aucune réparation.</td></tr>`;
 
   const vehTxt = [v.year,v.make,v.model].filter(Boolean).join(" ");
+  const extraLines = [
+    v.engineType ? `Moteur: <strong>${safe(v.engineType)}</strong>` : null,
+    v.cylinders ? `Cylindres: <strong>${safe(v.cylinders)}</strong>` : null,
+    v.bodyType ? `Type: <strong>${safe(v.bodyType)}</strong>${(v.bodyType==="Van" && v.seats)?` &nbsp;•&nbsp; Places: <strong>${safe(v.seats)}</strong>`:""}` : null,
+  ].filter(Boolean);
   openModal("Fiche véhicule", `
     <div class="row-between">
       <div>
@@ -2704,6 +2777,7 @@ function openVehicleView(vehicleId){
           Client: <a href="#" onclick="window.__openClientView('${v.customerId}'); return false;">${safe(c?.fullName||"—")}</a><br/>
           Plaque: <strong>${safe(v.plate||"")}</strong> &nbsp; • &nbsp; VIN: ${safe(v.vin||"")}<br/>
           KM: ${safe(v.currentKm||"")}
+          ${extraLines.length ? `<br/>${extraLines.join(" &nbsp;•&nbsp; ")}` : ""}
         </div>
       </div>
       <div class="row">
