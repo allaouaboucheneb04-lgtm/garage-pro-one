@@ -2716,13 +2716,36 @@ function openVehicleForm(vehicleId=null, customerId=null){
       <div id="modelHint" class="muted" style="margin-top:4px">Choisis d’abord une marque pour voir les modèles.</div>
       <label>Année</label>
       <input name="year" inputmode="numeric" value="${safe(v.year||"")}" / list="yearListVehicle">
-      <label>Plaque (recherche)</label>
-      <input name="plate" value="${safe(v.plate||"")}" />
-      <label>VIN</label>
-      <input name="vin" value="${safe(v.vin||"")}" />
-<button type="button" class="btn secondary" data-vin-decode style="margin-top:8px">Remplir via VIN</button>
-<button type="button" class="btn secondary" data-vin-scan style="margin-top:8px">Scanner VIN</button>
-<small class="muted" style="display:block;margin-top:6px">Remplit marque, modèle, année, type, moteur, cylindres (via vPIC).</small>
+      
+      <div class="vehicle-scan-head">
+        <div class="muted">Scan rapide</div>
+        <div class="vehicle-scan-actions">
+          <button type="button" class="btn secondary" data-vin-scan>Scanner VIN</button>
+          <button type="button" class="btn secondary" data-plate-scan>Scanner plaque</button>
+          <button type="button" class="btn secondary" data-vin-decode>Remplir via VIN</button>
+        </div>
+        <small class="muted" style="display:block;margin-top:6px">
+          VIN : remplit marque, modèle, année, type, moteur, cylindres (vPIC). Plaque : remplit la plaque (OCR).
+        </small>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label>Plaque</label>
+          <div class="input-with-btn">
+            <input name="plate" value="${safe(v.plate||"")}" placeholder="ex: ABC 123" />
+            <button type="button" class="btn icon" title="Scanner plaque" data-plate-scan>📷</button>
+          </div>
+        </div>
+        <div>
+          <label>VIN</label>
+          <div class="input-with-btn">
+            <input name="vin" value="${safe(v.vin||"")}" placeholder="17 caractères" />
+            <button type="button" class="btn icon" title="Scanner VIN" data-vin-scan>📷</button>
+          </div>
+        </div>
+      </div>
+
       <label>Kilométrage actuel</label>
       <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
 
@@ -4756,6 +4779,35 @@ document.addEventListener('click', async (e)=>{
     btn.textContent = "Scanner VIN";
   }
 });
+
+// Handle plate scan button clicks (camera OCR)
+document.addEventListener('click', async (e)=>{
+  const btn = e.target && e.target.closest ? e.target.closest('[data-plate-scan]') : null;
+  if(!btn) return;
+
+  const modal = btn.closest('.modal') || document;
+  const plateEl = modal.querySelector('input[name="plate"], input#plate, input[placeholder*="plaque" i]');
+  if(!plateEl) return;
+
+  btn.disabled = true;
+  const oldTxt = btn.textContent;
+  if(btn.classList && !btn.classList.contains('icon')) btn.textContent = "Scanner...";
+  try{
+    const plate = await startPlateScanner();
+    if(plate && plateEl){
+      plateEl.value = plate;
+      // trigger input event (if any listeners)
+      plateEl.dispatchEvent(new Event('input', { bubbles:true }));
+    }
+  }catch(err){
+    console.error('[PLATE] scan error', err);
+  }finally{
+    btn.disabled = false;
+    if(btn.classList && !btn.classList.contains('icon')) btn.textContent = oldTxt || "Scanner plaque";
+  }
+});
+
+
 
 // PRO: auto-decode VIN while typing / pasting
 document.addEventListener('input', (e)=>{
