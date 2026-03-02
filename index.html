@@ -1021,5 +1021,24 @@
 <script src="./assets/firebase-config.js"></script>
 <script type="module" src="./assets/app.js"></script>
 
+<script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
+
+
+<!-- VIN SCAN MODAL -->
+<div class="modal" id="vinScanModal" style="display:none">
+  <div class="modal-card" style="max-width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h3 style="margin:0">Scanner VIN (code-barres)</h3>
+      <button class="btn btn-ghost btn-small" id="btnCloseVinScan">Fermer</button>
+    </div>
+    <div style="margin-top:10px">
+      <div id="vinScanViewport" style="width:100%;background:#111;border-radius:10px;overflow:hidden"></div>
+      <small class="muted" style="display:block;margin-top:8px">
+        Astuce: vise le code‑barres VIN (pare‑brise ou porte). Si ça ne lit pas, augmente la lumière.
+      </small>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

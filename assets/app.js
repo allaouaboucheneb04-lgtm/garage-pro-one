@@ -2708,6 +2708,7 @@ function openVehicleForm(vehicleId=null, customerId=null){
       <label>VIN</label>
       <input name="vin" value="${safe(v.vin||"")}" />
 <button type="button" class="btn secondary" data-vin-decode style="margin-top:8px">Remplir via VIN</button>
+<button type="button" class="btn secondary" data-vin-scan style="margin-top:8px">Scanner VIN</button>
 <small class="muted" style="display:block;margin-top:6px">Remplit marque, modèle, année, type, moteur, cylindres (via vPIC).</small>
       <label>Kilométrage actuel</label>
       <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
@@ -4099,3 +4100,118 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+
+// ===== VIN BARCODE SCAN (Quagga2) =====
+let _vinScanActive = false;
+
+function openVinScanModal(){
+  const m = document.getElementById("vinScanModal");
+  if(m) m.style.display = "";
+}
+function closeVinScanModal(){
+  const m = document.getElementById("vinScanModal");
+  if(m) m.style.display = "none";
+}
+
+async function startVinScanner(onResult){
+  if(_vinScanActive) return;
+  if(typeof Quagga === "undefined"){
+    alert("Scanner non disponible (Quagga non chargé).");
+    return;
+  }
+  _vinScanActive = true;
+  openVinScanModal();
+
+  const viewport = document.getElementById("vinScanViewport");
+  if(viewport) viewport.innerHTML = "";
+
+  return new Promise((resolve, reject)=>{
+    try{
+      Quagga.init({
+        inputStream: {
+          type: "LiveStream",
+          target: viewport,
+          constraints: {
+            facingMode: "environment",
+            width: { min: 640 },
+            height: { min: 360 }
+          }
+        },
+        locator: { patchSize: "medium", halfSample: true },
+        decoder: {
+          // VIN barcodes are often CODE_39 / CODE_128
+          readers: ["code_39_reader","code_128_reader","codabar_reader"]
+        },
+        locate: true
+      }, function(err){
+        if(err){
+          console.error("[VINSCAN] init error", err);
+          _vinScanActive = false;
+          closeVinScanModal();
+          alert("Erreur caméra: " + (err.message||err));
+          reject(err);
+          return;
+        }
+        Quagga.start();
+      });
+
+      const handler = (data)=>{
+        const code = data && data.codeResult && data.codeResult.code ? String(data.codeResult.code) : "";
+        const vin = code.replace(/[^A-Z0-9]/gi,"").toUpperCase();
+        if(vin.length < 8) return;
+        // stop quickly to avoid multiple detections
+        Quagga.offDetected(handler);
+        try{ Quagga.stop(); }catch(e){}
+        _vinScanActive = false;
+        closeVinScanModal();
+        onResult && onResult(vin);
+        resolve(vin);
+      };
+
+      Quagga.onDetected(handler);
+
+      const closeBtn = document.getElementById("btnCloseVinScan");
+      if(closeBtn){
+        closeBtn.onclick = ()=>{
+          try{ Quagga.stop(); }catch(e){}
+          _vinScanActive = false;
+          closeVinScanModal();
+          resolve(null);
+        };
+      }
+    }catch(e){
+      console.error("[VINSCAN] error", e);
+      _vinScanActive = false;
+      closeVinScanModal();
+      reject(e);
+    }
+  });
+}
+
+// Handle scan button clicks
+document.addEventListener('click', async (e)=>{
+  const btn = e.target && e.target.closest ? e.target.closest('[data-vin-scan]') : null;
+  if(!btn) return;
+
+  const modal = btn.closest('.modal') || document;
+  const vinEl = modal.querySelector('input[name="vin"], input#vin, input[placeholder="VIN"]');
+  if(!vinEl) return;
+
+  btn.disabled = true;
+  btn.textContent = "Scanner...";
+  try{
+    const vin = await startVinScanner((v)=>{
+      if(vinEl) vinEl.value = v;
+    });
+    if(vin){
+      // after scan, auto decode VIN
+      const decodeBtn = modal.querySelector('[data-vin-decode]');
+      if(decodeBtn) decodeBtn.click();
+    }
+  }catch(err){
+    console.error(err);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Scanner VIN";
+  }
+});
