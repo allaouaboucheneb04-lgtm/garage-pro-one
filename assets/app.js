@@ -3009,7 +3009,7 @@ function openWorkorderForm(vehicleId){
 }
 
 async function setWorkorderStatus(id, status){
-  const ref = docWorkorder(id);
+  const ref = doc(colWorkorders(), id);
   await updateDoc(ref, { status, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid });
 
   // Update local cache immediately (meilleure UX + évite impression "ça marche pas")
