@@ -1,5 +1,3 @@
-console.log('🚀 App starting...');
-console.log('🔥 window.firebaseConfig:', window.firebaseConfig);
 
 
 // ===== Helper: normalizeEmail (added fix) =====
@@ -63,7 +61,6 @@ function normalizeRole(raw) {
   return "";
 }
 
-
 // Normalize customer email field (supports different schemas)
 function getCustomerEmail(c){
   const v = ((c && (c.email ?? c.mail ?? c.emailAddress ?? c.email_address ?? c.courriel ?? c.emailClient)) ?? "");
@@ -117,7 +114,7 @@ async function loadRole(){
     currentUserName = d.fullName || d.name || d.email || auth.currentUser.email || "";
     window.currentRole = currentRole;
   }catch(e){
-    console.warn("loadRole failed", e);
+
     currentRole = "unknown";
     currentUserName = "";
   }
@@ -159,10 +156,9 @@ async function loadMechanics(){
     mechanics = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}))
       .map(u=>({uid:u.uid, name:u.fullName || u.name || u.email || u.uid, email:u.email||""}));
   }catch(e){
-    console.warn("loadMechanics failed", e);
+
   }
 }
-
 
 /* ============
    UI helpers
@@ -246,8 +242,6 @@ function showToast(message, ms=3500){
 }
 }
 
-
-
 /* ============
    Garage info (modifiable)
 =========== */
@@ -300,7 +294,7 @@ modalBody.addEventListener("click", async (e)=>{
       await window.__deleteWo(btn.dataset.id);
     }
   }catch(err){
-    console.error(err);
+
     alert("Erreur: action impossible (vérifie les règles Firestore / connexion).");
   }
 });
@@ -321,7 +315,7 @@ function _handleModalAction(e){
         await window.__deleteWo(btn.dataset.id);
       }
     }catch(err){
-      console.error(err);
+
       alert("Erreur: action impossible (vérifie les règles Firestore / connexion).");
     }
   })();
@@ -643,11 +637,10 @@ function subscribeAll(){
       if(currentRole === "admin") renderRevenue();
     },
     (err)=>{
-      console.warn('workorders onSnapshot error', err);
+
       showToast("Accès refusé: réparations. Vérifie le champ role dans /users/{uid} (admin ou mechanic).", true);
     }
   );
-
 
   // Invoices (admin)
   if(currentRole === "admin"){
@@ -660,7 +653,7 @@ function subscribeAll(){
         renderFinanceDashboard();
       },
       (err)=>{
-        console.warn('invoices onSnapshot error', err);
+
         showToast("Accès refusé: factures. Vérifie les rules /invoices et ton rôle admin.", 7000);
       }
     );
@@ -842,10 +835,9 @@ function renderFinanceDashboard(){
       drawBarChart(chartNetEl, labels, netVals);
     }
 }catch(e){
-    console.error("renderFinanceDashboard error:", e);
+
   }
 }
-
 
 /* Quick search */
 $("btnQuickSearch").onclick = ()=>runQuickSearch();
@@ -859,7 +851,7 @@ if(btnPlateScan){
     try{
       await startPlateScanner();
     }catch(e){
-      console.error('[PLATE] start error', e);
+
       alert('Impossible d\'ouvrir la caméra pour la plaque. Vérifie les permissions caméra.');
     }
   };
@@ -945,8 +937,6 @@ if(btnPromoSelectAll) btnPromoSelectAll.onclick = ()=>window.__promoSelectAll(tr
 if(btnPromoSelectHasEmail) btnPromoSelectHasEmail.onclick = ()=>window.__promoSelectHasEmail();
 if(btnPromoSelectNone) btnPromoSelectNone.onclick = ()=>window.__promoSelectAll(false);
 
-
-
 /* ============
    Revenue view
 =========== */
@@ -963,7 +953,6 @@ const revTbody = $("revTbody");
 const revByPayTbody = $("revByPayTbody");
 const revByDateTbody = $("revByDateTbody");
 const btnRevApply = $("btnRevApply");
-
 
 /* ============
    Invoices (Parts) / Profit
@@ -1028,7 +1017,6 @@ if(formInvoice) formInvoice.onsubmit = createInvoiceFromForm;
 if(invLaborEl) invLaborEl.addEventListener("input", recalcInvoiceTotals);
 if(invHoursEl) invHoursEl.addEventListener("input", recalcInvoiceTotals);
 if(invPayMethodEl) invPayMethodEl.addEventListener("change", recalcInvoiceTotals);
-
 
 function invSetMonth(which){
   const now = new Date();
@@ -1125,7 +1113,6 @@ function fillInvoiceCustomers(){
   invCustomerEl.innerHTML = list.map(c=>`<option value="${c.id}">${safe(c.fullName||'(Sans nom)')}</option>`).join('');
 }
 
-
 function workorderDisplay(wo){
   if(!wo) return "";
   const v = getVehicle(wo.vehicleId) || {};
@@ -1137,7 +1124,6 @@ function workorderDisplay(wo){
   const parts = [d, client, veh].filter(Boolean).join(" — ");
   return parts ? `${parts} — ${total}` : `${wo.id} — ${total}`;
 }
-
 
 function invPaymentLabel(pm){
   const v = String(pm||"").toLowerCase();
@@ -1161,7 +1147,6 @@ function fillInvoiceWorkorders(){
   }
   invWorkorderEl.innerHTML = opts.join('');
 }
-
 
 async function createInvoiceFromForm(e){
   e.preventDefault();
@@ -1288,7 +1273,7 @@ async function createInvoiceFromForm(e){
           showToast("Lignes ajoutées à la facture existante.");
           return;
         }catch(err){
-          console.error(err);
+
           alert("Erreur ajout au même facture: "+(err?.message||err));
           return;
         }
@@ -1355,7 +1340,7 @@ async function createInvoiceFromForm(e){
     editingInvoiceId = null;
     alert("Facture enregistrée.");
   }catch(err){
-    console.error(err);
+
     alert("Erreur enregistrement facture: "+(err?.message||err));
   }
 }
@@ -1365,11 +1350,10 @@ async function deleteInvoice(id){
   try{
     await deleteDoc(doc(colInvoices(), id));
   }catch(err){
-    console.error(err);
+
     alert("Erreur suppression: "+(err?.message||err));
   }
 }
-
 
 function setInvFilter(fromISO, toISO){
   invFilter.from = fromISO || null;
@@ -1646,7 +1630,6 @@ function renderInvoicesAnalytics(list){
   }
 }
 
-
 }
 
 function isoDate(d){
@@ -1690,7 +1673,6 @@ function workorderDateKey(w){
   const s = String(w.invoiceDate || w.createdAt || w.updatedAt || "");
   return s.slice(0,10);
 }
-
 
 function getInvoiceTotals(inv){
   // Supporte plusieurs formats (anciens / nouveaux)
@@ -1898,8 +1880,6 @@ if(revPresetEl && revFromEl && revToEl){
   if(revPayFilterEl) revPayFilterEl.addEventListener("change", ()=>renderRevenue());
 }
 
-
-
 // ===== Promo selection (clients) =====
 window.__togglePromoSelected = async (customerId, checked)=>{
   if(currentRole !== "admin") return;
@@ -1909,7 +1889,7 @@ window.__togglePromoSelected = async (customerId, checked)=>{
       promoSelectedAtTs: serverTimestamp()
     });
   }catch(err){
-    console.error(err);
+
     alert("Impossible de modifier la sélection promo. Vérifie les permissions Firestore (admin).");
   }
 };
@@ -1935,7 +1915,7 @@ window.__promoSelectAll = async (checked)=>{
       await batch.commit();
     }
   }catch(err){
-    console.error(err);
+
     alert("Erreur: impossible de mettre à jour la sélection promo.");
   }
 };
@@ -1974,7 +1954,7 @@ window.__promoSelectHasEmail = async ()=>{
       await batch.commit();
     }
   }catch(err){
-    console.error(err);
+
     alert("Erreur: impossible de sélectionner ceux avec email.");
   }
 };
@@ -2016,7 +1996,6 @@ function renderClients(){
     </tr>
   `).join("");
 }
-
 
 function openClientStats(customerId){
   const c = customers.find(x=>x.id===customerId) || {};
@@ -2318,7 +2297,7 @@ if(btnPromoSend){
       promoSendOk.textContent = `Envoi déclenché: ${sent} / ${total}` + (isTest ? " (test)" : "");
       promoSendOk.style.display = "";
     }catch(err){
-      console.warn(err);
+
       promoSendError.textContent =
         (err?.message || "Erreur envoi. Vérifie Firestore rules + extension + collection 'mail'.");
       promoSendError.style.display = "";
@@ -2629,7 +2608,6 @@ async function deleteVehicle(id){
   batch.delete(doc(colVehicles(), id));
   await batch.commit();
 }
-
 
 // ===== Vehicle make/model helper (vPIC) =====
 const VPIC_BASE = "https://vpic.nhtsa.dot.gov/api";
@@ -3741,7 +3719,7 @@ function wireAuthTabs(){
       // clean hash
       history.replaceState(null, "", window.location.pathname);
     }catch(e){
-      console.error(e);
+
       alert("Erreur création compte: " + (e.message||e));
     }
   };
@@ -3759,7 +3737,7 @@ async function logEvent(type, data){
       createdAt: serverTimestamp()
     });
   }catch(e){
-    console.warn("logEvent failed", e);
+
   }
 }
 
@@ -3808,7 +3786,7 @@ async function loadInvites(){
       </tr>`;
     }).join("");
   }catch(e){
-    console.error(e);
+
     tbody.innerHTML = '<tr><td class="muted" colspan="6">Erreur.</td></tr>';
   }
 }
@@ -3830,7 +3808,6 @@ async function sendInviteEmail(code, email, role){
   await addDoc(collection(db,"mail"), { to: email, message: { subject, html }, createdAt: serverTimestamp() });
   try{ await logEvent("invite_email_sent",{code,email,role,link}); }catch(e){}
 }
-
 
 function renderStaffRows(rows){
   const tbody = $("staffTbody");
@@ -3897,11 +3874,10 @@ async function loadStaffList(){
     const rows = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
     renderStaffRows(rows);
   }catch(e){
-    console.error(e);
+
     tbody.innerHTML = '<tr><td class="muted" colspan="5">Erreur.</td></tr>';
   }
 }
-
 
 async function countActiveAdmins(){
   // count admins that are NOT disabled (disabled != true)
@@ -3977,7 +3953,7 @@ async function loadLogs(){
       </tr>`;
     }).join("");
   }catch(e){
-    console.error(e);
+
     tbody.innerHTML = '<tr><td class="muted" colspan="4">Erreur chargement logs.</td></tr>';
   }
 }
@@ -3999,7 +3975,7 @@ function wireEmployeesUI(){
         $("btnSendInviteEmail").onclick = ()=>sendInviteEmail(code, email, role).then(()=>alert("Email envoyé ✅")).catch(e=>{console.error(e); alert("Erreur envoi email");});
         await loadInvites();
       }catch(e){
-        console.error(e);
+
         alert("Erreur création invitation");
       }
     };
@@ -4055,16 +4031,16 @@ document.addEventListener("DOMContentLoaded", ()=>wireEmployeesUI());
 
 try{
   onAuthStateChanged(auth, (u)=>{
-    console.log("👤 Auth state:", u ? {uid:u.uid,email:u.email} : null);
+
   });
 }catch(e){
-  console.warn("Auth debug hook failed", e);
+
 }
 
 function explainFirebaseError(e){
   const msg = (e && (e.message||e.code||e)) + "";
   if(msg.includes("permission-denied") || msg.includes("Missing or insufficient permissions")){
-    console.error("🚫 Firestore permissions: vérifie les règles + ton compte admin/staff.");
+
   }
 }
 window.addEventListener("unhandledrejection", (ev)=>{
@@ -4139,14 +4115,13 @@ document.addEventListener('click', async (e) => {
       setVehicleType: (v) => { if (vehicleTypeEl && v) { vehicleTypeEl.value = v; vehicleTypeEl.dispatchEvent(new Event('change', { bubbles:true })); } },
     });
   } catch (err) {
-    console.error('[VIN] decode error', err);
+
     alert('Erreur VIN: ' + (err?.message || err));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Remplir via VIN';
   }
 });
-
 
 // ===== VIN BARCODE SCAN (Quagga2) =====
 let _vinScanActive = false;
@@ -4261,7 +4236,7 @@ async function _autoDecodeVinForInput(vinInput){
         }, 900);
       }
     }catch(err){
-      console.error('[VIN] auto-decode error', err);
+
       // silent: keep manual options available
       const decodeBtn = modal.querySelector('[data-vin-decode]');
       if(decodeBtn){
@@ -4496,7 +4471,7 @@ async function startPlateScanner(){
         closePlateScanModal();
         try{ runQuickSearch(); }catch(e){ /* ignore */ }
       }catch(err){
-        console.error('[PLATE] OCR error', err);
+
         alert(err.message || 'Erreur OCR plaque');
       }finally{
         btnOcr.disabled = false;
@@ -4587,7 +4562,7 @@ async function startPlateScanner(){
       }
 
     }catch(err){
-      console.warn('[PLATE] auto scan error', err);
+
       frame.classList.remove('state-ok','state-search');
       frame.classList.add('state-none');
       setStatus('Erreur caméra/OCR…');
@@ -4665,7 +4640,7 @@ async function startVinScanner(onResult){
         locate: true
       }, function(err){
         if(err){
-          console.error("[VINSCAN] init error", err);
+
           _vinScanActive = false;
           closeVinScanModal();
           alert("Erreur caméra: " + (err.message||err));
@@ -4736,7 +4711,7 @@ async function startVinScanner(onResult){
             onResult && onResult(vin);
             resolve(vin);
           }catch(err){
-            console.error('[VIN OCR]', err);
+
             alert(err?.message || String(err));
           }finally{
             ocrBtn.disabled = false;
@@ -4745,7 +4720,7 @@ async function startVinScanner(onResult){
         };
       }
     }catch(e){
-      console.error("[VINSCAN] error", e);
+
       _vinScanActive = false;
       closeVinScanModal();
       reject(e);
@@ -4773,7 +4748,7 @@ document.addEventListener('click', async (e)=>{
       await _autoDecodeVinForInput(vinEl);
     }
   }catch(err){
-    console.error(err);
+
   }finally{
     btn.disabled = false;
     btn.textContent = "Scanner VIN";
@@ -4800,14 +4775,12 @@ document.addEventListener('click', async (e)=>{
       plateEl.dispatchEvent(new Event('input', { bubbles:true }));
     }
   }catch(err){
-    console.error('[PLATE] scan error', err);
+
   }finally{
     btn.disabled = false;
     if(btn.classList && !btn.classList.contains('icon')) btn.textContent = oldTxt || "Scanner plaque";
   }
 });
-
-
 
 // PRO: auto-decode VIN while typing / pasting
 document.addEventListener('input', (e)=>{
@@ -4818,7 +4791,6 @@ document.addEventListener('input', (e)=>{
   el.value = _sanitizeVin(el.value);
   _autoDecodeVinForInput(el);
 });
-
 
 // ===== PARTS / INVENTORY BARCODE SCAN (Quagga2) =====
 let _barcodeScanActive = false;
@@ -4873,7 +4845,7 @@ async function startBarcodeScanner({ title='Scanner code‑barres', readers=["ea
         locate: true
       }, function(err){
         if(err){
-          console.error('[BARCODE] init error', err);
+
           _barcodeScanActive = false;
           _closeBarcodeScanModal();
           alert('Erreur caméra: ' + (err.message||err));
@@ -4925,7 +4897,7 @@ async function startBarcodeScanner({ title='Scanner code‑barres', readers=["ea
         };
       }
     }catch(e){
-      console.error('[BARCODE] error', e);
+
       _barcodeScanActive = false;
       _closeBarcodeScanModal();
       reject(e);
@@ -4954,7 +4926,7 @@ document.addEventListener('click', async (e)=>{
       target.dispatchEvent(new Event('change', { bubbles: true }));
     }
   }catch(err){
-    console.error(err);
+
   }finally{
     btn.disabled = false;
     btn.textContent = prev || 'Scanner';
