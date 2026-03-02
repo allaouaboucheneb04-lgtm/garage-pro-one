@@ -4106,11 +4106,19 @@ let _vinScanActive = false;
 
 function openVinScanModal(){
   const m = document.getElementById("vinScanModal");
-  if(m) m.style.display = "";
+  if(!m) return;
+  m.style.display = "flex";
+  m.setAttribute("aria-hidden","false");
+  m.removeAttribute("inert");
+  document.body.classList.add("modal-open");
 }
 function closeVinScanModal(){
   const m = document.getElementById("vinScanModal");
-  if(m) m.style.display = "none";
+  if(!m) return;
+  m.style.display = "none";
+  m.setAttribute("aria-hidden","true");
+  m.setAttribute("inert","");
+  document.body.classList.remove("modal-open");
 }
 
 async function startVinScanner(onResult){

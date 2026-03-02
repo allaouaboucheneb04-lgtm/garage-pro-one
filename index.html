@@ -1025,14 +1025,16 @@
 
 
 <!-- VIN SCAN MODAL -->
-<div class="modal" id="vinScanModal" style="display:none">
-  <div class="modal-card" style="max-width:520px">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <h3 style="margin:0">Scanner VIN (code-barres)</h3>
-      <button class="btn btn-ghost btn-small" id="btnCloseVinScan">Fermer</button>
-    </div>
-    <div style="margin-top:10px">
-      <div id="vinScanViewport" style="width:100%;background:#111;border-radius:10px;overflow:hidden"></div>
+<!-- VIN SCAN MODAL (overlay) -->
+<div aria-hidden="true" class="modal-backdrop" id="vinScanModal" inert style="display:none">
+  <div class="modal" style="width:min(720px, 100%)">
+    <div class="card">
+      <div class="row-between" style="gap:10px">
+        <h2 style="margin:0">Scanner VIN (code-barres)</h2>
+        <button class="btn btn-ghost btn-small" id="btnCloseVinScan" type="button">Fermer</button>
+      </div>
+      <div class="divider"></div>
+      <div id="vinScanViewport" class="vin-viewport"></div>
       <small class="muted" style="display:block;margin-top:8px">
         Astuce: vise le code‑barres VIN (pare‑brise ou porte). Si ça ne lit pas, augmente la lumière.
       </small>

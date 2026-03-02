@@ -177,6 +177,26 @@ body.modal-open{overflow:hidden}
 .print-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .print-box{border:1px solid #e5e7eb;border-radius:12px;padding:10px}
 .print-totals{display:grid;grid-template-columns:1fr 320px;gap:12px;margin-top:12px}
+
+/* ===== VIN Scanner viewport ===== */
+.vin-viewport{
+  width:100%;
+  height:320px;
+  background:#111;
+  border-radius:10px;
+  overflow:hidden;
+  position:relative;
+}
+.vin-viewport video,
+.vin-viewport canvas{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover;
+}
+@media (max-width:520px){
+  .vin-viewport{ height:260px; }
+}
+
 @media print{
   header,
   footer,
