@@ -17,8 +17,11 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from ""https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
+  collection, query, where, orderBy, limit, getDocs,
+  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
@@ -401,7 +404,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"Montréal, QC", garagePhone:"", garageEmail:"", signatureName:"" };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"", garagePhone:"", garageEmail:"", signatureName:"" };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -891,6 +894,7 @@ const btnNewInvoice = $("btnNewInvoice");
 const invoiceFormBox = $("invoiceFormBox");
 const formInvoice = $("formInvoice");
 const invCustomerEl = $("invCustomer");
+const invEmailEl = $("invEmail");
 const invDateEl = $("invDate");
 const invPurchaseDateEl = $("invPurchaseDate");
 const invInstallDateEl = $("invInstallDate");
@@ -907,6 +911,8 @@ const invNetProfitEl = $("invNetProfit");
 const invItemsTbody = $("invItemsTbody");
 const btnInvAddLine = $("btnInvAddLine");
 const btnInvCancel = $("btnInvCancel");
+const btnInvPrint = $("btnInvPrint");
+const btnInvEmail = $("btnInvEmail");
 const invCostTotalEl = $("invCostTotal");
 const invSellTotalEl = $("invSellTotal");
 const invProfitTotalEl = $("invProfitTotal");
@@ -1139,6 +1145,7 @@ async function createInvoiceFromForm(e){
             ref: ref,
             customerId: existing.customerId || customerId,
             customerName: existing.customerName || (customer?.fullName||""),
+            customerEmail: existing.customerEmail || String(invEmailEl?.value||"").trim(),
             workorderId: existing.workorderId || workorderId || "",
             workorderLabel: existing.workorderLabel || (workorderId ? workorderDisplay(workorders.find(w=>w.id===workorderId)) : ""),
             paymentMethod: (invPayMethodEl?.value || existing.paymentMethod || "cash"),
@@ -1202,6 +1209,7 @@ async function createInvoiceFromForm(e){
     paymentMethod: (invPayMethodEl?.value || "cash"),
     customerId,
     customerName: customer?.fullName || "",
+    customerEmail: String(invEmailEl?.value||"").trim(),
     workorderId: workorderId || "",
     workorderLabel: workorderId ? workorderDisplay(workorders.find(w=>w.id===workorderId)) : "",
     date: d,
@@ -1246,26 +1254,6 @@ async function createInvoiceFromForm(e){
     alert("Erreur enregistrement facture: "+(err?.message||err));
   }
 }
-  // Référence auto si vide (compteur dans meta/counters)
-  let refVal = String(invRefEl?.value || "").trim();
-  if(!refVal){
-    try{
-      const cRef = doc(db, "meta", "counters");
-      refVal = await runTransaction(db, async (tx)=>{
-        const snap = await tx.get(cRef);
-        const cur = (snap.exists() && snap.data().invoiceSeq) ? Number(snap.data().invoiceSeq) : 0;
-        const next = cur + 1;
-        tx.set(cRef, { invoiceSeq: next, updatedAt: serverTimestamp() }, { merge:true });
-        return String(next);
-      });
-      if(invRefEl) invRefEl.value = refVal;
-    }catch(e){
-      // fallback
-      refVal = String(Date.now());
-      if(invRefEl) invRefEl.value = refVal;
-    }
-  }
-
 
 async function deleteInvoice(id){
   if(!confirm("Supprimer cette facture ?")) return;
@@ -1412,6 +1400,7 @@ function renderInvoices(){
       if(invPurchaseDateEl) invPurchaseDateEl.value = inv.purchaseDate || "";
       if(invInstallDateEl) invInstallDateEl.value = inv.installDate || "";
       invRefEl.value = inv.ref || "";
+  if(invEmailEl) invEmailEl.value = inv.customerEmail || "";
       if(invPayMethodEl) invPayMethodEl.value = inv.paymentMethod || "cash";
       if(invHoursEl) invHoursEl.value = String(inv.hours ?? 0);
       if(invLaborEl) invLaborEl.value = String(inv.labor ?? 0);
@@ -3148,101 +3137,96 @@ onAuthStateChanged(auth, async (user)=>{
   }
 });
 
-// PWA service worker
-if("serviceWorker" in navigator){
-  window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
-  });
-}
-
 function renderInvoicePrint(){
-  const area = document.getElementById("invPrintArea") || document.getElementById("invPrint") || document.getElementById("invoicePrint");
+  const area = document.getElementById("invPrintArea");
   if(!area) return;
-  // Inject a lightweight header block if not present
-  if(!area.querySelector(".invoice-meta")){
-    const meta = document.createElement("div");
-    meta.className = "invoice-meta";
-    meta.innerHTML = `
-      <div class="invoice-box">
-        <h4>Garage</h4>
-        <div><b>${safe(settings.garageName||"")}</b></div>
-        <div class="muted">${safe(settings.garageAddress||"")}</div>
-        <div class="muted">${safe(settings.garagePhone||"")}</div>
-        <div class="muted">${safe(settings.garageEmail||"")}</div>
-      </div>
-      <div class="invoice-box">
-        <h4>Client</h4>
-        <div><b>${safe(document.getElementById("invCustomer")?.value||"")}</b></div>
-        <div class="muted">${safe(document.getElementById("invRef")?.value ? ("Réf: "+document.getElementById("invRef").value) : "")}</div>
-        <div class="muted">${safe(document.getElementById("invDate")?.value ? ("Date: "+document.getElementById("invDate").value) : "")}</div>
-        <div class="muted">${safe(document.getElementById("invPayMethod")?.value ? ("Paiement: "+invPaymentLabel(document.getElementById("invPayMethod").value)) : "")}</div>
-      </div>
-    `;
-    area.prepend(meta);
-  }else{
-    // Update existing meta blocks
-    const b = area.querySelectorAll(".invoice-box");
-    if(b[0]){
-      b[0].innerHTML = `
-        <h4>Garage</h4>
-        <div><b>${safe(settings.garageName||"")}</b></div>
-        <div class="muted">${safe(settings.garageAddress||"")}</div>
-        <div class="muted">${safe(settings.garagePhone||"")}</div>
-        <div class="muted">${safe(settings.garageEmail||"")}</div>
-      `;
-    }
-    if(b[1]){
-      b[1].innerHTML = `
-        <h4>Client</h4>
-        <div><b>${safe(document.getElementById("invCustomer")?.value||"")}</b></div>
-        <div class="muted">${safe(document.getElementById("invRef")?.value ? ("Réf: "+document.getElementById("invRef").value) : "")}</div>
-        <div class="muted">${safe(document.getElementById("invDate")?.value ? ("Date: "+document.getElementById("invDate").value) : "")}</div>
-        <div class="muted">${safe(document.getElementById("invPayMethod")?.value ? ("Paiement: "+invPaymentLabel(document.getElementById("invPayMethod").value)) : "")}</div>
-      `;
-    }
+
+  const custId = invCustomerEl?.value || "";
+  const cust = customers.find(c=>c.id===custId) || {};
+  const clientName = cust.fullName || "";
+  const ref = String(invRefEl?.value || "").trim();
+  const date = String(invDateEl?.value || "");
+  const pay = invPaymentLabel(invPayMethodEl?.value || "cash");
+
+  const items = readInvoiceItems();
+  const partsSell = items.reduce((s,it)=> s + Number(it.price||0)*Number(it.qty||1), 0);
+  const hours = Math.max(0, Number(invHoursEl?.value || 0));
+  const labor = hours>0 ? (hours*Number(settings.laborRate||0)) : Math.max(0, Number(invLaborEl?.value || 0));
+  const sub = partsSell + labor;
+  const tax = sub * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0));
+  const grand = sub + tax;
+
+  const setTxt=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+  setTxt("printGarageLine", settings.garageName||"");
+  setTxt("printGarageName", settings.garageName||"");
+  setTxt("printGarageAddress", settings.garageAddress||"");
+  setTxt("printGaragePhone", settings.garagePhone||"");
+  setTxt("printGarageEmail", settings.garageEmail||"");
+  setTxt("printClientName", clientName);
+  setTxt("printInvoiceMeta", `${ref?("Réf: "+ref+" • "):""}${date?("Date: "+date+" • "):""}Paiement: ${pay}`);
+  setTxt("printSub", money(sub));
+  setTxt("printTax", money(tax));
+  setTxt("printGrand", money(grand));
+  setTxt("printSignature", settings.signatureName||"");
+
+  const tbody = document.getElementById("printItemsTbody");
+  if(tbody){
+    tbody.innerHTML = items.map(it=>`
+      <tr>
+        <td>${safe(it.desc||"")}</td>
+        <td>${safe(String(it.qty||1))}</td>
+        <td style="text-align:right">${money(Number(it.price||0))}</td>
+      </tr>
+    `).join("");
   }
 }
 
 async function sendInvoiceEmail(){
   const to = String(invEmailEl?.value || "").trim();
   if(!to){
-    alert("Ajoute l'email du client avant d'envoyer.");
+    alert("Ajoute l'email du client.");
     return;
   }
+  const custId = invCustomerEl?.value || "";
+  const cust = customers.find(c=>c.id===custId) || {};
+  const clientName = cust.fullName || "";
+
   const ref = String(invRefEl?.value || "").trim() || "Facture";
   const date = String(invDateEl?.value || "");
-  const pay = invPaymentLabel(invPayMethodEl?.value||"cash");
-  const items = readInvoiceItems();
+  const pay = invPaymentLabel(invPayMethodEl?.value || "cash");
 
-  // Totaux
-  const costTotal = items.reduce((s,it)=> s + Number(it.cost||0)*Number(it.qty||1), 0);
-  const sellTotal = items.reduce((s,it)=> s + Number(it.price||0)*Number(it.qty||1), 0);
+  const items = readInvoiceItems();
+  const rows = items.map(it=>`
+    <tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee">${safe(it.desc||"")}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${safe(String(it.qty||1))}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${money(Number(it.price||0))}</td>
+    </tr>
+  `).join("");
+
+  const partsCost = items.reduce((s,it)=> s + Number(it.cost||0)*Number(it.qty||1), 0);
+  const partsSell = items.reduce((s,it)=> s + Number(it.price||0)*Number(it.qty||1), 0);
   const hours = Math.max(0, Number(invHoursEl?.value || 0));
   const labor = hours>0 ? (hours*Number(settings.laborRate||0)) : Math.max(0, Number(invLaborEl?.value || 0));
-  const sub = sellTotal + labor;
+  const sub = partsSell + labor;
   const tax = sub * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0));
   const grand = sub + tax;
-  const cardFee = (String(invPayMethodEl?.value||"").toLowerCase()==="card") ? (grand*Number(settings.cardFeeRate||0)) : 0;
-  const net = sub - costTotal - cardFee;
-
-  const rows = items.map(it=>`<tr>
-    <td style="padding:6px 8px;border-bottom:1px solid #eee">${safe(it.name||"")}</td>
-    <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${safe(String(it.qty??1))}</td>
-    <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${money(Number(it.price||0))}</td>
-  </tr>`).join("");
+  const cardFee = (String(invPayMethodEl?.value||"") === "card") ? (grand*Number(settings.cardFeeRate||0)) : 0;
+  const netProfit = sub - partsCost - cardFee;
 
   const html = `
   <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:720px">
     <h2 style="margin:0 0 6px 0">${safe(settings.garageName||"Garage")}</h2>
     <div style="color:#666;margin-bottom:14px">${safe(settings.garageAddress||"")}</div>
-    <h3 style="margin:0 0 8px 0">Facture #${safe(ref)}</h3>
+
+    <h3 style="margin:0 0 8px 0">Facture ${safe(ref)}</h3>
     <div style="color:#666;margin-bottom:10px">Date: ${safe(date)} • Paiement: ${safe(pay)}</div>
-    <div style="margin:12px 0"><b>Client:</b> ${safe(String(invCustomerEl?.value||"").trim())}</div>
+    <div style="margin:10px 0"><b>Client:</b> ${safe(clientName)}</div>
 
     <table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:10px;overflow:hidden">
       <thead>
         <tr style="background:#f7f7f7">
-          <th style="text-align:left;padding:8px">Pièce / service</th>
+          <th style="text-align:left;padding:8px">Description</th>
           <th style="text-align:right;padding:8px">Qté</th>
           <th style="text-align:right;padding:8px">Prix</th>
         </tr>
@@ -3265,7 +3249,7 @@ async function sendInvoiceEmail(){
 
   await addDoc(collection(db, "mail"), {
     to,
-    message: { subject: `Facture #${ref} - ${settings.garageName||"Garage"}`, html },
+    message: { subject: `Facture ${ref} - ${settings.garageName||"Garage"}`, html },
     createdAt: serverTimestamp()
   });
 

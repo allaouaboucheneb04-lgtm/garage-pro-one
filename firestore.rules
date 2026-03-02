@@ -55,5 +55,11 @@ service cloud.firestore {
     match /meta/{id} {
       allow read, write: if isAdmin();
     }
+
+
+    // Queue email (Firebase Extension "Trigger Email from Firestore")
+    match /mail/{id} {
+      allow read, create, update, delete: if isAdmin();
+    }
   }
 }

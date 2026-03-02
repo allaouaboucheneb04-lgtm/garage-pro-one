@@ -5,18 +5,6 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <title>Garage Pro One — Synchro iPhone + PC</title>
-
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0b0f19">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
-<link rel="shortcut icon" href="assets/favicon.ico">
-
 <link href="./assets/style.css" rel="stylesheet"/>
 </head>
 <body>
@@ -400,6 +388,10 @@
           <select class="input" id="invCustomer" required></select>
         </div>
         <div>
+          <label>Email client (optionnel)</label>
+          <input class="input" id="invEmail" placeholder="client@email.com" />
+        </div>
+        <div>
           <label>Date</label>
           <input class="input" id="invDate" type="date" required />
         </div>
@@ -480,6 +472,8 @@
 
       <div class="row" style="gap:10px; margin-top:12px; flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Enregistrer</button>
+        <button class="btn btn-ghost" id="btnInvPrint" type="button">Imprimer / PDF</button>
+        <button class="btn btn-ghost" id="btnInvEmail" type="button">Envoyer par email</button>
         <button class="btn btn-ghost" id="btnInvCancel" type="button">Annuler</button>
       </div>
     </form>
@@ -694,6 +688,12 @@
 <input id="setTps" inputmode="decimal" placeholder="5">
 <label>TVQ (%)</label>
 <input id="setTvq" inputmode="decimal" placeholder="9.975"/>
+<label>Frais carte (%)</label>
+<input id="setCardFee" inputmode="decimal" placeholder="2.5"/>
+<small class="muted">Appliqué seulement si paiement = Carte.</small>
+<label>Tarif main-d’œuvre ($/h)</label>
+<input id="setLaborRate" inputmode="decimal" placeholder="80"/>
+<small class="muted">Utilisé si tu mets des heures dans les factures.</small>
 
 <div class="divider"></div>
 <h3 style="margin-top:0">Infos garage (facture)</h3>
@@ -707,15 +707,8 @@
 <input id="setGarageEmail" class="input" placeholder="contact@garage.com" />
 <label>Nom pour signature</label>
 <input id="setSignatureName" class="input" placeholder="Nom du responsable" />
-<small class="muted">Ces informations s’affichent automatiquement sur les factures.</small>
-<div class="divider"></div>
+<small class="muted">Ces infos s’affichent sur la facture PDF + dans l’email.</small>
 
-<label>Frais carte (%)</label>
-<input id="setCardFee" inputmode="decimal" placeholder="2.5"/>
-<small class="muted">Appliqué seulement si paiement = Carte.</small>
-<label>Tarif main-d’œuvre ($/h)</label>
-<input id="setLaborRate" inputmode="decimal" placeholder="80"/>
-<small class="muted">Utilisé si tu mets des heures dans les factures.</small>
 <div class="row">
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
@@ -739,6 +732,59 @@
 <footer class="footer no-print">
 <small>© <span id="year"></span> Garage Pro One — <span class="muted">Synchro Firebase</span></small>
 </footer>
+
+<div id="invPrintArea" class="print-area" style="display:none">
+  <div class="print-head">
+    <div class="print-logo">G</div>
+    <div>
+      <div style="font-size:20px;font-weight:800;line-height:1">Facture</div>
+      <div class="muted" id="printGarageLine"></div>
+    </div>
+  </div>
+
+  <div class="print-grid">
+    <div class="print-box">
+      <div class="muted">Garage</div>
+      <div style="font-weight:700" id="printGarageName"></div>
+      <div class="muted" id="printGarageAddress"></div>
+      <div class="muted" id="printGaragePhone"></div>
+      <div class="muted" id="printGarageEmail"></div>
+    </div>
+    <div class="print-box">
+      <div class="muted">Client</div>
+      <div style="font-weight:700" id="printClientName"></div>
+      <div class="muted" id="printInvoiceMeta"></div>
+    </div>
+  </div>
+
+  <div style="overflow:auto;margin-top:12px">
+    <table class="table" id="printItemsTable">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th style="width:90px">Qté</th>
+          <th style="width:130px;text-align:right">Prix</th>
+        </tr>
+      </thead>
+      <tbody id="printItemsTbody"></tbody>
+    </table>
+  </div>
+
+  <div class="print-totals">
+    <div></div>
+    <div class="print-box">
+      <div class="row-between"><span>Sous-total</span><b id="printSub">$0.00</b></div>
+      <div class="row-between muted"><span>Taxes</span><b id="printTax">$0.00</b></div>
+      <div class="row-between"><span>Total</span><b id="printGrand">$0.00</b></div>
+    </div>
+  </div>
+
+  <div style="margin-top:18px" class="print-box">
+    <div class="muted">Signature</div>
+    <div style="font-weight:700" id="printSignature"></div>
+  </div>
+</div>
+
 <!-- MODAL -->
 <div aria-hidden="true" class="modal-backdrop" id="modalBackdrop" inert="">
 <div class="modal">
@@ -790,18 +836,6 @@
       </div>
     </div>
   </div>
-</div>
-
-
-<div id="invPrintArea" class="print-area" style="display:none">
-  <div class="invoice-head">
-    <img src="assets/logo.png" class="invoice-logo" alt="Garage Pro One"/>
-    <div class="invoice-head-text">
-      <h2 style="margin:0">Facture</h2>
-      <div class="muted">Garage Pro One</div>
-    </div>
-  </div>
-  <div class="muted">Utilise “Imprimer / PDF” pour enregistrer en PDF.</div>
 </div>
 
 </body>
