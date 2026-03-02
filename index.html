@@ -756,6 +756,31 @@
   </div>
 </div>
 
+<div style="margin-top:12px" class="box">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+    <h3 style="margin:0">Employés</h3>
+    <button class="btn btn-ghost btn-small" id="btnRefreshStaff">Rafraîchir</button>
+  </div>
+  <small class="muted">Gestion des rôles via collection <code>staff</code> (option sécurisée).</small>
+  <div style="overflow:auto;margin-top:10px">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Email</th>
+          <th>Rôle</th>
+          <th>Statut</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="staffTbody">
+        <tr><td class="muted" colspan="5">Aucun employé.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
 </input></form>

@@ -68,7 +68,7 @@ function getCustomerEmail(c){
 }
 
 function docUserProfile(uid=currentUid){
-  return doc(db, "users", uid);
+  return doc(db, "staff", uid);
 }
 
 async function ensureUserProfile(_user){
@@ -145,7 +145,7 @@ async function loadMechanics(){
   mechanics = [];
   if(currentRole !== "admin") return;
   try{
-    const snap = await getDocs(query(collection(db, "users"), where("role","==","mechanic")));
+    const snap = await getDocs(query(collection(db, "staff"), where("role","==","mechanic")));
     mechanics = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}))
       .map(u=>({uid:u.uid, name:u.name || u.email || u.uid, email:u.email||""}));
   }catch(e){
@@ -418,12 +418,12 @@ function colPromotions(){
 function docSettings(){
   if(DATA_MODE==="root") return doc(db, "meta", "settings");
   if(DATA_MODE==="nested") return doc(db, "meta", "settings"); // shared
-  return doc(db, "users", currentUid, "meta", "settings");
+  return doc(db, "staff", currentUid, "meta", "settings");
 }
 function docCounters(){
   if(DATA_MODE==="root") return doc(db, "meta", "counters");
   if(DATA_MODE==="nested") return doc(db, "meta", "counters");
-  return doc(db, "users", currentUid, "meta", "counters");
+  return doc(db, "staff", currentUid, "meta", "counters");
 }
 async function _hasAnyDocs(colRef){
   try{
@@ -3465,7 +3465,7 @@ async function registerWithInvite(){
   const uid = cred.user.uid;
 
   // Créer profil user avec rôle (règles valident via inviteCode)
-  await setDoc(doc(db,"users",uid), {
+  await setDoc(doc(db,"staff",uid), {
     fullName,
     email,
     role,
@@ -3495,3 +3495,88 @@ function wireInvitesUI(){
 document.addEventListener("DOMContentLoaded", ()=>{
   wireInvitesUI();
 });
+
+async function loadStaff(){
+  const tbody = document.getElementById("staffTbody");
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td class="muted" colspan="5">Chargement...</td></tr>';
+  try{
+    const snap = await getDocs(collection(db,"staff"));
+    const rows = [];
+    snap.forEach(d=>{
+      const u = d.data()||{};
+      rows.push({
+        id: d.id,
+        fullName: u.fullName || "",
+        email: u.email || "",
+        role: u.role || "",
+        disabled: !!u.disabled
+      });
+    });
+    rows.sort((a,b)=> (a.email||"").localeCompare(b.email||""));
+    if(rows.length===0){
+      tbody.innerHTML = '<tr><td class="muted" colspan="5">Aucun employé.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r=>{
+      const status = r.disabled ? "DÉSACTIVÉ" : "ACTIF";
+      const nextRole = (r.role==="admin") ? "mechanic" : "admin";
+      const roleBadge = r.role ? `<b>${safe(r.role)}</b>` : "—";
+      const disableBtn = r.disabled
+        ? `<button class="btn btn-ghost btn-small" data-act="enableStaff" data-id="${safe(r.id)}">Activer</button>`
+        : `<button class="btn btn-ghost btn-small" data-act="disableStaff" data-id="${safe(r.id)}">Désactiver</button>`;
+      return `<tr>
+        <td>${safe(r.fullName)}</td>
+        <td>${safe(r.email)}</td>
+        <td>${roleBadge}</td>
+        <td>${status}</td>
+        <td style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-small" data-act="toggleRole" data-id="${safe(r.id)}" data-role="${safe(nextRole)}">Mettre ${safe(nextRole)}</button>
+          ${disableBtn}
+        </td>
+      </tr>`;
+    }).join("");
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = '<tr><td class="muted" colspan="5">Erreur chargement employés.</td></tr>';
+  }
+}
+
+async function setStaffRole(uid, role){
+  await updateDoc(doc(db,"staff",uid), { role, updatedAt: serverTimestamp() });
+  await loadStaff();
+}
+
+async function setStaffDisabled(uid, disabled){
+  await updateDoc(doc(db,"staff",uid), { disabled, updatedAt: serverTimestamp() });
+  await loadStaff();
+}
+
+function wireStaffUI(){
+  const btnRefreshStaff = document.getElementById("btnRefreshStaff");
+  if(btnRefreshStaff) btnRefreshStaff.onclick = ()=>{ loadStaff().catch(()=>{}); };
+
+  const staffTbody = document.getElementById("staffTbody");
+  if(staffTbody){
+    const handler = (ev)=>{
+      const btn = ev.target?.closest?.("[data-act]");
+      if(!btn) return;
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id");
+      if(!id) return;
+      if(act==="toggleRole"){
+        const role = btn.getAttribute("data-role") || "mechanic";
+        setStaffRole(id, role).catch(e=>{console.error(e); alert("Erreur changement rôle");});
+      }
+      if(act==="disableStaff"){
+        setStaffDisabled(id, true).catch(e=>{console.error(e); alert("Erreur désactiver");});
+      }
+      if(act==="enableStaff"){
+        setStaffDisabled(id, false).catch(e=>{console.error(e); alert("Erreur activer");});
+      }
+    };
+    staffTbody.addEventListener("click", handler);
+    staffTbody.addEventListener("touchend", (e)=>{ handler(e); }, {passive:true});
+  }
+}
+document.addEventListener("DOMContentLoaded", ()=>{ wireStaffUI(); });

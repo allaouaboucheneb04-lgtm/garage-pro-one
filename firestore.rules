@@ -4,24 +4,21 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
-    function myUserDoc() {
-      return /databases/$(database)/documents/users/$(request.auth.uid);
+    // Source de vérité des rôles = /staff/{uid}
+    function myStaffDoc() {
+      return /databases/$(database)/documents/staff/$(request.auth.uid);
     }
 
     function role() {
-      return exists(myUserDoc()) ? get(myUserDoc()).data.role : null;
+      return exists(myStaffDoc()) ? get(myStaffDoc()).data.role : null;
     }
 
     function isAdmin() { return signedIn() && role() == "admin"; }
     function isMech()  { return signedIn() && role() == "mechanic"; }
 
-    // USERS
-    // - Lecture: chacun lit son doc
-    // - Création: un utilisateur peut créer son doc avec role SI invite valide (inviteCode)
-    // - Update: l'utilisateur peut update son doc SANS changer role (évite escalade)
-    // - Admin: gère tout
-    match /users/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
+    // STAFF
+    match /staff/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
 
       allow create: if signedIn()
         && request.auth.uid == uid
@@ -35,17 +32,17 @@ service cloud.firestore {
 
       allow update: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.role == resource.data.role;
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.disabled == resource.data.disabled;
 
       allow create, update, delete: if isAdmin();
     }
 
-    // INVITES (admin crée, utilisateur lit/consume)
+    // INVITES
     match /invites/{code} {
       allow read: if signedIn();
       allow create, delete: if isAdmin();
 
-      // l'utilisateur (même email) peut marquer used=true sans modifier email/role/code
       allow update: if signedIn()
         && request.auth.token.email == resource.data.email
         && request.resource.data.email == resource.data.email
