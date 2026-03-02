@@ -97,7 +97,7 @@
 <th>Date</th><th>Client</th><th>Réparation</th><th>Total TTC</th><th></th>
 </tr></thead>
 <tbody id="openRepairsTbody">
-<tr><td class="muted" colspan="6">Chargement…</td></tr>
+<tr><td class="muted" colspan="5">Chargement…</td></tr>
 </tbody>
 </table>
 </div>
@@ -533,7 +533,7 @@
             </tr>
           </thead>
           <tbody id="invTopClientsTbody">
-            <tr><td class="muted" colspan="6">Aucune donnée.</td></tr>
+            <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
           </tbody>
         </table>
       </div>
@@ -554,7 +554,7 @@
             </tr>
           </thead>
           <tbody id="invMonthlyTbody">
-            <tr><td class="muted" colspan="6">Aucune donnée.</td></tr>
+            <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
           </tbody>
         </table>
       </div>
@@ -577,7 +577,7 @@
           </tr>
         </thead>
         <tbody id="invPayTbody">
-          <tr><td class="muted" colspan="6">Aucune donnée.</td></tr>
+          <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
         </tbody>
       </table>
     
@@ -596,7 +596,7 @@
           </tr>
         </thead>
         <tbody id="invTopRepairsTbody">
-          <tr><td class="muted" colspan="6">Aucune donnée.</td></tr>
+          <tr><td class="muted" colspan="5">Aucune donnée.</td></tr>
         </tbody>
       </table>
     </div>
@@ -675,7 +675,7 @@
         </tr>
       </thead>
       <tbody id="promosTbody">
-        <tr><td class="muted" colspan="6">Chargement…</td></tr>
+        <tr><td class="muted" colspan="5">Chargement…</td></tr>
       </tbody>
     </table>
   </div>
@@ -712,111 +712,6 @@
 <small class="muted">Ces infos s’affichent sur la facture PDF + dans l’email.</small>
 
 <div class="row">
-
-<div class="divider"></div>
-<h3 style="margin-top:0">Employés (invitation)</h3>
-<div class="grid" style="grid-template-columns: 2fr 1fr auto; gap:10px; align-items:end">
-  <div>
-    <label>Email employé</label>
-    <input class="input" id="empInviteEmail" placeholder="mecano@email.com" />
-  </div>
-  <div>
-    <label>Rôle</label>
-    <select class="input" id="empInviteRole">
-      <option value="mechanic">mechanic</option>
-      <option value="admin">admin</option>
-    </select>
-  </div>
-  <div>
-    <button class="btn btn-ghost" id="btnCreateInvite">Créer invitation</button>
-  </div>
-</div>
-<small class="muted">Le code d’invitation sera généré automatiquement. L’employé crée son compte avec ce code.</small>
-
-<div style="margin-top:12px" class="box">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-    <h3 style="margin:0">Invitations</h3>
-    <button class="btn btn-ghost btn-small" id="btnRefreshInvites">Rafraîchir</button>
-  </div>
-  <div style="overflow:auto;margin-top:10px">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Code</th>
-          <th>Email</th>
-          <th>Rôle</th>
-          <th>Statut</th>
-          <th>Créé</th>
-        </tr>
-      </thead>
-      <tbody id="invitesTbody">
-        <tr><td class="muted" colspan="6">Aucune invitation.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div style="margin-top:12px" class="box">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-    <h3 style="margin:0">Employés</h3>
-    <button class="btn btn-ghost btn-small" id="btnRefreshStaff">Rafraîchir</button>
-  </div>
-  <small class="muted">Gestion des rôles via collection <code>staff</code> (option sécurisée).</small>
-  <div style="overflow:auto;margin-top:10px">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Nom</th>
-          <th>Email</th>
-          <th>Rôle</th>
-          <th>Statut</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="staffTbody">
-        <tr><td class="muted" colspan="6">Aucun employé.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-
-
-<div style="margin-top:12px" class="box" id="logsBox" style="display:none">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-    <h3 style="margin:0">Historique</h3>
-    <div style="display:flex;gap:8px;align-items:center">
-      <select class="input" id="logsFilterType" style="max-width:220px">
-        <option value="">Tous</option>
-        <option value="invite_created">Invitation créée</option>
-        <option value="invite_email_sent">Invitation email envoyé</option>
-        <option value="account_created">Compte créé</option>
-        <option value="staff_role_changed">Rôle changé</option>
-        <option value="staff_disabled_changed">Statut employé</option>
-        <option value="workorder_status">Statut réparation</option>
-        <option value="invoice_saved">Facture sauvegardée</option>
-      </select>
-      <button class="btn btn-ghost btn-small" id="btnRefreshLogs">Rafraîchir</button>
-    </div>
-  </div>
-  <small class="muted">Admin voit tout. Mécanicien voit seulement ses actions.</small>
-  <div style="overflow:auto;margin-top:10px">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Employé</th>
-          <th>Action</th>
-          <th>Détails</th>
-        </tr>
-      </thead>
-      <tbody id="logsTbody">
-        <tr><td class="muted" colspan="4">Aucun log.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
 </input></form>
@@ -945,34 +840,6 @@
     </div>
   </div>
 </div>
-
-
-<div class="divider"></div>
-<h3 id="registerInviteSection" style="margin-top:0">Créer un compte (invitation)</h3>
-<div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px">
-  <div>
-    <label>Nom complet</label>
-    <input class="input" id="regFullName" placeholder="Nom Prénom" />
-  </div>
-  <div>
-    <label>Code invitation</label>
-    <input class="input" id="regInviteCode" placeholder="Ex: GP-AB12CD" />
-  </div>
-</div>
-<div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px">
-  <div>
-    <label>Email</label>
-    <input class="input" id="regEmail" type="email" placeholder="email@exemple.com" />
-  </div>
-  <div>
-    <label>Mot de passe</label>
-    <input class="input" id="regPassword" type="password" placeholder="••••••••" />
-  </div>
-</div>
-<div class="row" style="margin-top:10px">
-  <button class="btn btn-primary" id="btnRegisterInvite" type="button">Créer mon compte</button>
-</div>
-<small class="muted">Le rôle est appliqué automatiquement selon le code invitation.</small>
 
 </body>
 </html>
