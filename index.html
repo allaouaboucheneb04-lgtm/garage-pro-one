@@ -112,6 +112,7 @@
 </div>
 <form class="form form-inline" onsubmit="return false;">
 <input id="quickSearch" placeholder="Nom / Téléphone / Plaque / VIN">
+<button class="btn btn-ghost" id="btnPlateScan" type="button" title="Scanner plaque (caméra)">📷 Plaque</button>
 <button class="btn btn-primary" id="btnQuickSearch">Rechercher</button>
 <button class="btn btn-ghost" id="btnClearSearch">Effacer</button>
 </input></form>
@@ -1064,6 +1065,30 @@
       </small>
       <small class="muted" style="display:block;margin-top:6px">
         Mode PRO (beta): “Lire VIN (photo)” peut reconnaître le VIN même sans code‑barres, mais c’est plus lent.
+      </small>
+    </div>
+  </div>
+</div>
+
+<!-- PLATE SCAN MODAL (OCR via camera photo) -->
+<div aria-hidden="true" class="modal-backdrop" id="plateScanModal" inert style="display:none">
+  <div class="modal" style="width:min(720px, 100%)">
+    <div class="card">
+      <div class="row-between" style="gap:10px">
+        <h2 style="margin:0">Scanner plaque (caméra)</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-small" id="btnToggleTorchPlate" type="button" title="Lampe (si supportée)">Lampe</button>
+          <button class="btn btn-ghost btn-small" id="btnPlateOcr" type="button" title="Lire plaque par photo">Lire plaque (photo)</button>
+          <button class="btn btn-ghost btn-small" id="btnClosePlateScan" type="button">Fermer</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div id="plateScanViewport" class="vin-viewport"></div>
+      <small class="muted" style="display:block;margin-top:8px">
+        Astuce: cadre la plaque le plus proche possible, avec bonne lumière. Puis clique “Lire plaque (photo)”.
+      </small>
+      <small class="muted" style="display:block;margin-top:6px">
+        Le texte détecté sera mis dans la recherche rapide.
       </small>
     </div>
   </div>

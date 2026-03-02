@@ -852,6 +852,19 @@ $("btnQuickSearch").onclick = ()=>runQuickSearch();
 $("btnClearSearch").onclick = ()=>{ $("quickSearch").value=""; $("searchResults").innerHTML = '<span class="muted">Tape une recherche pour afficher les résultats.</span>'; };
 $("quickSearch").addEventListener("keydown", (e)=>{ if(e.key==="Enter") runQuickSearch(); });
 
+// Camera OCR: search by license plate
+const btnPlateScan = $("btnPlateScan");
+if(btnPlateScan){
+  btnPlateScan.onclick = async ()=>{
+    try{
+      await startPlateScanner();
+    }catch(e){
+      console.error('[PLATE] start error', e);
+      alert('Impossible d\'ouvrir la caméra pour la plaque. Vérifie les permissions caméra.');
+    }
+  };
+}
+
 function runQuickSearch(){
   const q = ($("quickSearch").value||"").trim().toLowerCase();
   if(!q){
@@ -4275,6 +4288,147 @@ function _extractVinFromText(text){
   if(!m || !m.length) return null;
   // Prefer ones without I,O,Q (already excluded by regex)
   return m[0];
+}
+
+// --------- PLAQUE (License plate) scan (OCR) ---------
+let _plateStream = null;
+let _plateTorchOn = false;
+
+function openPlateScanModal(){
+  const m = document.getElementById('plateScanModal');
+  if(!m) return;
+  m.style.display = 'flex';
+  m.setAttribute('aria-hidden','false');
+  m.removeAttribute('inert');
+  document.body.classList.add('modal-open');
+}
+
+function _stopPlateCamera(){
+  try{
+    if(_plateStream){
+      for(const t of _plateStream.getTracks()) t.stop();
+    }
+  }catch(e){ /* ignore */ }
+  _plateStream = null;
+  _plateTorchOn = false;
+}
+
+function closePlateScanModal(){
+  const m = document.getElementById('plateScanModal');
+  if(!m) return;
+  m.style.display = 'none';
+  m.setAttribute('aria-hidden','true');
+  m.setAttribute('inert','');
+  document.body.classList.remove('modal-open');
+  _stopPlateCamera();
+  const viewport = document.getElementById('plateScanViewport');
+  if(viewport) viewport.innerHTML = '';
+}
+
+function _extractPlateFromText(text){
+  // Keep alnum only, then look for plausible sequences.
+  const t = String(text||'').toUpperCase().replace(/[^A-Z0-9\s]/g,' ');
+  const candidates = (t.match(/[A-Z0-9]{5,8}/g) || [])
+    .map(s=>s.replace(/\s/g,''))
+    .filter(Boolean);
+  if(!candidates.length) return null;
+  // Prefer 6-7 chars (common), otherwise longest
+  const scored = candidates.map(s=>({s, score: (s.length===6||s.length===7)? 100+s.length : s.length}));
+  scored.sort((a,b)=>b.score-a.score);
+  return scored[0].s;
+}
+
+async function _ocrPlateFromVideo(videoEl){
+  if(!videoEl) throw new Error('Vidéo introuvable');
+  const w = videoEl.videoWidth || 1280;
+  const h = videoEl.videoHeight || 720;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(videoEl, 0, 0, w, h);
+
+  const T = await _ensureTesseract();
+  const { data } = await T.recognize(canvas, 'eng', {
+    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+  });
+  const plate = _extractPlateFromText(data && data.text);
+  if(!plate) throw new Error('Plaque non détectée. Rapproche la caméra, augmente la lumière, puis réessaie.');
+  return plate;
+}
+
+async function startPlateScanner(){
+  openPlateScanModal();
+  const viewport = document.getElementById('plateScanViewport');
+  if(!viewport) throw new Error('Viewport plaque introuvable');
+  viewport.innerHTML = '';
+
+  const video = document.createElement('video');
+  video.setAttribute('playsinline','');
+  video.autoplay = true;
+  video.muted = true;
+  video.style.width = '100%';
+  video.style.borderRadius = '12px';
+  viewport.appendChild(video);
+
+  // Start camera
+  _plateStream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    },
+    audio: false
+  });
+  video.srcObject = _plateStream;
+  await new Promise(res=>{ video.onloadedmetadata = ()=>res(); });
+  try{ await video.play(); }catch(e){ /* ignore */ }
+
+  // Wire buttons
+  const btnClose = document.getElementById('btnClosePlateScan');
+  if(btnClose) btnClose.onclick = ()=>closePlateScanModal();
+
+  // Torch toggle (best effort)
+  const track = _plateStream.getVideoTracks && _plateStream.getVideoTracks()[0];
+  const torchBtn = document.getElementById('btnToggleTorchPlate');
+  if(torchBtn){
+    if(!_trackTorchSupported(track)){
+      torchBtn.style.display = 'none';
+    }else{
+      torchBtn.style.display = '';
+      const render = ()=>{ torchBtn.textContent = _plateTorchOn ? 'Lampe ✅' : 'Lampe'; };
+      render();
+      torchBtn.onclick = async ()=>{
+        const next = !_plateTorchOn;
+        const ok = await _setTrackTorch(track, next);
+        if(ok){ _plateTorchOn = next; render(); }
+      };
+    }
+  }
+
+  // OCR capture
+  const btnOcr = document.getElementById('btnPlateOcr');
+  if(btnOcr){
+    btnOcr.onclick = async ()=>{
+      const prev = btnOcr.textContent;
+      btnOcr.disabled = true;
+      btnOcr.textContent = 'Lecture...';
+      try{
+        const plate = await _ocrPlateFromVideo(video);
+        const qs = document.getElementById('quickSearch');
+        if(qs) qs.value = plate;
+        closePlateScanModal();
+        // Auto-run search
+        try{ runQuickSearch(); }catch(e){ /* ignore */ }
+      }catch(err){
+        console.error('[PLATE] OCR error', err);
+        alert(err.message || 'Erreur OCR plaque');
+      }finally{
+        btnOcr.disabled = false;
+        btnOcr.textContent = prev;
+      }
+    };
+  }
 }
 
 async function _ocrVinFromViewport(){
