@@ -177,6 +177,43 @@ function money(n){
   const x = Number(n||0);
   return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2}) + " $";
 }
+
+function monthKey(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function drawBarChart(canvas, labels, values){
+  if(!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0,0,w,h);
+
+  const max = Math.max(1, ...values.map(v=>Math.max(0,v)));
+  const pad = 28;
+  const bw = (w - pad*2) / Math.max(1, values.length);
+  ctx.strokeStyle = "#ddd";
+  ctx.beginPath();
+  ctx.moveTo(pad, h-pad);
+  ctx.lineTo(w-pad, h-pad);
+  ctx.stroke();
+
+  for(let i=0;i<values.length;i++){
+    const v = Math.max(0, values[i]);
+    const bh = (h - pad*2) * (v / max);
+    const x = pad + i*bw + 2;
+    const y = (h - pad) - bh;
+    ctx.fillStyle = "#2563eb";
+    ctx.fillRect(x, y, bw-4, bh);
+
+    ctx.fillStyle = "#666";
+    ctx.font = "12px system-ui";
+    ctx.fillText(labels[i], x, h-10);
+  }
+  ctx.fillStyle="#666";
+  ctx.font="12px system-ui";
+  ctx.fillText(money(max), 6, 14);
+}
 function pct(n){
   return (Number(n)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'') + "%";
 }
@@ -367,7 +404,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025 };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80 };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -589,6 +626,8 @@ const finProfitEl = $("finProfit");
 const finCountEl = $("finCount");
 const finByPayTbody = $("finByPayTbody");
 const finByDayTbody = $("finByDayTbody");
+const chartSalesEl = $("chartSales");
+const chartNetEl = $("chartNet");
 const openRepairsTbody = $("openRepairsTbody");
 function getCustomer(id){ return customers.find(c=>c.id===id); }
 function getVehicle(id){ return vehicles.find(v=>v.id===id); }
@@ -716,7 +755,28 @@ function renderFinanceDashboard(){
         </tr>
       `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
     }
-  }catch(e){
+  
+
+    // Graphiques 12 mois (revenus & profit net)
+    if(chartSalesEl || chartNetEl){
+      const m = new Map();
+      for(const inv of (invoices||[])){
+        const d = invoiceDateAsDate(inv);
+        const k = monthKey(d);
+        const t = getInvoiceTotals(inv);
+        const cur = m.get(k) || {sales:0, net:0};
+        cur.sales += t.sell;
+        cur.net += t.profit;
+        m.set(k, cur);
+      }
+      const keys = [...m.keys()].sort().slice(-12);
+      const labels = keys.map(k=>k.slice(5));
+      const salesVals = keys.map(k=>m.get(k)?.sales||0);
+      const netVals = keys.map(k=>m.get(k)?.net||0);
+      drawBarChart(chartSalesEl, labels, salesVals);
+      drawBarChart(chartNetEl, labels, netVals);
+    }
+}catch(e){
     console.error("renderFinanceDashboard error:", e);
   }
 }
@@ -783,6 +843,18 @@ function runQuickSearch(){
 
 /* Clients view */
 const clientsTbody = $("clientsTbody");
+const clientStatsModal = $("clientStatsModal");
+const btnCloseClientStats = $("btnCloseClientStats");
+const csTitle = $("csTitle");
+const csSubtitle = $("csSubtitle");
+const csCount = $("csCount");
+const csSales = $("csSales");
+const csParts = $("csParts");
+const csNet = $("csNet");
+const csTbody = $("csTbody");
+if(btnCloseClientStats) btnCloseClientStats.onclick = ()=>{ if(clientStatsModal) clientStatsModal.style.display="none"; };
+if(clientStatsModal) clientStatsModal.addEventListener("click", (e)=>{ if(e.target===clientStatsModal) clientStatsModal.style.display="none"; });
+
 const clientsCount = $("clientsCount");
 const promoSelCount = $("promoSelCount");
 const btnPromoSelectAll = $("btnPromoSelectAll");
@@ -828,6 +900,7 @@ const invInstallDateEl = $("invInstallDate");
 const invRefEl = $("invRef");
 const invWorkorderEl = $("invWorkorder");
 const invPayMethodEl = $("invPayMethod");
+const invHoursEl = $("invHours");
 const invLaborEl = $("invLabor");
 const invSubTotalEl = $("invSubTotal");
 const invTaxTotalEl = $("invTaxTotal");
@@ -861,7 +934,8 @@ let invFilter = { from: null, to: null };
 
 // UI wiring (Invoices)
 if(invDateEl) invDateEl.value = todayISO();
-if(invLaborEl) invLaborEl.value = "0";
+if(invHoursEl) invHoursEl.value = "0";
+    if(invLaborEl) invLaborEl.value = "0";
 if(btnNewInvoice) btnNewInvoice.onclick = ()=>{
   if(currentRole !== "admin"){ showToast("Accès réservé admin."); return; }
   openInvoiceForm(true);
@@ -870,6 +944,7 @@ if(btnInvAddLine) btnInvAddLine.onclick = ()=>{ ensureInvoiceLine(); recalcInvoi
 if(btnInvCancel) btnInvCancel.onclick = ()=>{ openInvoiceForm(false); };
 if(formInvoice) formInvoice.onsubmit = createInvoiceFromForm;
 if(invLaborEl) invLaborEl.addEventListener("input", recalcInvoiceTotals);
+if(invHoursEl) invHoursEl.addEventListener("input", recalcInvoiceTotals);
 if(invPayMethodEl) invPayMethodEl.addEventListener("change", recalcInvoiceTotals);
 
 
@@ -930,7 +1005,10 @@ function readInvoiceItems(){
 
 function recalcInvoiceTotals(){
   const items = readInvoiceItems();
-  const labor = Math.max(0, Number(invLaborEl?.value || 0));
+  const hours = Math.max(0, Number(invHoursEl?.value || 0));
+  const laborManual = Math.max(0, Number(invLaborEl?.value || 0));
+  const labor = hours>0 ? (hours * Number(settings.laborRate||0)) : laborManual;
+  if(invLaborEl) invLaborEl.value = String(labor.toFixed(2));
   let partsCost = 0;
   let partsSell = 0;
   for(const it of items){
@@ -1071,7 +1149,16 @@ async function createInvoiceFromForm(e){
             purchaseDate: existing.purchaseDate || (invPurchaseDateEl?.value||""),
             installDate: existing.installDate || (invInstallDateEl?.value||""),
             items: mergedItems,
-            totals: { cost: cTot, sell: sTot, profit: pTot },
+            totals: (function(){
+  const hours = Number(existing.hours||0);
+  const labor = Number(existing.labor||0);
+  const subTotal = sTot + labor;
+  const tax = subTotal * (Number(settings.tpsRate||0)+Number(settings.tvqRate||0));
+  const grandTotal = subTotal + tax;
+  const cardFee = (String(upd.paymentMethod||"").toLowerCase()==="card") ? (grandTotal*Number(settings.cardFeeRate||0)) : 0;
+  const netProfit = subTotal - cTot - cardFee;
+  return { partsCost: cTot, partsSell: sTot, labor, subTotal, tax, grandTotal, cardFee, netProfit };
+})(),
             updatedAt: serverTimestamp(),
             updatedBy: currentUid,
           };
@@ -1084,6 +1171,7 @@ async function createInvoiceFromForm(e){
           invDateEl.value = todayISO();
           if(invWorkorderEl) invWorkorderEl.value = "";
           if(invPayMethodEl) invPayMethodEl.value = "cash";
+    if(invHoursEl) invHoursEl.value = "0";
     if(invLaborEl) invLaborEl.value = "0";
           if(invPurchaseDateEl) invPurchaseDateEl.value = "";
           if(invInstallDateEl) invInstallDateEl.value = "";
@@ -1103,6 +1191,14 @@ async function createInvoiceFromForm(e){
     }
   }
 
+  const hoursCalc = Math.max(0, Number(invHoursEl?.value || 0));
+  const laborCalc = hoursCalc>0 ? (hoursCalc*Number(settings.laborRate||0)) : Math.max(0, Number(invLaborEl?.value || 0));
+  const subCalc = sellTotal + laborCalc;
+  const taxCalc = subCalc * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0));
+  const grandCalc = subCalc + taxCalc;
+  const cardCalc = ((invPayMethodEl?.value||"")==="card") ? (grandCalc*Number(settings.cardFeeRate||0)) : 0;
+  const netCalc = subCalc - costTotal - cardCalc;
+
   const payload = {
     ref: ref,
 
@@ -1115,15 +1211,17 @@ async function createInvoiceFromForm(e){
     purchaseDate: invPurchaseDateEl?.value || "",
     installDate: invInstallDateEl?.value || "",
     items,
-    labor: Math.max(0, Number(invLaborEl?.value || 0)),
+    hours: hoursCalc,
+    labor: laborCalc,
     totals: {
       partsCost: costTotal,
       partsSell: sellTotal,
-      subTotal: (sellTotal + Math.max(0, Number(invLaborEl?.value || 0))),
-      tax: ((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0))),
-      grandTotal: ((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (1 + Number(settings.tpsRate||0) + Number(settings.tvqRate||0))),
-      cardFee: (((invPayMethodEl?.value||"")==="card") ? (((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (1 + Number(settings.tpsRate||0) + Number(settings.tvqRate||0))) * Number(settings.cardFeeRate||0)) : 0),
-      netProfit: ((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) - costTotal - (((invPayMethodEl?.value||"")==="card") ? (((sellTotal + Math.max(0, Number(invLaborEl?.value || 0))) * (1 + Number(settings.tpsRate||0) + Number(settings.tvqRate||0))) * Number(settings.cardFeeRate||0)) : 0))
+      labor: laborCalc,
+      subTotal: subCalc,
+      tax: taxCalc,
+      grandTotal: grandCalc,
+      cardFee: cardCalc,
+      netProfit: netCalc
     },
     createdAt: serverTimestamp(),
     createdBy: currentUid,
@@ -1141,6 +1239,7 @@ async function createInvoiceFromForm(e){
     invDateEl.value = todayISO();
     if(invWorkorderEl) invWorkorderEl.value = "";
     if(invPayMethodEl) invPayMethodEl.value = "cash";
+    if(invHoursEl) invHoursEl.value = "0";
     if(invLaborEl) invLaborEl.value = "0";
     recalcInvoiceTotals();
     editingInvoiceId = null;
@@ -1297,7 +1396,9 @@ function renderInvoices(){
       if(invInstallDateEl) invInstallDateEl.value = inv.installDate || "";
       invRefEl.value = inv.ref || "";
       if(invPayMethodEl) invPayMethodEl.value = inv.paymentMethod || "cash";
+      if(invHoursEl) invHoursEl.value = String(inv.hours ?? 0);
       if(invLaborEl) invLaborEl.value = String(inv.labor ?? 0);
+      recalcInvoiceTotals();
       invItemsTbody.innerHTML = "";
       (inv.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
       recalcInvoiceTotals();
@@ -1484,9 +1585,9 @@ function getInvoiceTotals(inv){
   // Supporte plusieurs formats (anciens / nouveaux)
   const t = inv?.totals || inv?.total || {};
   // 1) si totals existe
-  let sell = Number(t.sell ?? t.total ?? t.grandTotal ?? 0);
-  let cost = Number(t.cost ?? t.partsCost ?? 0);
-  let profit = Number(t.profit ?? t.netProfit ?? 0);
+  let sell = Number(t.grandTotal ?? t.totalClient ?? t.sell ?? t.total ?? 0);
+  let cost = Number(t.partsCost ?? t.cost ?? 0);
+  let profit = Number(t.netProfit ?? t.profit ?? 0);
 
   // 2) si totals absent ou à 0 mais items existent -> recalcul
   const items = Array.isArray(inv?.items) ? inv.items : [];
@@ -1805,6 +1906,49 @@ function renderClients(){
   `).join("");
 }
 
+
+function openClientStats(customerId){
+  const c = customers.find(x=>x.id===customerId) || {};
+  if(csTitle) csTitle.textContent = `Stats: ${c.fullName||"Client"}`;
+  if(csSubtitle) csSubtitle.textContent = `${c.phone||""} ${c.email?("• "+c.email):""}`.trim();
+
+  const invs = (invoices||[]).filter(inv=> (inv.customerId===customerId) || (String(inv.customerName||"").toLowerCase()===String(c.fullName||"").toLowerCase()));
+  invs.sort((a,b)=> invoiceDateAsDate(b)-invoiceDateAsDate(a));
+
+  let sales=0, parts=0, net=0;
+  for(const inv of invs){
+    const t = getInvoiceTotals(inv);
+    sales += t.sell;
+    parts += t.cost;
+    net += t.profit;
+  }
+  if(csCount) csCount.textContent = String(invs.length);
+  if(csSales) csSales.textContent = money(sales);
+  if(csParts) csParts.textContent = money(parts);
+  if(csNet) csNet.textContent = money(net);
+
+  if(csTbody){
+    if(invs.length===0){
+      csTbody.innerHTML = '<tr><td class="muted" colspan="4">Aucune facture.</td></tr>';
+    }else{
+      csTbody.innerHTML = invs.slice(0,20).map(inv=>{
+        const t = getInvoiceTotals(inv);
+        return `
+          <tr>
+            <td>${safe(inv.ref||inv.id||"—")}</td>
+            <td>${safe(invoiceDateKey(inv)||"—")}</td>
+            <td style="text-align:right">${money(t.sell)}</td>
+            <td style="text-align:right"><b>${money(t.profit)}</b></td>
+          </tr>
+        `;
+      }).join("");
+    }
+  }
+
+  if(clientStatsModal) clientStatsModal.style.display="flex";
+}
+window.__openClientStats = openClientStats;
+
 /* Repairs view */
 const repairsTbody = $("repairsTbody");
 const repairsCount = $("repairsCount");
@@ -2078,11 +2222,12 @@ $("btnSaveSettings").onclick = async ()=>{
   const tps = parseFloat(String($("setTps").value).replace(',','.'))/100;
   const tvq = parseFloat(String($("setTvq").value).replace(',','.'))/100;
   const cardFee = parseFloat(String($("setCardFee").value||"0").replace(',','.'))/100;
-  if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || tps<0 || tvq<0 || cardFee<0){
+  const laborRate = parseFloat(String($("setLaborRate")?.value||"0").replace(',','.'));
+  if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || !isFinite(laborRate) || tps<0 || tvq<0 || cardFee<0 || laborRate<0){
     alert("TPS/TVQ invalides.");
     return;
   }
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, updatedAt: serverTimestamp() }, { merge:true });
+  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
 function renderSettings(){
@@ -2093,6 +2238,14 @@ function renderSettings(){
 
 /* Export / Import */
 $("btnExport").onclick = ()=>{
+  const hoursCalc = Math.max(0, Number(invHoursEl?.value || 0));
+  const laborCalc = hoursCalc>0 ? (hoursCalc*Number(settings.laborRate||0)) : Math.max(0, Number(invLaborEl?.value || 0));
+  const subCalc = sellTotal + laborCalc;
+  const taxCalc = subCalc * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0));
+  const grandCalc = subCalc + taxCalc;
+  const cardCalc = ((invPayMethodEl?.value||"")==="card") ? (grandCalc*Number(settings.cardFeeRate||0)) : 0;
+  const netCalc = subCalc - costTotal - cardCalc;
+
   const payload = { settings, customers, vehicles, workorders };
   const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
