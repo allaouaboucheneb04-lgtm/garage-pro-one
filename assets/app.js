@@ -2702,11 +2702,13 @@ function openVehicleForm(vehicleId=null, customerId=null){
       <datalist id="modelList"></datalist>
       <div id="modelHint" class="muted" style="margin-top:4px">Choisis d’abord une marque pour voir les modèles.</div>
       <label>Année</label>
-      <input name="year" inputmode="numeric" value="${safe(v.year||"")}" />
+      <input name="year" inputmode="numeric" value="${safe(v.year||"")}" / list="yearListVehicle">
       <label>Plaque (recherche)</label>
       <input name="plate" value="${safe(v.plate||"")}" />
       <label>VIN</label>
       <input name="vin" value="${safe(v.vin||"")}" />
+<button type="button" class="btn secondary" data-vin-decode style="margin-top:8px">Remplir via VIN</button>
+<small class="muted" style="display:block;margin-top:6px">Remplit marque, modèle, année, type, moteur, cylindres (via vPIC).</small>
       <label>Kilométrage actuel</label>
       <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
 
@@ -3541,7 +3543,58 @@ if(btnInvPdf) btnInvPdf.addEventListener("click", ()=>{
     if(!w){ window.print(); return; }
     w.document.open();
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Facture</title><link rel="stylesheet" href="assets/style.css"></head><body>${area.outerHTML}<script>setTimeout(()=>{window.print();},300);<\/script></body></html>`);
+      <title>Facture</title><link rel="stylesheet" href="assets/style.css"></head><body>${area.outerHTML}<script>setTimeout(()=>{window.print();},300);<\/script>
+<datalist id="yearListVehicle">
+<option value="2027"></option>
+<option value="2026"></option>
+<option value="2025"></option>
+<option value="2024"></option>
+<option value="2023"></option>
+<option value="2022"></option>
+<option value="2021"></option>
+<option value="2020"></option>
+<option value="2019"></option>
+<option value="2018"></option>
+<option value="2017"></option>
+<option value="2016"></option>
+<option value="2015"></option>
+<option value="2014"></option>
+<option value="2013"></option>
+<option value="2012"></option>
+<option value="2011"></option>
+<option value="2010"></option>
+<option value="2009"></option>
+<option value="2008"></option>
+<option value="2007"></option>
+<option value="2006"></option>
+<option value="2005"></option>
+<option value="2004"></option>
+<option value="2003"></option>
+<option value="2002"></option>
+<option value="2001"></option>
+<option value="2000"></option>
+<option value="1999"></option>
+<option value="1998"></option>
+<option value="1997"></option>
+<option value="1996"></option>
+<option value="1995"></option>
+<option value="1994"></option>
+<option value="1993"></option>
+<option value="1992"></option>
+<option value="1991"></option>
+<option value="1990"></option>
+<option value="1989"></option>
+<option value="1988"></option>
+<option value="1987"></option>
+<option value="1986"></option>
+<option value="1985"></option>
+<option value="1984"></option>
+<option value="1983"></option>
+<option value="1982"></option>
+<option value="1981"></option>
+<option value="1980"></option>
+</datalist>
+</body></html>`);
     w.document.close();
   }catch(e){ console.error(e); window.print(); }
 });
@@ -3969,3 +4022,80 @@ function explainFirebaseError(e){
 window.addEventListener("unhandledrejection", (ev)=>{
   try{ explainFirebaseError(ev.reason); }catch(_){}
 });
+
+// ===== VIN decode (vPIC) =====
+async function decodeVinAndFill(vin, setters) {
+  const clean = (vin || '').trim();
+  if (!clean || clean.length < 8) return;
+  const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(clean)}?format=json`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const row = (data && data.Results && data.Results[0]) ? data.Results[0] : null;
+  if (!row) return;
+
+  const make = (row.Make || '').trim();
+  const model = (row.Model || '').trim();
+  const year = (row.ModelYear || '').trim();
+  const body = ((row.BodyClass || '') + ' ' + (row.VehicleType || '')).toLowerCase();
+  const fuel = (row.FuelTypePrimary || '').toLowerCase();
+  const cyl = (row.EngineCylinders || '').toString().trim();
+
+  // Map fuel to our values
+  let moteur = 'Autre';
+  if (fuel.includes('gas') || fuel.includes('gasoline') || fuel.includes('essence')) moteur = 'Essence';
+  else if (fuel.includes('diesel')) moteur = 'Diesel';
+  else if (fuel.includes('electric')) moteur = 'Électrique';
+  else if (fuel.includes('hybrid')) moteur = 'Hybride';
+
+  // Map body to our vehicle type (French)
+  let typeVeh = 'Autre';
+  if (body.includes('minivan') || body.includes('van')) typeVeh = 'Van';
+  else if (body.includes('sedan') || body.includes('saloon') || body.includes('berline')) typeVeh = 'Berline';
+  else if (body.includes('sport utility') || body.includes('suv') || body.includes('crossover')) typeVeh = 'VUS';
+  else if (body.includes('pickup') || body.includes('pick-up') || body.includes('truck')) typeVeh = 'Pickup';
+  else if (body.includes('coupe')) typeVeh = 'Coupé';
+
+  setters.setMake?.(make);
+  setters.setModel?.(model);
+  setters.setYear?.(year);
+  setters.setEngineType?.(moteur);
+  setters.setCylinders?.(cyl);
+  setters.setVehicleType?.(typeVeh);
+}
+
+// Delegate click on VIN decode buttons inside modals/forms
+document.addEventListener('click', async (e) => {
+  const btn = e.target && e.target.closest ? e.target.closest('[data-vin-decode]') : null;
+  if (!btn) return;
+
+  const modal = btn.closest('.modal') || document;
+  const vinEl = modal.querySelector('input[name="vin"], input#vin, input[placeholder="VIN"]');
+  if (!vinEl) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Analyse VIN...';
+  try {
+    const makeEl = modal.querySelector('input[name="make"], input#make, input[placeholder*="Marque"]');
+    const modelEl = modal.querySelector('input[name="model"], input#model, input[placeholder*="Modèle"]');
+    const yearEl = modal.querySelector('input[name="year"], input[name="annee"], input[name="modelYear"], input#year, input#annee');
+    const engineTypeEl = modal.querySelector('select[name="engineType"], select[name="moteurType"], select#engineType');
+    const cylindersEl = modal.querySelector('input[name="cylinders"], input[name="cylindres"], input#cylinders');
+    const vehicleTypeEl = modal.querySelector('select[name="vehicleType"], select[name="typeVehicule"], select#vehicleType');
+
+    await decodeVinAndFill(vinEl.value, {
+      setMake: (v) => { if (makeEl && v) makeEl.value = v; },
+      setModel: (v) => { if (modelEl && v) modelEl.value = v; },
+      setYear: (v) => { if (yearEl && v) yearEl.value = v; },
+      setEngineType: (v) => { if (engineTypeEl && v) engineTypeEl.value = v; },
+      setCylinders: (v) => { if (cylindersEl && v) cylindersEl.value = v; },
+      setVehicleType: (v) => { if (vehicleTypeEl && v) vehicleTypeEl.value = v; },
+    });
+  } catch (err) {
+    console.error('[VIN] decode error', err);
+    alert('Erreur VIN: ' + (err?.message || err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Remplir via VIN';
+  }
+});
+
