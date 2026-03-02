@@ -209,3 +209,14 @@ body.modal-open{overflow:hidden}
   }
 }
 
+
+/* Invoice PRO (red) */
+:root{ --pro-red:#e11d2e; }
+.print-head{border-bottom:3px solid var(--pro-red);padding-bottom:10px;margin-bottom:12px}
+.print-box{border-color:#ddd}
+.print-totals .print-box{border-left:6px solid var(--pro-red)}
+.row-between{display:flex;justify-content:space-between;gap:10px}
+#printItemsTable thead th{background:#fafafa}
+@media print{
+  .print-head{border-bottom:3px solid var(--pro-red)}
+}

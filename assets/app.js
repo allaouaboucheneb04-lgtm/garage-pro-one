@@ -912,6 +912,7 @@ const invItemsTbody = $("invItemsTbody");
 const btnInvAddLine = $("btnInvAddLine");
 const btnInvCancel = $("btnInvCancel");
 const btnInvPrint = $("btnInvPrint");
+const btnInvPdf = $("btnInvPdf");
 const btnInvEmail = $("btnInvEmail");
 const invCostTotalEl = $("invCostTotal");
 const invSellTotalEl = $("invSellTotal");
@@ -1089,6 +1090,32 @@ async function createInvoiceFromForm(e){
   const customerId = invCustomerEl.value;
   const customer = customers.find(c=>c.id===customerId);
   const workorderId = (invWorkorderEl && invWorkorderEl.value) ? invWorkorderEl.value : "";
+
+  // Référence auto format GP-0001 si vide
+  let refVal = String(invRefEl?.value || "").trim();
+  if(!refVal){
+    try{
+      const cRef = doc(db, "meta", "counters");
+      // runTransaction peut ne pas être importé selon version; on teste
+      if(typeof runTransaction === "function"){
+        const seq = await runTransaction(db, async (tx)=>{
+          const snap = await tx.get(cRef);
+          const cur = (snap.exists() && snap.data().invoiceSeq) ? Number(snap.data().invoiceSeq) : 0;
+          const next = cur + 1;
+          tx.set(cRef, { invoiceSeq: next, updatedAt: serverTimestamp() }, { merge:true });
+          return next;
+        });
+        refVal = "GP-" + String(seq).padStart(4,"0");
+      }else{
+        // fallback: timestamp
+        refVal = "GP-" + String(Date.now()).slice(-6);
+      }
+      if(invRefEl) invRefEl.value = refVal;
+    }catch(e){
+      refVal = "GP-" + String(Date.now()).slice(-6);
+      if(invRefEl) invRefEl.value = refVal;
+    }
+  }
   const items = readInvoiceItems();
   if(items.length===0){
     alert("Ajoute au moins une ligne (pièce / service). ");
@@ -3265,4 +3292,18 @@ window.addEventListener("afterprint", ()=>{
     document.body.style.height = "auto";
     window.scrollTo(0, window.scrollY);
   }catch(e){}
+});
+
+if(btnInvPdf) btnInvPdf.addEventListener("click", ()=>{
+  try{
+    renderInvoicePrint();
+    const area = document.getElementById("invPrintArea");
+    if(!area){ window.print(); return; }
+    const w = window.open("", "_blank");
+    if(!w){ window.print(); return; }
+    w.document.open();
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Facture</title><link rel="stylesheet" href="assets/style.css"></head><body>${area.outerHTML}<script>setTimeout(()=>{window.print();},300);<\/script></body></html>`);
+    w.document.close();
+  }catch(e){ console.error(e); window.print(); }
 });
