@@ -4,37 +4,72 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
+    function myUserDoc() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
     function role() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return exists(myUserDoc()) ? get(myUserDoc()).data.role : null;
     }
 
     function isAdmin() { return signedIn() && role() == "admin"; }
     function isMech()  { return signedIn() && role() == "mechanic"; }
 
+    // USERS
+    // - Lecture: chacun lit son doc
+    // - Création: un utilisateur peut créer son doc avec role SI invite valide (inviteCode)
+    // - Update: l'utilisateur peut update son doc SANS changer role (évite escalade)
+    // - Admin: gère tout
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
+      allow read: if signedIn() && request.auth.uid == uid;
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ["admin","mechanic"]
+        && request.resource.data.inviteCode is string
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.email == request.auth.token.email
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.role == request.resource.data.role
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.used != true;
+
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == resource.data.role;
+
+      allow create, update, delete: if isAdmin();
+    }
+
+    // INVITES (admin crée, utilisateur lit/consume)
+    match /invites/{code} {
+      allow read: if signedIn();
+      allow create, delete: if isAdmin();
+
+      // l'utilisateur (même email) peut marquer used=true sans modifier email/role/code
+      allow update: if signedIn()
+        && request.auth.token.email == resource.data.email
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.used == true;
     }
 
     match /customers/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /vehicles/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /workorders/{id} {
       allow read: if isAdmin()
         || (isMech() && resource.data.assignedTo == request.auth.uid);
 
-      // admin crée les réparations
       allow create: if isAdmin();
 
-      // admin modifie tout
-      // mécanicien modifie seulement ses réparations (sans pouvoir changer assignedTo)
       allow update: if isAdmin()
         || (isMech()
             && resource.data.assignedTo == request.auth.uid
@@ -45,19 +80,23 @@ service cloud.firestore {
 
     match /appointments/{id} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /promotions/{id} {
-      allow read, write: if isAdmin();
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /invoices/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /meta/{id} {
-      allow read, write: if isAdmin();
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
-
-    // Queue email (Firebase Extension "Trigger Email from Firestore")
     match /mail/{id} {
       allow read, create, update, delete: if isAdmin();
     }

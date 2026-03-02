@@ -17,11 +17,8 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, query, where, orderBy, limit, getDocs,
-  addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from ""https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
@@ -3367,3 +3364,134 @@ function toast(msg){
   setTimeout(()=>{ el.classList.add("show"); }, 10);
   setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(), 250); }, 2200);
 }
+
+function genInviteCode(){
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "GP-";
+  for(let i=0;i<6;i++) s += chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+
+async function createInvite(){
+  const email = String(document.getElementById("empInviteEmail")?.value||"").trim().toLowerCase();
+  const role = String(document.getElementById("empInviteRole")?.value||"mechanic").trim();
+  if(!email || !email.includes("@")){
+    alert("Email invalide");
+    return;
+  }
+  const code = genInviteCode();
+  await setDoc(doc(db,"invites",code), {
+    code,
+    email,
+    role,
+    used: false,
+    createdAt: serverTimestamp(),
+    createdBy: auth.currentUser?.uid || ""
+  });
+  alert("Invitation créée ✅\nCode: " + code);
+  await loadInvites();
+}
+
+async function loadInvites(){
+  const tbody = document.getElementById("invitesTbody");
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td class="muted" colspan="5">Chargement...</td></tr>';
+  try{
+    const q = query(collection(db,"invites"), orderBy("createdAt","desc"), limit(50));
+    const snap = await getDocs(q);
+    const rows = [];
+    snap.forEach(d=>{
+      const inv = d.data()||{};
+      rows.push({
+        code: inv.code || d.id,
+        email: inv.email || "",
+        role: inv.role || "",
+        used: !!inv.used,
+        createdAt: inv.createdAt?.toDate ? inv.createdAt.toDate() : null
+      });
+    });
+    if(rows.length===0){
+      tbody.innerHTML = '<tr><td class="muted" colspan="5">Aucune invitation.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r=>{
+      const created = r.createdAt ? r.createdAt.toLocaleString() : "—";
+      const status = r.used ? "UTILISÉE" : "ACTIVE";
+      return `<tr>
+        <td><code>${safe(r.code)}</code></td>
+        <td>${safe(r.email)}</td>
+        <td><b>${safe(r.role)}</b></td>
+        <td>${status}</td>
+        <td class="muted">${safe(created)}</td>
+      </tr>`;
+    }).join("");
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = '<tr><td class="muted" colspan="5">Erreur chargement invitations.</td></tr>';
+  }
+}
+
+async function registerWithInvite(){
+  const fullName = String(document.getElementById("regFullName")?.value||"").trim();
+  const code = String(document.getElementById("regInviteCode")?.value||"").trim();
+  const email = String(document.getElementById("regEmail")?.value||"").trim().toLowerCase();
+  const password = String(document.getElementById("regPassword")?.value||"").trim();
+
+  if(!fullName){ alert("Nom obligatoire"); return; }
+  if(!code){ alert("Code invitation obligatoire"); return; }
+  if(!email || !email.includes("@")){ alert("Email invalide"); return; }
+  if(password.length < 6){ alert("Mot de passe: minimum 6 caractères"); return; }
+
+  // Vérifier invitation
+  const invRef = doc(db,"invites",code);
+  const invSnap = await getDoc(invRef);
+  if(!invSnap.exists()){
+    alert("Code invitation invalide");
+    return;
+  }
+  const inv = invSnap.data()||{};
+  if(String(inv.email||"").toLowerCase() !== email){
+    alert("Cette invitation est pour un autre email.");
+    return;
+  }
+  if(inv.used){
+    alert("Invitation déjà utilisée.");
+    return;
+  }
+  const role = String(inv.role||"mechanic");
+
+  // Créer compte (ça connecte ce nouveau compte)
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const uid = cred.user.uid;
+
+  // Créer profil user avec rôle (règles valident via inviteCode)
+  await setDoc(doc(db,"users",uid), {
+    fullName,
+    email,
+    role,
+    inviteCode: code,
+    createdAt: serverTimestamp()
+  });
+
+  // Marquer invitation utilisée
+  await updateDoc(invRef, {
+    used: true,
+    usedBy: uid,
+    usedAt: serverTimestamp()
+  });
+
+  alert("Compte créé ✅");
+}
+
+function wireInvitesUI(){
+  const btnCreateInvite = document.getElementById("btnCreateInvite");
+  const btnRefreshInvites = document.getElementById("btnRefreshInvites");
+  if(btnCreateInvite) btnCreateInvite.onclick = ()=>{ createInvite().catch(e=>{console.error(e); alert("Erreur création invitation");}); };
+  if(btnRefreshInvites) btnRefreshInvites.onclick = ()=>{ loadInvites().catch(()=>{}); };
+
+  const btnRegisterInvite = document.getElementById("btnRegisterInvite");
+  if(btnRegisterInvite) btnRegisterInvite.onclick = ()=>{ registerWithInvite().catch(e=>{console.error(e); alert("Erreur création compte");}); };
+}
+document.addEventListener("DOMContentLoaded", ()=>{
+  wireInvitesUI();
+});

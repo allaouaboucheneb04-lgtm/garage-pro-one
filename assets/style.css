@@ -220,3 +220,6 @@ body.modal-open{overflow:hidden}
 @media print{
   .print-head{border-bottom:3px solid var(--pro-red)}
 }
+
+/* Invites */
+#invitesTbody td{white-space:nowrap}

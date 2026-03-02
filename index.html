@@ -712,6 +712,50 @@
 <small class="muted">Ces infos s’affichent sur la facture PDF + dans l’email.</small>
 
 <div class="row">
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Employés (invitation)</h3>
+<div class="grid" style="grid-template-columns: 2fr 1fr auto; gap:10px; align-items:end">
+  <div>
+    <label>Email employé</label>
+    <input class="input" id="empInviteEmail" placeholder="mecano@email.com" />
+  </div>
+  <div>
+    <label>Rôle</label>
+    <select class="input" id="empInviteRole">
+      <option value="mechanic">mechanic</option>
+      <option value="admin">admin</option>
+    </select>
+  </div>
+  <div>
+    <button class="btn btn-ghost" id="btnCreateInvite">Créer invitation</button>
+  </div>
+</div>
+<small class="muted">Le code d’invitation sera généré automatiquement. L’employé crée son compte avec ce code.</small>
+
+<div style="margin-top:12px" class="box">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+    <h3 style="margin:0">Invitations</h3>
+    <button class="btn btn-ghost btn-small" id="btnRefreshInvites">Rafraîchir</button>
+  </div>
+  <div style="overflow:auto;margin-top:10px">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Email</th>
+          <th>Rôle</th>
+          <th>Statut</th>
+          <th>Créé</th>
+        </tr>
+      </thead>
+      <tbody id="invitesTbody">
+        <tr><td class="muted" colspan="5">Aucune invitation.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
 </input></form>
