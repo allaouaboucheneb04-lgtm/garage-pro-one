@@ -89,12 +89,8 @@ async function loadRole(){
       currentUserName = "";
       applyRoleUI();
       alert(
-        "Compte non autorisé (staff manquant).
-
-"+
-        "Demande à l’admin de t’envoyer une invitation, puis crée ton compte via le code.
-
-"+
+        "Compte non autorisé (staff manquant).\\n\\n"+
+        "Demande à l’admin de t’envoyer une invitation, puis crée ton compte via le code.\\n\\n"+
         "UID: "+currentUid
       );
       await signOut(auth);
