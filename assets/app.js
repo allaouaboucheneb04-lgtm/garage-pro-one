@@ -2746,9 +2746,12 @@ function openVehicleForm(vehicleId=null, customerId=null){
         </div>
       </div>
 
+      <label>Kilométrage actuel</label>
+      <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
+
       <div class="divider"></div>
       <h3 style="margin:0">Infos véhicule</h3>
-      <div class="muted" style="margin-top:6px">Ces infos aident pour le suivi et les rapports. (Auto-remplies après scan VIN)</div>
+      <div class="muted" style="margin-top:6px">Ces infos aident pour le suivi et les rapports.</div>
 
       <label>Type de moteur</label>
       <select name="engineType">
@@ -2794,10 +2797,6 @@ function openVehicleForm(vehicleId=null, customerId=null){
         <label>Nombre de places (si van / bus)</label>
         <input name="seats" inputmode="numeric" value="${safe(v.seats||"")}" placeholder="ex: 7" />
       </div>
-
-      <div class="divider"></div>
-      <label>Kilométrage actuel</label>
-      <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
 
       <label>Notes</label>
       <textarea name="notes" rows="4">${safe(v.notes||"")}</textarea>
@@ -2874,8 +2873,7 @@ function openVehicleForm(vehicleId=null, customerId=null){
       return;
     }
     try{
-      const seatTypes = ["Van","Bus"];
-      const payload = {make,model,year,plate,vin,currentKm,engineType,cylinders,bodyType,seats:(seatTypes.includes(bodyType)?seats:""),notes};
+      const payload = {make,model,year,plate,vin,currentKm,engineType,cylinders,bodyType,seats:(bodyType==="Van"?seats:""),notes};
       if(editing) await updateVehicle(vehicleId, payload);
       else await createVehicle(customerId, payload);
       closeModal();
@@ -4129,16 +4127,16 @@ document.addEventListener('click', async (e) => {
     const modelEl = modal.querySelector('input[name="model"], input#model, input[placeholder*="Modèle"]');
     const yearEl = modal.querySelector('input[name="year"], input[name="annee"], input[name="modelYear"], input#year, input#annee');
     const engineTypeEl = modal.querySelector('select[name="engineType"], select[name="moteurType"], select#engineType');
-    const cylindersEl = modal.querySelector('input[name="cylinders"], input[name="cylindres"], input#cylinders');
-    const vehicleTypeEl = modal.querySelector('select[name="vehicleType"], select[name="typeVehicule"], select#vehicleType');
+    const cylindersEl = modal.querySelector('select[name="cylinders"], input[name="cylinders"], input[name="cylindres"], select#cylinders, input#cylinders');
+    const vehicleTypeEl = modal.querySelector('select[name="bodyType"], select[name="vehicleType"], select[name="typeVehicule"], select#bodyType, select#vehicleType');
 
     await decodeVinAndFill(vinEl.value, {
-      setMake: (v) => { if (makeEl && v) makeEl.value = v; },
-      setModel: (v) => { if (modelEl && v) modelEl.value = v; },
-      setYear: (v) => { if (yearEl && v) yearEl.value = v; },
-      setEngineType: (v) => { if (engineTypeEl && v) engineTypeEl.value = v; },
-      setCylinders: (v) => { if (cylindersEl && v) cylindersEl.value = v; },
-      setVehicleType: (v) => { if (vehicleTypeEl && v) vehicleTypeEl.value = v; },
+      setMake: (v) => { if (makeEl && v) { makeEl.value = v; makeEl.dispatchEvent(new Event('input', { bubbles:true })); } },
+      setModel: (v) => { if (modelEl && v) { modelEl.value = v; modelEl.dispatchEvent(new Event('input', { bubbles:true })); } },
+      setYear: (v) => { if (yearEl && v) { yearEl.value = v; yearEl.dispatchEvent(new Event('input', { bubbles:true })); } },
+      setEngineType: (v) => { if (engineTypeEl && v) { engineTypeEl.value = v; engineTypeEl.dispatchEvent(new Event('change', { bubbles:true })); } },
+      setCylinders: (v) => { if (cylindersEl && v) { cylindersEl.value = v; cylindersEl.dispatchEvent(new Event('change', { bubbles:true })); } },
+      setVehicleType: (v) => { if (vehicleTypeEl && v) { vehicleTypeEl.value = v; vehicleTypeEl.dispatchEvent(new Event('change', { bubbles:true })); } },
     });
   } catch (err) {
     console.error('[VIN] decode error', err);
@@ -4235,8 +4233,8 @@ async function _autoDecodeVinForInput(vinInput){
       const modelEl = modal.querySelector('input[name="model"], input#model, input[placeholder*="Modèle"]');
       const yearEl = modal.querySelector('input[name="year"], input[name="annee"], input[name="modelYear"], input#year, input#annee');
       const engineTypeEl = modal.querySelector('select[name="engineType"], select[name="moteurType"], select#engineType');
-      const cylindersEl = modal.querySelector('input[name="cylinders"], input[name="cylindres"], input#cylinders');
-      const vehicleTypeEl = modal.querySelector('select[name="vehicleType"], select[name="typeVehicule"], select#vehicleType');
+      const cylindersEl = modal.querySelector('select[name="cylinders"], input[name="cylinders"], input[name="cylindres"], select#cylinders, input#cylinders');
+      const vehicleTypeEl = modal.querySelector('select[name="bodyType"], select[name="vehicleType"], select[name="typeVehicule"], select#bodyType, select#vehicleType');
 
       // Visual feedback if a decode button exists
       const decodeBtn = modal.querySelector('[data-vin-decode]');
@@ -4247,12 +4245,12 @@ async function _autoDecodeVinForInput(vinInput){
       }
 
       await decodeVinAndFill(vin, {
-        setMake: (v) => { if (makeEl && v) makeEl.value = v; },
-        setModel: (v) => { if (modelEl && v) modelEl.value = v; },
-        setYear: (v) => { if (yearEl && v) yearEl.value = v; },
-        setEngineType: (v) => { if (engineTypeEl && v) engineTypeEl.value = v; },
-        setCylinders: (v) => { if (cylindersEl && v) cylindersEl.value = v; },
-        setVehicleType: (v) => { if (vehicleTypeEl && v) vehicleTypeEl.value = v; },
+        setMake: (v) => { if (makeEl && v) { makeEl.value = v; makeEl.dispatchEvent(new Event('input', { bubbles:true })); } },
+        setModel: (v) => { if (modelEl && v) { modelEl.value = v; modelEl.dispatchEvent(new Event('input', { bubbles:true })); } },
+        setYear: (v) => { if (yearEl && v) { yearEl.value = v; yearEl.dispatchEvent(new Event('input', { bubbles:true })); } },
+        setEngineType: (v) => { if (engineTypeEl && v) { engineTypeEl.value = v; engineTypeEl.dispatchEvent(new Event('change', { bubbles:true })); } },
+        setCylinders: (v) => { if (cylindersEl && v) { cylindersEl.value = v; cylindersEl.dispatchEvent(new Event('change', { bubbles:true })); } },
+        setVehicleType: (v) => { if (vehicleTypeEl && v) { vehicleTypeEl.value = v; vehicleTypeEl.dispatchEvent(new Event('change', { bubbles:true })); } },
       });
 
       if(decodeBtn){
