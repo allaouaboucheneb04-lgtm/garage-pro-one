@@ -2746,12 +2746,9 @@ function openVehicleForm(vehicleId=null, customerId=null){
         </div>
       </div>
 
-      <label>Kilométrage actuel</label>
-      <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
-
       <div class="divider"></div>
       <h3 style="margin:0">Infos véhicule</h3>
-      <div class="muted" style="margin-top:6px">Ces infos aident pour le suivi et les rapports.</div>
+      <div class="muted" style="margin-top:6px">Ces infos aident pour le suivi et les rapports. (Auto-remplies après scan VIN)</div>
 
       <label>Type de moteur</label>
       <select name="engineType">
@@ -2797,6 +2794,10 @@ function openVehicleForm(vehicleId=null, customerId=null){
         <label>Nombre de places (si van / bus)</label>
         <input name="seats" inputmode="numeric" value="${safe(v.seats||"")}" placeholder="ex: 7" />
       </div>
+
+      <div class="divider"></div>
+      <label>Kilométrage actuel</label>
+      <input name="currentKm" inputmode="numeric" value="${safe(v.currentKm||"")}" />
 
       <label>Notes</label>
       <textarea name="notes" rows="4">${safe(v.notes||"")}</textarea>
@@ -2873,7 +2874,8 @@ function openVehicleForm(vehicleId=null, customerId=null){
       return;
     }
     try{
-      const payload = {make,model,year,plate,vin,currentKm,engineType,cylinders,bodyType,seats:(bodyType==="Van"?seats:""),notes};
+      const seatTypes = ["Van","Bus"];
+      const payload = {make,model,year,plate,vin,currentKm,engineType,cylinders,bodyType,seats:(seatTypes.includes(bodyType)?seats:""),notes};
       if(editing) await updateVehicle(vehicleId, payload);
       else await createVehicle(customerId, payload);
       closeModal();
