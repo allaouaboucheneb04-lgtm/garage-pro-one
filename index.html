@@ -16,6 +16,23 @@
 <div class="name">Garage Pro One</div>
 <div class="muted" style="font-size:12px">Synchro automatique (Firebase)</div>
 </div>
+
+<!-- BARCODE SCAN MODAL (Parts / Inventory) -->
+<div aria-hidden="true" class="modal-backdrop" id="barcodeScanModal" inert style="display:none">
+  <div class="modal" style="width:min(720px, 100%)">
+    <div class="card">
+      <div class="row-between" style="gap:10px">
+        <h2 style="margin:0" id="barcodeScanTitle">Scanner code‑barres</h2>
+        <button class="btn btn-ghost btn-small" id="btnCloseBarcodeScan" type="button">Fermer</button>
+      </div>
+      <div class="divider"></div>
+      <div id="barcodeScanViewport" class="vin-viewport"></div>
+      <small class="muted" style="display:block;margin-top:8px">
+        Compatible: EAN/UPC/Code‑128/Code‑39 (pièces, inventaire, étiquettes fournisseur).
+      </small>
+    </div>
+  </div>
+</div>
 </div>
 <nav class="nav" id="navAuthed" style="display:none">
 <button class="btn btn-ghost" data-go="dashboard">Dashboard</button>
@@ -1031,12 +1048,18 @@
     <div class="card">
       <div class="row-between" style="gap:10px">
         <h2 style="margin:0">Scanner VIN (code-barres)</h2>
-        <button class="btn btn-ghost btn-small" id="btnCloseVinScan" type="button">Fermer</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-small" id="btnVinOcr" type="button" title="Lecture VIN par photo (beta)">Lire VIN (photo)</button>
+          <button class="btn btn-ghost btn-small" id="btnCloseVinScan" type="button">Fermer</button>
+        </div>
       </div>
       <div class="divider"></div>
       <div id="vinScanViewport" class="vin-viewport"></div>
       <small class="muted" style="display:block;margin-top:8px">
         Astuce: vise le code‑barres VIN (pare‑brise ou porte). Si ça ne lit pas, augmente la lumière.
+      </small>
+      <small class="muted" style="display:block;margin-top:6px">
+        Mode PRO (beta): “Lire VIN (photo)” peut reconnaître le VIN même sans code‑barres, mais c’est plus lent.
       </small>
     </div>
   </div>

@@ -4104,6 +4104,76 @@ document.addEventListener('click', async (e) => {
 // ===== VIN BARCODE SCAN (Quagga2) =====
 let _vinScanActive = false;
 
+// PRO: debounce auto-decode when VIN reaches 17 chars (no need to click "Remplir via VIN")
+const _vinAutoTimers = new WeakMap();
+function _sanitizeVin(raw){
+  return String(raw||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+function _looksLikeVin(v){
+  // VINs exclude I,O,Q in most standards
+  if(!v || v.length !== 17) return false;
+  if(/[IOQ]/.test(v)) return false;
+  return /^[A-HJ-NPR-Z0-9]{17}$/.test(v);
+}
+
+async function _autoDecodeVinForInput(vinInput){
+  if(!vinInput) return;
+  const modal = vinInput.closest('.modal') || document;
+  const vin = _sanitizeVin(vinInput.value);
+  if(!_looksLikeVin(vin)) return;
+
+  // don't spam if user keeps typing / scanner fires multiple detections
+  const existing = _vinAutoTimers.get(vinInput);
+  if(existing) clearTimeout(existing);
+
+  const t = setTimeout(async ()=>{
+    try{
+      // Try to locate related fields inside the same modal
+      const makeEl = modal.querySelector('input[name="make"], input#make, input[placeholder*="Marque"]');
+      const modelEl = modal.querySelector('input[name="model"], input#model, input[placeholder*="Modèle"]');
+      const yearEl = modal.querySelector('input[name="year"], input[name="annee"], input[name="modelYear"], input#year, input#annee');
+      const engineTypeEl = modal.querySelector('select[name="engineType"], select[name="moteurType"], select#engineType');
+      const cylindersEl = modal.querySelector('input[name="cylinders"], input[name="cylindres"], input#cylinders');
+      const vehicleTypeEl = modal.querySelector('select[name="vehicleType"], select[name="typeVehicule"], select#vehicleType');
+
+      // Visual feedback if a decode button exists
+      const decodeBtn = modal.querySelector('[data-vin-decode]');
+      const prevText = decodeBtn ? decodeBtn.textContent : null;
+      if(decodeBtn){
+        decodeBtn.disabled = true;
+        decodeBtn.textContent = 'Remplissage...';
+      }
+
+      await decodeVinAndFill(vin, {
+        setMake: (v) => { if (makeEl && v) makeEl.value = v; },
+        setModel: (v) => { if (modelEl && v) modelEl.value = v; },
+        setYear: (v) => { if (yearEl && v) yearEl.value = v; },
+        setEngineType: (v) => { if (engineTypeEl && v) engineTypeEl.value = v; },
+        setCylinders: (v) => { if (cylindersEl && v) cylindersEl.value = v; },
+        setVehicleType: (v) => { if (vehicleTypeEl && v) vehicleTypeEl.value = v; },
+      });
+
+      if(decodeBtn){
+        decodeBtn.textContent = '✅ Rempli';
+        setTimeout(()=>{
+          decodeBtn.textContent = prevText || 'Remplir via VIN';
+          decodeBtn.disabled = false;
+        }, 900);
+      }
+    }catch(err){
+      console.error('[VIN] auto-decode error', err);
+      // silent: keep manual options available
+      const decodeBtn = modal.querySelector('[data-vin-decode]');
+      if(decodeBtn){
+        decodeBtn.disabled = false;
+        decodeBtn.textContent = 'Remplir via VIN';
+      }
+    }
+  }, 650);
+
+  _vinAutoTimers.set(vinInput, t);
+}
+
 function openVinScanModal(){
   const m = document.getElementById("vinScanModal");
   if(!m) return;
@@ -4119,6 +4189,53 @@ function closeVinScanModal(){
   m.setAttribute("aria-hidden","true");
   m.setAttribute("inert","");
   document.body.classList.remove("modal-open");
+}
+
+// PRO (beta): OCR VIN from the current camera frame using Tesseract.js loaded on demand
+async function _ensureTesseract(){
+  if(window.Tesseract) return window.Tesseract;
+  await new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = ()=>res();
+    s.onerror = ()=>rej(new Error('Impossible de charger Tesseract.js'));
+    document.head.appendChild(s);
+  });
+  return window.Tesseract;
+}
+
+function _extractVinFromText(text){
+  const t = String(text||'').toUpperCase().replace(/[^A-Z0-9\s]/g,' ');
+  // Find the first plausible 17-char VIN in OCR text
+  const m = t.match(/[A-HJ-NPR-Z0-9]{17}/g);
+  if(!m || !m.length) return null;
+  // Prefer ones without I,O,Q (already excluded by regex)
+  return m[0];
+}
+
+async function _ocrVinFromViewport(){
+  const viewport = document.getElementById('vinScanViewport');
+  if(!viewport) throw new Error('Viewport VIN introuvable');
+
+  // Try canvas first, otherwise capture from <video>
+  let canvas = viewport.querySelector('canvas');
+  if(!canvas){
+    const video = viewport.querySelector('video');
+    if(!video) throw new Error('Vidéo caméra introuvable');
+    canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
+
+  const T = await _ensureTesseract();
+  const { data } = await T.recognize(canvas, 'eng', {
+    tessedit_char_whitelist: 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789',
+  });
+  const vin = _extractVinFromText(data && data.text);
+  if(!vin) throw new Error('VIN non détecté sur la photo. Essaie de zoomer et d’avoir plus de lumière.');
+  return vin;
 }
 
 async function startVinScanner(onResult){
@@ -4161,6 +4278,16 @@ async function startVinScanner(onResult){
           return;
         }
         Quagga.start();
+
+        // PRO: Try to force continuous autofocus on supported browsers (best effort)
+        try{
+          if(Quagga.CameraAccess && typeof Quagga.CameraAccess.getActiveTrack === 'function'){
+            const track = Quagga.CameraAccess.getActiveTrack();
+            if(track && typeof track.applyConstraints === 'function'){
+              track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(()=>{});
+            }
+          }
+        }catch(e){ /* ignore */ }
       });
 
       const handler = (data)=>{
@@ -4185,6 +4312,30 @@ async function startVinScanner(onResult){
           _vinScanActive = false;
           closeVinScanModal();
           resolve(null);
+        };
+      }
+
+      const ocrBtn = document.getElementById('btnVinOcr');
+      if(ocrBtn){
+        ocrBtn.onclick = async ()=>{
+          const prev = ocrBtn.textContent;
+          ocrBtn.disabled = true;
+          ocrBtn.textContent = 'Analyse...';
+          try{
+            const vin = await _ocrVinFromViewport();
+            // stop camera after OCR
+            try{ Quagga.stop(); }catch(e){}
+            _vinScanActive = false;
+            closeVinScanModal();
+            onResult && onResult(vin);
+            resolve(vin);
+          }catch(err){
+            console.error('[VIN OCR]', err);
+            alert(err?.message || String(err));
+          }finally{
+            ocrBtn.disabled = false;
+            ocrBtn.textContent = prev || 'Lire VIN (photo)';
+          }
         };
       }
     }catch(e){
@@ -4212,14 +4363,156 @@ document.addEventListener('click', async (e)=>{
       if(vinEl) vinEl.value = v;
     });
     if(vin){
-      // after scan, auto decode VIN
-      const decodeBtn = modal.querySelector('[data-vin-decode]');
-      if(decodeBtn) decodeBtn.click();
+      // after scan, auto decode VIN (no manual button needed)
+      await _autoDecodeVinForInput(vinEl);
     }
   }catch(err){
     console.error(err);
   }finally{
     btn.disabled = false;
     btn.textContent = "Scanner VIN";
+  }
+});
+
+// PRO: auto-decode VIN while typing / pasting
+document.addEventListener('input', (e)=>{
+  const el = e.target;
+  if(!(el instanceof HTMLInputElement)) return;
+  const isVin = (el.name && el.name.toLowerCase() === 'vin') || el.id === 'vin' || (el.placeholder && el.placeholder.toLowerCase().includes('vin'));
+  if(!isVin) return;
+  el.value = _sanitizeVin(el.value);
+  _autoDecodeVinForInput(el);
+});
+
+
+// ===== PARTS / INVENTORY BARCODE SCAN (Quagga2) =====
+let _barcodeScanActive = false;
+
+function _openBarcodeScanModal(title){
+  const m = document.getElementById('barcodeScanModal');
+  if(!m) return;
+  const t = document.getElementById('barcodeScanTitle');
+  if(t && title) t.textContent = title;
+  m.style.display = 'flex';
+  m.setAttribute('aria-hidden','false');
+  m.removeAttribute('inert');
+  document.body.classList.add('modal-open');
+}
+
+function _closeBarcodeScanModal(){
+  const m = document.getElementById('barcodeScanModal');
+  if(!m) return;
+  m.style.display = 'none';
+  m.setAttribute('aria-hidden','true');
+  m.setAttribute('inert','');
+  document.body.classList.remove('modal-open');
+}
+
+async function startBarcodeScanner({ title='Scanner code‑barres', readers=["ean_reader","upc_reader","upc_e_reader","code_128_reader","code_39_reader"], onResult } = {}){
+  if(_barcodeScanActive) return;
+  if(typeof Quagga === 'undefined'){
+    alert('Scanner non disponible (Quagga non chargé).');
+    return;
+  }
+  _barcodeScanActive = true;
+  _openBarcodeScanModal(title);
+
+  const viewport = document.getElementById('barcodeScanViewport');
+  if(viewport) viewport.innerHTML = '';
+
+  return new Promise((resolve, reject)=>{
+    try{
+      Quagga.init({
+        inputStream: {
+          type: 'LiveStream',
+          target: viewport,
+          constraints: {
+            facingMode: 'environment',
+            width: { min: 640 },
+            height: { min: 360 }
+          }
+        },
+        locator: { patchSize: 'medium', halfSample: true },
+        decoder: { readers },
+        locate: true
+      }, function(err){
+        if(err){
+          console.error('[BARCODE] init error', err);
+          _barcodeScanActive = false;
+          _closeBarcodeScanModal();
+          alert('Erreur caméra: ' + (err.message||err));
+          reject(err);
+          return;
+        }
+        Quagga.start();
+
+        // best effort continuous autofocus
+        try{
+          if(Quagga.CameraAccess && typeof Quagga.CameraAccess.getActiveTrack === 'function'){
+            const track = Quagga.CameraAccess.getActiveTrack();
+            if(track && typeof track.applyConstraints === 'function'){
+              track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(()=>{});
+            }
+          }
+        }catch(e){ /* ignore */ }
+      });
+
+      const handler = (data)=>{
+        const code = data && data.codeResult && data.codeResult.code ? String(data.codeResult.code) : '';
+        const cleaned = code.trim();
+        if(cleaned.length < 6) return;
+        Quagga.offDetected(handler);
+        try{ Quagga.stop(); }catch(e){}
+        _barcodeScanActive = false;
+        _closeBarcodeScanModal();
+        onResult && onResult(cleaned);
+        resolve(cleaned);
+      };
+
+      Quagga.onDetected(handler);
+
+      const closeBtn = document.getElementById('btnCloseBarcodeScan');
+      if(closeBtn){
+        closeBtn.onclick = ()=>{
+          try{ Quagga.stop(); }catch(e){}
+          _barcodeScanActive = false;
+          _closeBarcodeScanModal();
+          resolve(null);
+        };
+      }
+    }catch(e){
+      console.error('[BARCODE] error', e);
+      _barcodeScanActive = false;
+      _closeBarcodeScanModal();
+      reject(e);
+    }
+  });
+}
+
+// Buttons: add data-barcode-scan to any button and it will fill the closest input (or [data-barcode-target])
+document.addEventListener('click', async (e)=>{
+  const btn = e.target && e.target.closest ? e.target.closest('[data-barcode-scan]') : null;
+  if(!btn) return;
+
+  const mode = (btn.getAttribute('data-barcode-scan') || 'parts').toLowerCase();
+  const modal = btn.closest('.modal') || document;
+  const targetSel = btn.getAttribute('data-barcode-target');
+  const target = targetSel ? modal.querySelector(targetSel) : (modal.querySelector('input[name="barcode"], input[name="partNumber"], input#barcode') || null);
+
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = 'Scanner...';
+  try{
+    const title = mode === 'inventory' ? 'Scanner inventaire' : 'Scanner pièce';
+    const code = await startBarcodeScanner({ title, onResult: (c)=>{ if(target) target.value = c; } });
+    if(code && target){
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      target.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }catch(err){
+    console.error(err);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = prev || 'Scanner';
   }
 });
