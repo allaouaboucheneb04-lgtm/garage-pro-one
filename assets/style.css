@@ -240,3 +240,21 @@ body.modal-open{overflow:hidden}
 @media print{
   .print-head{border-bottom:3px solid var(--pro-red)}
 }
+
+
+/* ===== Plate Auto Scan overlay ===== */
+.plate-frame{
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:72%;
+  height:32%;
+  border:3px solid rgba(255,255,255,0.35);
+  border-radius:14px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,0.12);
+  pointer-events:none;
+}
+.plate-frame.state-search{ border-color: rgba(255, 215, 0, 0.75); }
+.plate-frame.state-ok{ border-color: rgba(0, 255, 128, 0.85); }
+.plate-frame.state-none{ border-color: rgba(255,255,255,0.35); }

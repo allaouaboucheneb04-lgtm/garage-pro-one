@@ -1078,17 +1078,21 @@
         <h2 style="margin:0">Scanner plaque (caméra)</h2>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-ghost btn-small" id="btnToggleTorchPlate" type="button" title="Lampe (si supportée)">Lampe</button>
-          <button class="btn btn-ghost btn-small" id="btnPlateOcr" type="button" title="Lire plaque par photo">Lire plaque (photo)</button>
+          <button class="btn btn-ghost btn-small" id="btnPlateOcr" type="button" title="Capture manuelle (si besoin)">Capture</button>
           <button class="btn btn-ghost btn-small" id="btnClosePlateScan" type="button">Fermer</button>
         </div>
       </div>
       <div class="divider"></div>
       <div id="plateScanViewport" class="vin-viewport"></div>
+<div class="row-between" style="margin-top:10px;gap:10px">
+  <div class="muted" id="plateScanStatus">Prêt…</div>
+  <div class="muted" id="plateScanLast">—</div>
+</div>
       <small class="muted" style="display:block;margin-top:8px">
-        Astuce: cadre la plaque le plus proche possible, avec bonne lumière. Puis clique “Lire plaque (photo)”.
+        Astuce: pointe la plaque dans le cadre. La lecture se fait automatiquement (Canada + USA).
       </small>
       <small class="muted" style="display:block;margin-top:6px">
-        Le texte détecté sera mis dans la recherche rapide.
+        Dès que la plaque est stable, elle est copiée dans la recherche rapide et la recherche se lance.
       </small>
     </div>
   </div>

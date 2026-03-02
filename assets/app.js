@@ -4325,17 +4325,47 @@ function closePlateScanModal(){
   if(viewport) viewport.innerHTML = '';
 }
 
+function _normalizePlateRaw(s){
+  // Uppercase + strip separators
+  let t = String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  // Common OCR swaps
+  const swaps = { 'O':'0', 'I':'1', 'L':'1', 'Z':'2', 'S':'5', 'B':'8' };
+  // For mixed strings, apply swaps only when it helps keep alnum length reasonable.
+  t = t.split('').map(ch=>swaps[ch] || ch).join('');
+  return t;
+}
+
+function _isPlausiblePlateCAUS(s){
+  const t = _normalizePlateRaw(s);
+  // CA/US plates vary widely; keep it conservative to reduce false positives.
+  // Typical: 5-8 chars, sometimes 4; allow 4-8.
+  if(t.length < 4 || t.length > 8) return false;
+  // Must contain at least one letter and one digit in most cases, but allow all-letters personalized.
+  const hasA = /[A-Z]/.test(t);
+  const hasD = /[0-9]/.test(t);
+  if(!(hasA || hasD)) return false;
+  if(hasA && hasD) return true;
+  // Personalized: allow all letters length 4-8
+  return hasA && !hasD;
+}
+
 function _extractPlateFromText(text){
-  // Keep alnum only, then look for plausible sequences.
-  const t = String(text||'').toUpperCase().replace(/[^A-Z0-9\s]/g,' ');
-  const candidates = (t.match(/[A-Z0-9]{5,8}/g) || [])
-    .map(s=>s.replace(/\s/g,''))
-    .filter(Boolean);
+  // Keep alnum only, then look for plausible sequences (Canada + USA)
+  const raw = String(text||'').toUpperCase().replace(/[^A-Z0-9\s]/g,' ');
+  const candidates = (raw.match(/[A-Z0-9]{4,8}/g) || [])
+    .map(_normalizePlateRaw)
+    .filter(s=>_isPlausiblePlateCAUS(s));
   if(!candidates.length) return null;
-  // Prefer 6-7 chars (common), otherwise longest
-  const scored = candidates.map(s=>({s, score: (s.length===6||s.length===7)? 100+s.length : s.length}));
-  scored.sort((a,b)=>b.score-a.score);
-  return scored[0].s;
+
+  // Prefer 6-7 length, then 5/8, then others
+  const score = (s)=>{
+    if(s.length===6 || s.length===7) return 200 + s.length;
+    if(s.length===5) return 150;
+    if(s.length===8) return 140;
+    return 100 + s.length;
+  };
+  candidates.sort((a,b)=>score(b)-score(a));
+  return candidates[0];
 }
 
 async function _ocrPlateFromVideo(videoEl){
@@ -4358,18 +4388,36 @@ async function _ocrPlateFromVideo(videoEl){
 }
 
 async function startPlateScanner(){
+  // Auto plate scan (Canada + USA) with stability check
   openPlateScanModal();
   const viewport = document.getElementById('plateScanViewport');
   if(!viewport) throw new Error('Viewport plaque introuvable');
   viewport.innerHTML = '';
+
+  const statusEl = document.getElementById('plateScanStatus');
+  const lastEl = document.getElementById('plateScanLast');
+  const setStatus = (msg)=>{ if(statusEl) statusEl.textContent = msg; };
+  const setLast = (msg)=>{ if(lastEl) lastEl.textContent = msg; };
+
+  const wrap = document.createElement('div');
+  wrap.style.position = 'relative';
+  wrap.style.width = '100%';
+  wrap.style.height = '100%';
 
   const video = document.createElement('video');
   video.setAttribute('playsinline','');
   video.autoplay = true;
   video.muted = true;
   video.style.width = '100%';
+  video.style.height = '100%';
   video.style.borderRadius = '12px';
-  viewport.appendChild(video);
+
+  const frame = document.createElement('div');
+  frame.className = 'plate-frame state-none';
+
+  wrap.appendChild(video);
+  wrap.appendChild(frame);
+  viewport.appendChild(wrap);
 
   // Start camera
   _plateStream = await navigator.mediaDevices.getUserMedia({
@@ -4384,18 +4432,23 @@ async function startPlateScanner(){
   await new Promise(res=>{ video.onloadedmetadata = ()=>res(); });
   try{ await video.play(); }catch(e){ /* ignore */ }
 
-  // Wire buttons
   const btnClose = document.getElementById('btnClosePlateScan');
   if(btnClose) btnClose.onclick = ()=>closePlateScanModal();
 
-  // Torch toggle (best effort)
   const track = _plateStream.getVideoTracks && _plateStream.getVideoTracks()[0];
+
+  // Torch toggle (best effort) + auto night mode (default ON if supported)
   const torchBtn = document.getElementById('btnToggleTorchPlate');
   if(torchBtn){
     if(!_trackTorchSupported(track)){
       torchBtn.style.display = 'none';
     }else{
       torchBtn.style.display = '';
+      // Auto-enable torch by default for better OCR in garages (user can disable)
+      if(!_plateTorchOn){
+        const ok = await _setTrackTorch(track, true);
+        if(ok) _plateTorchOn = true;
+      }
       const render = ()=>{ torchBtn.textContent = _plateTorchOn ? 'Lampe ✅' : 'Lampe'; };
       render();
       torchBtn.onclick = async ()=>{
@@ -4406,7 +4459,7 @@ async function startPlateScanner(){
     }
   }
 
-  // OCR capture
+  // Manual capture fallback (runs OCR once)
   const btnOcr = document.getElementById('btnPlateOcr');
   if(btnOcr){
     btnOcr.onclick = async ()=>{
@@ -4418,7 +4471,6 @@ async function startPlateScanner(){
         const qs = document.getElementById('quickSearch');
         if(qs) qs.value = plate;
         closePlateScanModal();
-        // Auto-run search
         try{ runQuickSearch(); }catch(e){ /* ignore */ }
       }catch(err){
         console.error('[PLATE] OCR error', err);
@@ -4429,6 +4481,108 @@ async function startPlateScanner(){
       }
     };
   }
+
+  // Auto loop: OCR on a cropped center region for speed
+  let last = null;
+  let stableCount = 0;
+  let running = true;
+
+  const stopIfClosed = ()=>{
+    const m = document.getElementById('plateScanModal');
+    if(!m || m.style.display==='none'){
+      running = false;
+    }
+  };
+
+  const cropAndOcr = async ()=>{
+    stopIfClosed();
+    if(!running) return;
+
+    // Show searching state
+    frame.classList.remove('state-ok','state-none');
+    frame.classList.add('state-search');
+    setStatus('Recherche…');
+    try{
+      const w = video.videoWidth || 1280;
+      const h = video.videoHeight || 720;
+      if(w < 10 || h < 10) throw new Error('Caméra pas prête');
+
+      // Crop around center (plate likely in middle)
+      const cw = Math.floor(w * 0.75);
+      const ch = Math.floor(h * 0.30);
+      const sx = Math.floor((w - cw) / 2);
+      const sy = Math.floor((h - ch) / 2);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+
+      const T = await _ensureTesseract();
+      const { data } = await T.recognize(canvas, 'eng', {
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+      });
+      const plate = _extractPlateFromText(data && data.text);
+
+      if(!plate){
+        stableCount = 0;
+        last = null;
+        frame.classList.remove('state-ok','state-search');
+        frame.classList.add('state-none');
+        setStatus('Aucune plaque…');
+        setLast('—');
+        return;
+      }
+
+      setLast('Lu: ' + plate);
+
+      if(plate === last){
+        stableCount += 1;
+      }else{
+        last = plate;
+        stableCount = 1;
+      }
+
+      if(stableCount >= 2){
+        // Accept
+        frame.classList.remove('state-search','state-none');
+        frame.classList.add('state-ok');
+        setStatus('Plaque détectée ✅');
+        const qs = document.getElementById('quickSearch');
+        if(qs) qs.value = plate;
+        // Small delay so user sees green frame
+        setTimeout(()=>{
+          try{ closePlateScanModal(); }catch(e){ /* ignore */ }
+          try{ runQuickSearch(); }catch(e){ /* ignore */ }
+        }, 250);
+        running = false;
+      }else{
+        frame.classList.remove('state-ok','state-none');
+        frame.classList.add('state-search');
+        setStatus('Stabilisation…');
+      }
+
+    }catch(err){
+      console.warn('[PLATE] auto scan error', err);
+      frame.classList.remove('state-ok','state-search');
+      frame.classList.add('state-none');
+      setStatus('Erreur caméra/OCR…');
+    }
+  };
+
+  // Kick off loop: every ~900ms (Tesseract is heavy)
+  setStatus('Prêt…');
+  setLast('—');
+
+  const loop = async ()=>{
+    stopIfClosed();
+    if(!running) return;
+    await cropAndOcr();
+    // Schedule next tick
+    if(running) setTimeout(loop, 900);
+  };
+  loop();
 }
 
 async function _ocrVinFromViewport(){
