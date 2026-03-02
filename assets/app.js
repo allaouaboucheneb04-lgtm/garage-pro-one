@@ -2617,6 +2617,66 @@ async function deleteVehicle(id){
   await batch.commit();
 }
 
+
+// ===== Vehicle make/model helper (vPIC) =====
+const VPIC_BASE = "https://vpic.nhtsa.dot.gov/api";
+const MAKE_CACHE_KEY = "gpo_vpic_makes_v1";
+const MAKE_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+
+async function loadMakesIntoDatalist(datalistEl){
+  try{
+    if(!datalistEl) return;
+    datalistEl.innerHTML = "";
+    const now = Date.now();
+    let cached = null;
+    try{
+      cached = JSON.parse(localStorage.getItem(MAKE_CACHE_KEY) || "null");
+    }catch(e){ cached = null; }
+    let makes = (cached && cached.makes && (now - cached.ts) < MAKE_CACHE_TTL_MS) ? cached.makes : null;
+
+    if(!makes){
+      const res = await fetch(`${VPIC_BASE}/vehicles/getallmakes?format=json`, { headers: { "Accept": "application/json" } });
+      const data = await res.json();
+      makes = (data && data.Results) ? data.Results.map(x=>x.Make_Name).filter(Boolean) : [];
+      makes = [...new Set(makes)].sort((a,b)=>a.localeCompare(b));
+      try{ localStorage.setItem(MAKE_CACHE_KEY, JSON.stringify({ts: now, makes})); }catch(e){}
+    }
+    datalistEl.innerHTML = makes.map(m=>`<option value="${safe(m)}"></option>`).join("");
+  }catch(e){
+    // silent (offline, blocked, etc.)
+  }
+}
+
+async function loadModelsIntoDatalist(makeName, datalistEl, hintEl){
+  try{
+    if(!datalistEl) return;
+    datalistEl.innerHTML = "";
+    if(hintEl) hintEl.textContent = makeName ? "Chargement des modèles..." : "Choisis d’abord une marque pour voir les modèles.";
+    if(!makeName){ return; }
+
+    // cache per make (1 month)
+    const key = `gpo_vpic_models_${String(makeName||"").toLowerCase()}`;
+    const ttl = MAKE_CACHE_TTL_MS;
+    const now = Date.now();
+    let cached = null;
+    try{ cached = JSON.parse(localStorage.getItem(key) || "null"); }catch(e){ cached = null; }
+    let models = (cached && cached.models && (now - cached.ts) < ttl) ? cached.models : null;
+
+    if(!models){
+      const url = `${VPIC_BASE}/vehicles/getmodelsformake/${encodeURIComponent(makeName)}?format=json`;
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      const data = await res.json();
+      models = (data && data.Results) ? data.Results.map(x=>x.Model_Name).filter(Boolean) : [];
+      models = [...new Set(models)].sort((a,b)=>a.localeCompare(b));
+      try{ localStorage.setItem(key, JSON.stringify({ts: now, models})); }catch(e){}
+    }
+    datalistEl.innerHTML = models.map(m=>`<option value="${safe(m)}"></option>`).join("");
+    if(hintEl) hintEl.textContent = models.length ? "Sélectionne un modèle (liste automatique)." : "Aucun modèle trouvé pour cette marque.";
+  }catch(e){
+    if(hintEl) hintEl.textContent = "Impossible de charger les modèles (hors ligne ?).";
+  }
+}
+
 function openVehicleForm(vehicleId=null, customerId=null){
   const editing = !!vehicleId;
   const v = editing ? vehicles.find(x=>x.id===vehicleId) : {
@@ -2634,9 +2694,13 @@ function openVehicleForm(vehicleId=null, customerId=null){
     <form class="form" id="vehicleForm">
       <div id="vehicleError" class="alert" style="display:none"></div>
       <label>Marque *</label>
-      <input name="make" value="${safe(v.make||"")}" required />
+      <input name="make" list="makeList" autocomplete="off" value="${safe(v.make||"")}" required />
+      <datalist id="makeList"></datalist>
+      <div class="muted" style="margin-top:4px">Commence à taper (liste automatique des marques).</div>
       <label>Modèle *</label>
-      <input name="model" value="${safe(v.model||"")}" required />
+      <input name="model" list="modelList" autocomplete="off" value="${safe(v.model||"")}" required />
+      <datalist id="modelList"></datalist>
+      <div id="modelHint" class="muted" style="margin-top:4px">Choisis d’abord une marque pour voir les modèles.</div>
       <label>Année</label>
       <input name="year" inputmode="numeric" value="${safe(v.year||"")}" />
       <label>Plaque (recherche)</label>
@@ -2706,6 +2770,31 @@ function openVehicleForm(vehicleId=null, customerId=null){
     }
   };
   $("bodyType").addEventListener("change", toggleSeats);
+
+  // Make/Model lists (vPIC)
+  const vf = $("vehicleForm");
+  const makeInput = vf.querySelector('input[name="make"]');
+  const modelInput = vf.querySelector('input[name="model"]');
+  const makeList = $("makeList");
+  const modelList = $("modelList");
+  const modelHint = $("modelHint");
+  loadMakesIntoDatalist(makeList);
+  // preload models if editing
+  loadModelsIntoDatalist(makeInput.value, modelList, modelHint);
+
+  let lastMake = (makeInput.value||"").trim();
+  const onMakeChanged = async ()=>{
+    const mk = (makeInput.value||"").trim();
+    if(mk && mk !== lastMake){
+      // reset model when make changes
+      if(modelInput) modelInput.value = "";
+    }
+    lastMake = mk;
+    await loadModelsIntoDatalist(mk, modelList, modelHint);
+  };
+  makeInput.addEventListener("change", onMakeChanged);
+  makeInput.addEventListener("blur", onMakeChanged);
+
   toggleSeats();
 
   $("vehicleForm").onsubmit = async (e)=>{
