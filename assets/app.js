@@ -17,7 +17,8 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from ""https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
 
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
@@ -2310,6 +2311,9 @@ function renderSettings(){
   $("setTps").value = (settings.tpsRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setTvq").value = (settings.tvqRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setCardFee").value = (Number(settings.cardFeeRate||0)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
+
+  // historique
+  loadLogs().catch(()=>{});
 }
 
 /* Export / Import */
@@ -3375,6 +3379,7 @@ function genInviteCode(){
 async function createInvite(){
   const email = String(document.getElementById("empInviteEmail")?.value||"").trim().toLowerCase();
   const role = String(document.getElementById("empInviteRole")?.value||"mechanic").trim();
+  window.currentRole = role;
   if(!email || !email.includes("@")){
     alert("Email invalide");
     return;
@@ -3388,6 +3393,7 @@ async function createInvite(){
     createdAt: serverTimestamp(),
     createdBy: auth.currentUser?.uid || ""
   });
+  await logEvent("invite_created",{code,email,role});
   await copyText(code);
   alert("Invitation créée ✅
 Code: " + code + "
@@ -3553,11 +3559,13 @@ async function loadStaff(){
 
 async function setStaffRole(uid, role){
   await updateDoc(doc(db,"staff",uid), { role, updatedAt: serverTimestamp() });
+  await logEvent("staff_role_changed",{targetUid: uid, role});
   await loadStaff();
 }
 
 async function setStaffDisabled(uid, disabled){
   await updateDoc(doc(db,"staff",uid), { disabled, updatedAt: serverTimestamp() });
+  await logEvent("staff_disabled_changed",{targetUid: uid, disabled});
   await loadStaff();
 }
 
@@ -3629,6 +3637,7 @@ async function sendInviteEmail(code, email, role){
     message: { subject, html },
     createdAt: serverTimestamp()
   });
+  await logEvent("invite_email_sent",{code,email,role,link});
   alert("Email envoyé ✅");
 }
 
@@ -3682,3 +3691,100 @@ function applyInviteFromHash(){
 }
 window.addEventListener("hashchange", ()=>applyInviteFromHash());
 document.addEventListener("DOMContentLoaded", ()=>applyInviteFromHash());
+
+async function logEvent(type, data){
+  try{
+    if(!auth.currentUser) return;
+    await addDoc(collection(db,"logs"), {
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email || "",
+      type: String(type||""),
+      data: data || {},
+      createdAt: serverTimestamp()
+    });
+  }catch(e){
+    // silent (ne bloque jamais l'app)
+    console.warn("logEvent failed", e);
+  }
+}
+
+function labelLogType(t){
+  const m = {
+    invite_created: "Invitation créée",
+    invite_email_sent: "Invitation email envoyé",
+    account_created: "Compte créé",
+    staff_role_changed: "Rôle changé",
+    staff_disabled_changed: "Statut employé",
+    workorder_status: "Statut réparation",
+    invoice_saved: "Facture sauvegardée"
+  };
+  return m[t] || t || "—";
+}
+
+async function loadLogs(){
+  const box = document.getElementById("logsBox");
+  const tbody = document.getElementById("logsTbody");
+  if(!tbody) return;
+
+  // show box when logged in
+  if(box) box.style.display = "";
+
+  tbody.innerHTML = '<tr><td class="muted" colspan="4">Chargement...</td></tr>';
+
+  try{
+    const typeFilter = String(document.getElementById("logsFilterType")?.value||"");
+    let q = query(collection(db,"logs"), orderBy("createdAt","desc"), limit(80));
+
+    // If not admin, Firestore rules will already restrict reads to own logs,
+    // but we also filter client-side by uid for efficiency.
+    if(window.currentRole && window.currentRole !== "admin" && auth.currentUser){
+      q = query(collection(db,"logs"),
+        where("uid","==",auth.currentUser.uid),
+        orderBy("createdAt","desc"),
+        limit(80)
+      );
+    }
+    const snap = await getDocs(q);
+    const rows = [];
+    snap.forEach(d=>{
+      const x = d.data()||{};
+      if(typeFilter && x.type !== typeFilter) return;
+      rows.push({
+        createdAt: x.createdAt?.toDate ? x.createdAt.toDate() : null,
+        email: x.email || "",
+        type: x.type || "",
+        data: x.data || {}
+      });
+    });
+
+    if(rows.length===0){
+      tbody.innerHTML = '<tr><td class="muted" colspan="4">Aucun log.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(r=>{
+      const dt = r.createdAt ? r.createdAt.toLocaleString() : "—";
+      const details = safe(JSON.stringify(r.data || {}));
+      return `<tr>
+        <td class="muted">${safe(dt)}</td>
+        <td>${safe(r.email)}</td>
+        <td><b>${safe(labelLogType(r.type))}</b></td>
+        <td><code style="white-space:pre-wrap">${details}</code></td>
+      </tr>`;
+    }).join("");
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = '<tr><td class="muted" colspan="4">Erreur chargement logs.</td></tr>';
+  }
+}
+
+function wireLogsUI(){
+  const btn = document.getElementById("btnRefreshLogs");
+  if(btn) btn.onclick = ()=>loadLogs().catch(()=>{});
+  const sel = document.getElementById("logsFilterType");
+  if(sel) sel.onchange = ()=>loadLogs().catch(()=>{});
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  wireLogsUI();
+});

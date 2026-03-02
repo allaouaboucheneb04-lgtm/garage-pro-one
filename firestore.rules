@@ -94,6 +94,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    
+    // LOGS (audit)
+    match /logs/{id} {
+      // Admin lit tout; mécanicien lit seulement ses logs
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+
+      // Tout user connecté peut créer SON log
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+
+      // Admin peut gérer
+      allow update, delete: if isAdmin();
+    }
+
     match /mail/{id} {
       allow read, create, update, delete: if isAdmin();
     }

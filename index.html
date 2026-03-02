@@ -781,6 +781,42 @@
 </div>
 
 
+
+<div style="margin-top:12px" class="box" id="logsBox" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+    <h3 style="margin:0">Historique</h3>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="input" id="logsFilterType" style="max-width:220px">
+        <option value="">Tous</option>
+        <option value="invite_created">Invitation créée</option>
+        <option value="invite_email_sent">Invitation email envoyé</option>
+        <option value="account_created">Compte créé</option>
+        <option value="staff_role_changed">Rôle changé</option>
+        <option value="staff_disabled_changed">Statut employé</option>
+        <option value="workorder_status">Statut réparation</option>
+        <option value="invoice_saved">Facture sauvegardée</option>
+      </select>
+      <button class="btn btn-ghost btn-small" id="btnRefreshLogs">Rafraîchir</button>
+    </div>
+  </div>
+  <small class="muted">Admin voit tout. Mécanicien voit seulement ses actions.</small>
+  <div style="overflow:auto;margin-top:10px">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Employé</th>
+          <th>Action</th>
+          <th>Détails</th>
+        </tr>
+      </thead>
+      <tbody id="logsTbody">
+        <tr><td class="muted" colspan="4">Aucun log.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
 </input></form>
