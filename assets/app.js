@@ -1,3 +1,6 @@
+console.log('🚀 App starting...');
+console.log('🔥 window.firebaseConfig:', window.firebaseConfig);
+
 
 // ===== Helper: normalizeEmail (added fix) =====
 function normalizeEmail(data){
@@ -3707,3 +3710,21 @@ function wireEmployeesUI(){
 }
 
 document.addEventListener("DOMContentLoaded", ()=>wireEmployeesUI());
+
+try{
+  onAuthStateChanged(auth, (u)=>{
+    console.log("👤 Auth state:", u ? {uid:u.uid,email:u.email} : null);
+  });
+}catch(e){
+  console.warn("Auth debug hook failed", e);
+}
+
+function explainFirebaseError(e){
+  const msg = (e && (e.message||e.code||e)) + "";
+  if(msg.includes("permission-denied") || msg.includes("Missing or insufficient permissions")){
+    console.error("🚫 Firestore permissions: vérifie les règles + ton compte admin/staff.");
+  }
+}
+window.addEventListener("unhandledrejection", (ev)=>{
+  try{ explainFirebaseError(ev.reason); }catch(_){}
+});
