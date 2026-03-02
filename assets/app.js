@@ -2848,7 +2848,7 @@ function openWorkorderForm(vehicleId){
           <label>Assigné à (mécanicien)</label>
           <select name="assignedTo">
             <option value="">— Non assigné —</option>
-            ${mechanics.map(m=>`<option value="${m.uid}" ${wo?.assignedTo===m.uid ? "selected":""}>${safe(m.name)}</option>`).join("")}
+            ${mechanics.map(m=>`<option value="${m.uid}">${safe(m.name)}</option>`).join("")}
           </select>
         </div>
       </div>
