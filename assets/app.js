@@ -338,6 +338,8 @@ modalBody.addEventListener("click", async (e)=>{
       await window.__printWorkorder(btn.dataset.id);
     }else if(act==="setWoStatus"){
       await window.__setWoStatus(btn.dataset.id, btn.dataset.status);
+    }else if(act==="editWoInvoice"){
+      await window.__editWorkorderInvoice(btn.dataset.id);
     }else if(act==="deleteWo"){
       await window.__deleteWo(btn.dataset.id);
     }
@@ -4406,6 +4408,7 @@ function openWorkorderView(workorderId){
       </div>
       <div class="row">
         <button type="button" class="btn btn-small" data-act="printWo" data-id="${wo.id}">Imprimer / PDF</button>
+        <button type="button" class="btn btn-small btn-ghost" data-act="editWoInvoice" data-id="${wo.id}">Modifier facture</button>
         ${wo.status!=="EN_COURS" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="EN_COURS">Démarrer</button>` : ``}
         ${wo.status!=="TERMINE" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="TERMINE">Terminer</button>` : `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="OUVERT">Rouvrir</button>`}
         ${currentRole==="admin" ? `<button type="button" class="btn btn-small btn-danger" data-act="deleteWo" data-id="${wo.id}">Supprimer</button>` : ``}
@@ -4450,6 +4453,57 @@ function openWorkorderView(workorderId){
 }
 window.__setWoStatus = async (id, next)=>{ await setWorkorderStatus(id, next); closeModal(); try{ toast("Statut mis à jour ✅"); }catch(e){} };
 window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
+
+window.__editWorkorderInvoice = async (workorderId)=>{
+  const wo = workorders.find(w=>w.id===workorderId);
+  if(!wo){ alert("Réparation introuvable."); return; }
+
+  // Ferme la fenêtre de réparation puis va aux Factures
+  try{ closeModal(); }catch(e){}
+  try{ go("invoices"); }catch(e){}
+
+  // Ouvre le formulaire Facture
+  openInvoiceForm(true);
+
+  // Trouve la facture liée à cette réparation
+  const inv = invoices.find(i=>i.workorderId === workorderId);
+
+  // Prépare les champs
+  const v = getVehicle(wo.vehicleId);
+  const customerId = v?.customerId || "";
+  if(invCustomerEl) invCustomerEl.value = (inv?.customerId || customerId || "");
+  invDateEl.value = inv ? isoDate(inv.date instanceof Date ? inv.date : inv.date.toDate()) : todayISO();
+  if(invPayMethodEl) invPayMethodEl.value = (inv?.paymentMethod || wo.paymentMethod || "cash").toLowerCase();
+  if(invEmailEl){
+    const c = v ? getCustomer(v.customerId) : null;
+    invEmailEl.value = inv?.customerEmail || c?.email || "";
+  }
+  if(invWorkorderEl) invWorkorderEl.value = workorderId;
+
+  // Mode édition ou création
+  editingInvoiceId = inv ? inv.id : null;
+
+  // Remplit les lignes
+  invItemsTbody.innerHTML = "";
+  if(inv && Array.isArray(inv.items) && inv.items.length){
+    inv.items.forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
+  }else if(Array.isArray(wo.items) && wo.items.length){
+    // Convertit les lignes de réparation -> facture
+    wo.items.forEach(it=>{
+      const desc = it.desc || "";
+      const qty = Number(it.qty||1);
+      const price = Number(it.unit||0);
+      const cost = Number(it.cost||0);
+      ensureInvoiceLine(desc, qty, cost, price);
+    });
+  }else{
+    ensureInvoiceLine();
+  }
+
+  // Totaux
+  recalcInvoiceTotals();
+  try{ toast(inv ? "Facture ouverte en modification ✅" : "Facture prête à créer ✅"); }catch(e){}
+};
 
 /* Print */
 window.__printWorkorder = async (workorderId)=>{
