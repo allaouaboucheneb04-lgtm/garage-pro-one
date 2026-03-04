@@ -994,58 +994,174 @@
 </div>
 
 <!-- DEBUG CONSOLE (mobile) -->
-<div id="debugConsole"
-     style="
-       position:fixed;
-       bottom:0;
-       left:0;
-       right:0;
-       max-height:40%;
-       overflow:auto;
-       background:#000;
-       color:#0f0;
-       font-size:12px;
-       padding:8px;
-       z-index:99999;
-       font-family:monospace;
-       display:none;">
+<div id="debugConsole" style="
+  position:fixed;
+  left:10px;
+  right:10px;
+  bottom:10px;
+  max-height:45vh;
+  background:rgba(0,0,0,0.92);
+  color:#e6e6e6;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;
+  font-size:12px;
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:10px;
+  z-index:999999;
+  overflow:hidden;
+  box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  display:none;">
+  <div style="
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:8px 10px;
+    border-bottom:1px solid rgba(255,255,255,0.12);
+    background:rgba(255,255,255,0.06);
+  ">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <strong>Debug</strong>
+      <span id="debugCount" style="opacity:0.8;">0</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button id="debugToggle" type="button" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;">Réduire</button>
+      <button id="debugClear" type="button" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;">Effacer</button>
+      <button id="debugCopy" type="button" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;">Copier</button>
+    </div>
+  </div>
+  <div id="debugLines" style="
+    padding:10px;
+    overflow:auto;
+    max-height: calc(45vh - 46px);
+    white-space: pre-wrap;
+    word-break: break-word;
+  "></div>
 </div>
 
 <script>
 (function () {
-  const box = document.getElementById("debugConsole");
+  const root = document.getElementById("debugConsole");
+  const linesBox = document.getElementById("debugLines");
+  const countBox = document.getElementById("debugCount");
+  const btnToggle = document.getElementById("debugToggle");
+  const btnClear = document.getElementById("debugClear");
+  const btnCopy = document.getElementById("debugCopy");
+
+  let lineCount = 0;
+  let collapsed = false;
+  const buffer = [];
+  const MAX_LINES = 400;
+
+  function ts(){
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    const ss = String(d.getSeconds()).padStart(2,'0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
   function safeStr(v){
     try{
       if (typeof v === "string") return v;
-      if (v instanceof Error) return (v.name + ": " + v.message);
+      if (v instanceof Error) return (v.name + ": " + v.message + (v.stack ? "\n" + v.stack : ""));
       return JSON.stringify(v);
-    }catch(e){ return String(v); }
+    }catch(e){
+      return String(v);
+    }
   }
-  function logToScreen(type, args) {
-    box.style.display = "block";
-    const line = document.createElement("div");
-    line.textContent =
-      "[" + type + "] " +
-      Array.from(args).map(safeStr).join(" ");
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
+
+  function show(){
+    if (!root) return;
+    root.style.display = "block";
+  }
+
+  function renderLine(text, type){
+    show();
+    const div = document.createElement("div");
+    div.textContent = text;
+    if (type === "ERROR" || type === "JS ERROR") div.style.color = "#ff6b6b";
+    else if (type === "WARN") div.style.color = "#ffd166";
+    else div.style.color = "#e6e6e6";
+    linesBox.appendChild(div);
+    linesBox.scrollTop = linesBox.scrollHeight;
+  }
+
+  function trimIfNeeded(){
+    while (linesBox.childNodes.length > MAX_LINES) {
+      linesBox.removeChild(linesBox.firstChild);
+    }
+  }
+
+  function logToScreen(type, args){
+    const msg = `[${ts()} ${type}] ` + Array.from(args).map(safeStr).join(" ");
+    buffer.push(msg);
+    lineCount++;
+    if (countBox) countBox.textContent = String(lineCount);
+
+    if (!collapsed) {
+      renderLine(msg, type);
+      trimIfNeeded();
+    } else {
+      show();
+    }
+  }
+
+  if (btnToggle) {
+    btnToggle.addEventListener("click", function(){
+      collapsed = !collapsed;
+      btnToggle.textContent = collapsed ? "Ouvrir" : "Réduire";
+      linesBox.style.display = collapsed ? "none" : "block";
+      if (!collapsed) {
+        linesBox.innerHTML = "";
+        buffer.slice(Math.max(0, buffer.length - MAX_LINES)).forEach((t) => {
+          const div = document.createElement("div");
+          div.textContent = t;
+          if (t.includes(" ERROR] ") || t.includes(" JS ERROR] ")) div.style.color = "#ff6b6b";
+          else if (t.includes(" WARN] ")) div.style.color = "#ffd166";
+          else div.style.color = "#e6e6e6";
+          linesBox.appendChild(div);
+        });
+        linesBox.scrollTop = linesBox.scrollHeight;
+      }
+    });
+  }
+
+  if (btnClear) {
+    btnClear.addEventListener("click", function(){
+      buffer.length = 0;
+      lineCount = 0;
+      if (countBox) countBox.textContent = "0";
+      linesBox.innerHTML = "";
+      show();
+    });
+  }
+
+  if (btnCopy) {
+    btnCopy.addEventListener("click", async function(){
+      try {
+        await navigator.clipboard.writeText(buffer.join("\n"));
+        logToScreen("LOG", ["Logs copiés ✅"]);
+      } catch (e) {
+        logToScreen("ERROR", ["Copie impossible:", e]);
+      }
+    });
   }
 
   const oldLog = console.log;
   const oldError = console.error;
   const oldWarn = console.warn;
 
-  console.log = function () {
+  console.log = function(){
     logToScreen("LOG", arguments);
     oldLog.apply(console, arguments);
   };
 
-  console.error = function () {
+  console.error = function(){
     logToScreen("ERROR", arguments);
     oldError.apply(console, arguments);
   };
 
-  console.warn = function () {
+  console.warn = function(){
     logToScreen("WARN", arguments);
     oldWarn.apply(console, arguments);
   };
