@@ -121,6 +121,12 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // DEPENSES PIECES (achats fournisseurs)
+    match /expenses_parts/{id} {
+      allow read: if signedIn() && isAdmin();
+      allow create, update, delete: if signedIn() && isAdmin();
+    }
+
     // meta/settings/counters
     match /meta/{id} {
       allow read: if signedIn();

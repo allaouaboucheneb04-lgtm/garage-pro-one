@@ -189,6 +189,7 @@ const views = {
   promotions: $("viewPromotions"),
   settings: $("viewSettings"),
   revenue: $("viewRevenue"),
+  partsExpenses: $("viewPartsExpenses"),
   invoices: $("viewInvoices"),
   fiscal: $("viewFiscal"),
 };
@@ -385,11 +386,11 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
-  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses")){
     view = "repairs";
   }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", invoices:"Factures pièces", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
 }
 document.querySelectorAll("[data-go]").forEach(btn=>{
@@ -470,12 +471,16 @@ let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate
 let promotions = [];
 let selectedPromotionId = null;
 
+// Dépenses pièces (achats)
+let partsExpenses = [];
+
 let unsubSettings = null;
 let unsubCustomers = null;
 let unsubVehicles = null;
 let unsubWorkorders = null;
 let unsubPromotions = null;
 let unsubInvoices = null;
+let unsubPartsExpenses = null;
 
 /* ============
    Auth UI
@@ -679,6 +684,21 @@ function subscribeAll(){
         showToast("Accès refusé: factures. Vérifie les rules /invoices et ton rôle admin.", 7000);
       }
     );
+
+    // Parts expenses (admin)
+    const pexQ = query(collection(db, "expenses_parts"), orderBy("date", "desc"), limit(2000));
+    unsubPartsExpenses = onSnapshot(
+      pexQ,
+      (snap)=>{
+        partsExpenses = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderPartsExpenses();
+        renderFiscal();
+      },
+      (err)=>{
+        console.error(err);
+        showToast("Accès refusé: dépenses pièces. Vérifie les rules /expenses_parts.", 7000);
+      }
+    );
   }
 
 }
@@ -690,9 +710,10 @@ function unsubscribeAll(){
   if(unsubWorkorders) try{unsubWorkorders();}catch(e){}
   if(unsubPromotions) try{unsubPromotions();}catch(e){}
   if(unsubInvoices) try{unsubInvoices();}catch(e){}
+  if(unsubPartsExpenses) try{unsubPartsExpenses();}catch(e){}
   if(unsubStaffLive) try{unsubStaffLive();}catch(e){}
   if(unsubInvitesLive) try{unsubInvitesLive();}catch(e){}
-  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = unsubInvoices = null;
+  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = unsubInvoices = unsubPartsExpenses = null;
   unsubStaffLive = unsubInvitesLive = null;
 }
 
@@ -1091,6 +1112,40 @@ const revByPayTbody = $("revByPayTbody");
 const revByDateTbody = $("revByDateTbody");
 const btnRevApply = $("btnRevApply");
 const btnRevExport = $("btnRevExport");
+
+/* ============
+   Parts expenses view
+=========== */
+const btnNewPartsExpense = $("btnNewPartsExpense");
+const btnPartsExpExport = $("btnPartsExpExport");
+const pexPresetEl = $("pexPreset");
+const pexFromEl = $("pexFrom");
+const pexToEl = $("pexTo");
+const pexPayFilterEl = $("pexPayFilter");
+const pexSubtotalEl = $("pexSubtotal");
+const pexTaxEl = $("pexTax");
+const pexTotalEl = $("pexTotal");
+const pexCountEl = $("pexCount");
+const pexTbody = $("pexTbody");
+
+/* ============
+   Fiscal view
+=========== */
+const fiscPresetEl = $("fiscPreset");
+const fiscFromEl = $("fiscFrom");
+const fiscToEl = $("fiscTo");
+const fiscPayFilterEl = $("fiscPayFilter");
+const fiscPurchasePayFilterEl = $("fiscPurchasePayFilter");
+const fiscRevenueEl = $("fiscRevenue");
+const fiscExpensesEl = $("fiscExpenses");
+const fiscProfitEl = $("fiscProfit");
+const fiscTaxCollectedEl = $("fiscTaxCollected");
+const fiscTaxPaidEl = $("fiscTaxPaid");
+const fiscTaxPayableEl = $("fiscTaxPayable");
+const fiscNetAfterTaxEl = $("fiscNetAfterTax");
+const fiscCountEl = $("fiscCount");
+const fiscTbody = $("fiscTbody");
+const btnFiscExportCsv = $("btnFiscExportCsv");
 
 /* ============
    Invoices (Parts) / Profit
@@ -2057,6 +2112,228 @@ function _endOfDay(d){
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999);
 }
 
+/* ============
+   Dépenses pièces (achats)
+=========== */
+function setPartsExpPreset(preset){
+  if(!pexFromEl || !pexToEl) return;
+  const now = new Date();
+  let from, to;
+  if(preset === "custom") return;
+  if(preset === "month"){
+    from = _startOfMonth(now);
+    to = _endOfDay(now);
+  }else if(preset === "3m"){
+    from = _startOfMonth(new Date(now.getFullYear(), now.getMonth()-2, 1));
+    to = _endOfDay(now);
+  }else if(preset === "6m"){
+    from = _startOfMonth(new Date(now.getFullYear(), now.getMonth()-5, 1));
+    to = _endOfDay(now);
+  }else if(preset === "12m"){
+    from = _startOfMonth(new Date(now.getFullYear(), now.getMonth()-11, 1));
+    to = _endOfDay(now);
+  }else{
+    from = _startOfMonth(now);
+    to = _endOfDay(now);
+  }
+  pexFromEl.value = isoDate(from);
+  pexToEl.value = isoDate(to);
+}
+
+function _partsExpDateAsDate(x){
+  if(!x) return new Date(0);
+  if(x.date) return new Date(String(x.date)+"T12:00:00");
+  if(x.createdAt && x.createdAt.toDate) return x.createdAt.toDate();
+  return new Date(0);
+}
+
+function filterPartsExpenses(){
+  const list = Array.isArray(partsExpenses) ? partsExpenses : [];
+  const preset = (pexPresetEl && pexPresetEl.value) ? String(pexPresetEl.value) : "month";
+  let from = pexFromEl && pexFromEl.value ? new Date(pexFromEl.value+"T00:00:00") : null;
+  let to = pexToEl && pexToEl.value ? new Date(pexToEl.value+"T23:59:59") : null;
+  if(!from || !to){
+    setPartsExpPreset(preset);
+    from = pexFromEl && pexFromEl.value ? new Date(pexFromEl.value+"T00:00:00") : null;
+    to = pexToEl && pexToEl.value ? new Date(pexToEl.value+"T23:59:59") : null;
+  }
+  const pay = pexPayFilterEl ? String(pexPayFilterEl.value||"").toLowerCase() : "";
+  return list.filter(x=>{
+    const d = _partsExpDateAsDate(x);
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    if(pay) return String(x.paymentMethod||"").toLowerCase() === pay;
+    return true;
+  });
+}
+
+function renderPartsExpenses(){
+  if(!$("viewPartsExpenses")) return;
+  if(currentRole !== "admin"){
+    if(pexTbody) pexTbody.innerHTML = '<tr><td class="muted" colspan="8">Accès réservé à l\'administrateur.</td></tr>';
+    if(pexSubtotalEl) pexSubtotalEl.textContent = money(0);
+    if(pexTaxEl) pexTaxEl.textContent = money(0);
+    if(pexTotalEl) pexTotalEl.textContent = money(0);
+    if(pexCountEl) pexCountEl.textContent = "0";
+    return;
+  }
+
+  const rows = filterPartsExpenses().sort((a,b)=> _partsExpDateAsDate(b) - _partsExpDateAsDate(a));
+
+  let subtotal=0, tax=0, total=0;
+  for(const x of rows){
+    subtotal += Number(x.subtotal||0);
+    tax += Number(x.taxTotal||0);
+    total += Number(x.total||0);
+  }
+  if(pexSubtotalEl) pexSubtotalEl.textContent = money(subtotal);
+  if(pexTaxEl) pexTaxEl.textContent = money(tax);
+  if(pexTotalEl) pexTotalEl.textContent = money(total);
+  if(pexCountEl) pexCountEl.textContent = String(rows.length);
+
+  if(!pexTbody) return;
+  if(rows.length===0){
+    pexTbody.innerHTML = '<tr><td class="muted" colspan="8">Aucune dépense.</td></tr>';
+    return;
+  }
+
+  pexTbody.innerHTML = rows.map(x=>{
+    const d = _partsExpDateAsDate(x);
+    const taxes = Number(x.taxTotal||0);
+    return `<tr>
+      <td>${isoDate(d)}</td>
+      <td>${safe(x.supplier||"")}</td>
+      <td>${safe(x.description||"")}</td>
+      <td>${safe(invPaymentLabel(x.paymentMethod))}</td>
+      <td style="text-align:right">${money(x.subtotal||0)}</td>
+      <td style="text-align:right">${money(taxes)}</td>
+      <td style="text-align:right"><b>${money(x.total||0)}</b></td>
+      <td class="no-print" style="white-space:nowrap">
+        <button class="btn btn-ghost btn-small" onclick="window.__editPartsExpense('${x.id}')">Modifier</button>
+        <button class="btn btn-ghost btn-small" onclick="window.__deletePartsExpense('${x.id}')">Supprimer</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function openPartsExpenseModal(existing){
+  if(currentRole !== "admin") return;
+  const x = existing || {};
+  const today = isoDate(new Date());
+  const html = `
+    <form class="form" id="formPartsExpense">
+      <label>Date</label>
+      <input class="input" name="date" type="date" required value="${safe(x.date || today)}" />
+
+      <label>Fournisseur</label>
+      <input class="input" name="supplier" placeholder="Ex: NAPA" value="${safe(x.supplier||"")}" />
+
+      <label>Description</label>
+      <input class="input" name="description" placeholder="Ex: Plaquettes + disques" value="${safe(x.description||"")}" />
+
+      <div class="row" style="gap:10px; flex-wrap:wrap">
+        <div style="flex:1; min-width:160px">
+          <label>Montant HT</label>
+          <input class="input" name="subtotal" type="number" step="0.01" required value="${Number(x.subtotal||0)}" />
+        </div>
+        <div style="flex:1; min-width:160px">
+          <label>Taxes (TPS+TVQ)</label>
+          <input class="input" name="taxTotal" type="number" step="0.01" required value="${Number(x.taxTotal||0)}" />
+        </div>
+        <div style="flex:1; min-width:160px">
+          <label>Total TTC</label>
+          <input class="input" name="total" type="number" step="0.01" required value="${Number(x.total||0)}" />
+        </div>
+      </div>
+
+      <label>Paiement</label>
+      <select class="input" name="paymentMethod">
+        ${["cash","card","etransfer","bank","cheque","other"].map(v=>{
+          const sel = String(x.paymentMethod||"")===v ? "selected" : "";
+          return `<option value="${v}" ${sel}>${invPaymentLabel(v)}</option>`;
+        }).join("")}
+      </select>
+
+      <div class="row" style="margin-top:12px; gap:10px">
+        <button class="btn btn-primary" type="submit">Enregistrer</button>
+        <button class="btn btn-ghost" type="button" data-modal-close>Annuler</button>
+      </div>
+    </form>
+    <small class="muted">Astuce: si tu veux, je peux ajouter TPS et TVQ séparés (2 champs) pour des rapports encore plus précis.</small>
+  `;
+
+  showModal(existing ? "Modifier dépense" : "Nouvelle dépense", html);
+
+  const form = modalBody.querySelector("#formPartsExpense");
+  if(!form) return;
+  form.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(form);
+    const data = {
+      date: String(fd.get("date")||"").trim(),
+      supplier: String(fd.get("supplier")||"").trim(),
+      description: String(fd.get("description")||"").trim(),
+      subtotal: Number(fd.get("subtotal")||0),
+      taxTotal: Number(fd.get("taxTotal")||0),
+      total: Number(fd.get("total")||0),
+      paymentMethod: String(fd.get("paymentMethod")||"other"),
+      updatedAt: serverTimestamp(),
+    };
+    if(!data.total) data.total = data.subtotal + data.taxTotal;
+    try{
+      if(existing && existing.id){
+        await updateDoc(doc(db, "expenses_parts", existing.id), data);
+      }else{
+        data.createdAt = serverTimestamp();
+        await addDoc(collection(db, "expenses_parts"), data);
+      }
+      closeModal();
+      showToast("Dépense enregistrée ✅");
+    }catch(err){
+      console.error(err);
+      showToast("Erreur dépense: "+(err.message||err), true);
+    }
+  });
+}
+
+window.__editPartsExpense = (id)=>{
+  const x = (Array.isArray(partsExpenses)?partsExpenses:[]).find(r=>r.id===id);
+  if(x) openPartsExpenseModal(x);
+};
+
+window.__deletePartsExpense = async (id)=>{
+  if(currentRole !== "admin") return;
+  if(!confirm("Supprimer cette dépense ?")) return;
+  try{
+    await deleteDoc(doc(db, "expenses_parts", id));
+    showToast("Supprimé ✅");
+  }catch(err){
+    console.error(err);
+    showToast("Erreur suppression: "+(err.message||err), true);
+  }
+};
+
+function exportPartsExpensesCSV(){
+  try{
+    if(currentRole !== "admin") return;
+    const rows = filterPartsExpenses().sort((a,b)=> _partsExpDateAsDate(a) - _partsExpDateAsDate(b));
+    const lines = [];
+    lines.push(["Date","Fournisseur","Description","Paiement","HT","Taxes","TTC"].join(","));
+    for(const x of rows){
+      const dt = isoDate(_partsExpDateAsDate(x));
+      const supplier = String(x.supplier||"").replaceAll('"','""');
+      const desc = String(x.description||"").replaceAll('"','""');
+      const pm = String(invPaymentLabel(x.paymentMethod)).replaceAll('"','""');
+      lines.push([dt, `"${supplier}"`, `"${desc}"`, `"${pm}"`, Number(x.subtotal||0), Number(x.taxTotal||0), Number(x.total||0)].join(","));
+    }
+    downloadText("depenses_pieces.csv", lines.join("\n"));
+    showToast("CSV exporté ✅");
+  }catch(err){
+    console.error(err);
+    showToast("Erreur export CSV dépenses: "+(err.message||err), true);
+  }
+}
+
 function setFiscalPreset(preset){
   if(!fiscFromEl || !fiscToEl) return;
   const now = new Date();
@@ -2131,17 +2408,41 @@ function renderFiscal(){
 
   const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(b) - invoiceDateAsDate(a));
 
-  let revenue=0, expenses=0, profit=0, taxCollected=0;
+  // Revenus (factures pièces)
+  let revenue = 0;
+  let taxCollected = 0;
   for(const inv of rows){
     const t = getInvoiceTotals(inv);
-    revenue += t.sell;
-    expenses += t.cost;
-    profit += t.profit;
+    revenue += Number(t.sell||0);
     taxCollected += _getInvoiceTaxCollected(inv);
   }
 
-  const rate = fiscPurchaseTaxRateEl ? Number(fiscPurchaseTaxRateEl.value||0) : 0.14975;
-  const taxPaid = (rate>0) ? (expenses * (rate/(1+rate))) : 0;
+  // Dépenses pièces (achats fournisseurs) — exactes
+  const purchasePay = fiscPurchasePayFilterEl ? String(fiscPurchasePayFilterEl.value||"").toLowerCase() : "";
+  const from = fiscFromEl && fiscFromEl.value ? new Date(fiscFromEl.value+"T00:00:00") : null;
+  const to = fiscToEl && fiscToEl.value ? new Date(fiscToEl.value+"T23:59:59") : null;
+  const purchases = (Array.isArray(partsExpenses) ? partsExpenses : []).filter(x=>{
+    const d = x?.date ? new Date(String(x.date)+"T12:00:00") : null;
+    if(d && from && d < from) return false;
+    if(d && to && d > to) return false;
+    if(purchasePay) return String(x.paymentMethod||"").toLowerCase() === purchasePay;
+    return true;
+  });
+
+  let purchasesSubtotal = 0;
+  let purchasesTax = 0;
+  let purchasesTotal = 0;
+  for(const p of purchases){
+    purchasesSubtotal += Number(p.subtotal||0);
+    purchasesTax += Number(p.taxTotal||0);
+    purchasesTotal += Number(p.total||0);
+  }
+
+  // Calculs fiscaux
+  const revenueHT = revenue - taxCollected;
+  const profit = revenueHT - purchasesSubtotal;
+  const expenses = purchasesTotal;
+  const taxPaid = purchasesTax;
   const taxPayable = taxCollected - taxPaid;
   const netAfterTax = profit - taxPayable;
 
@@ -2220,11 +2521,24 @@ if(revPresetEl && revFromEl && revToEl){
     });
   }
   if(fiscPayFilterEl) fiscPayFilterEl.addEventListener("change", ()=>renderFiscal());
-  if(fiscPurchaseTaxRateEl) fiscPurchaseTaxRateEl.addEventListener("change", ()=>renderFiscal());
+  if(fiscPurchasePayFilterEl) fiscPurchasePayFilterEl.addEventListener("change", ()=>renderFiscal());
   if(fiscFromEl) fiscFromEl.addEventListener("change", ()=>{ if(fiscPresetEl) fiscPresetEl.value="custom"; renderFiscal(); });
   if(fiscToEl) fiscToEl.addEventListener("change", ()=>{ if(fiscPresetEl) fiscPresetEl.value="custom"; renderFiscal(); });
   if(btnFiscExportCsv) btnFiscExportCsv.addEventListener("click", ()=>exportFiscalCSV());
-;
+
+  // Parts expenses filters
+  if(pexPresetEl && pexFromEl && pexToEl){
+    setPartsExpPreset(pexPresetEl.value || "month");
+    pexPresetEl.addEventListener("change", ()=>{
+      setPartsExpPreset(pexPresetEl.value);
+      renderPartsExpenses();
+    });
+  }
+  if(pexPayFilterEl) pexPayFilterEl.addEventListener("change", ()=>renderPartsExpenses());
+  if(pexFromEl) pexFromEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
+  if(pexToEl) pexToEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
+  if(btnNewPartsExpense) btnNewPartsExpense.addEventListener("click", ()=>openPartsExpenseModal(null));
+  if(btnPartsExpExport) btnPartsExpExport.addEventListener("click", ()=>exportPartsExpensesCSV());
 }
 
 // ===== Promo selection (clients) =====
