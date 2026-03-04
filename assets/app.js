@@ -1086,6 +1086,7 @@ const revTbody = $("revTbody");
 const revByPayTbody = $("revByPayTbody");
 const revByDateTbody = $("revByDateTbody");
 const btnRevApply = $("btnRevApply");
+const btnRevExport = $("btnRevExport");
 
 /* ============
    Invoices (Parts) / Profit
@@ -2002,6 +2003,47 @@ function renderRevenue(){
   }
 }
 
+function exportRevenueCSV(){
+  try{
+    if(currentRole !== "admin") return;
+    const rows = filterRevenueInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
+    const lines = [];
+    lines.push(["ref","date","client","repair","payment","total","partsCost","profit"].join(","));
+    for(const inv of rows){
+      const ref = String(inv.ref || "");
+      const date = invoiceDateKey(inv) || "";
+      const client = String(inv.customerName || "");
+      const repair = String(inv.workorderLabel || "");
+      const payment = invPaymentLabel(inv.paymentMethod || "");
+      const t = getInvoiceTotals(inv);
+      const row = [ref,date,client,repair,payment,
+        (t.sell||0).toFixed(2),
+        (t.cost||0).toFixed(2),
+        (t.profit||0).toFixed(2)
+      ].map(v=>{
+        const s=String(v).replace(/"/g,'""');
+        return `"${s}"`;
+      }).join(",");
+      lines.push(row);
+    }
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+    const name = "revenus_"+(revFromEl?.value||"")+"_to_"+(revToEl?.value||"")+".csv";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    showToast("CSV exporté ✅");
+  }catch(err){
+    console.error(err);
+    alert("Impossible d’exporter le CSV: " + (err?.message||err));
+  }
+}
+
 // init revenue controls
 if(revPresetEl && revFromEl && revToEl){
   setRevenuePreset(revPresetEl.value || "month");
@@ -2010,6 +2052,7 @@ if(revPresetEl && revFromEl && revToEl){
     renderRevenue();
   });
   if(btnRevApply) btnRevApply.addEventListener("click", ()=>renderRevenue());
+  if(btnRevExport) btnRevExport.addEventListener("click", ()=>exportRevenueCSV());
   if(revPayFilterEl) revPayFilterEl.addEventListener("change", ()=>renderRevenue());
 }
 
