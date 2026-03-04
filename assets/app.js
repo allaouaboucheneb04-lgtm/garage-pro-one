@@ -1677,7 +1677,7 @@ function renderInvoices(){
     return db - da;
   });
   if(list.length===0){
-    invListTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucune facture pour ce filtre.</td></tr>';
+    invListTbody.innerHTML = '<tr><td class="muted" colspan="11">Aucune facture pour ce filtre.</td></tr>';
     return;
   }
   invListTbody.innerHTML = list.map(inv=>{
@@ -1686,18 +1686,27 @@ function renderInvoices(){
     const ref = safe(inv.ref||"");
     const wo = safe(inv.workorderLabel||"");
     const cust = safe(inv.customerName||"");
-    const c = money(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
-    const s = money(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
-    const p = money(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
+    const sub = money(
+      (inv.totals?.subTotal ?? inv.totals?.subTotalHT ?? inv.totals?.sub ?? 0) ||
+      (Number(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0) - Number(inv.totals?.taxTotal ?? inv.totals?.tax ?? 0))
+    );
+    const tps = money(inv.totals?.tpsAmount ?? 0);
+    const tvq = money(inv.totals?.tvqAmount ?? 0);
+    const total = money(inv.totals?.grandTotal ?? inv.totals?.sell ?? 0);
+    const cost = money(inv.totals?.partsCost ?? inv.totals?.cost ?? 0);
+    const profit = money(inv.totals?.netProfit ?? inv.totals?.profit ?? 0);
     return `
       <tr>
         <td>${ds}</td>
         <td>${ref}</td>
         <td>${cust}</td>
         <td>${safe(invPaymentLabel(inv.paymentMethod))}</td>
-        <td style="text-align:right">${c}</td>
-        <td style="text-align:right">${s}</td>
-        <td style="text-align:right"><b>${p}</b></td>
+        <td style="text-align:right">${sub}</td>
+        <td style="text-align:right">${tps}</td>
+        <td style="text-align:right">${tvq}</td>
+        <td style="text-align:right">${total}</td>
+        <td style="text-align:right">${cost}</td>
+        <td style="text-align:right"><b>${profit}</b></td>
         <td class="no-print" style="text-align:right"><button class="btn btn-ghost" data-edit-inv="${inv.id}">Modifier</button> <button class="btn btn-ghost" data-del-inv="${inv.id}">Supprimer</button></td>
       </tr>
     `;
