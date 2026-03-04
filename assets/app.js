@@ -1,34 +1,20 @@
 
-// ===== Debug console (in-page) =====
-function debugLog(...args){
-  try {
-    const s = args.map(a => {
-      if (a instanceof Error) return a.stack || a.message;
-      if (typeof a === "object") return JSON.stringify(a);
-      return String(a);
-    }).join(" ");
-    window.__dbg?.append(s);
-  } catch(e) {}
+function debugLogWrapper(){
+  try{
+    if(window.debugLog){
+      const args=[...arguments].map(a=>typeof a==="object"?JSON.stringify(a):String(a)).join(" ");
+      window.debugLog(args);
+    }
+  }catch(e){}
 }
-
-["log","warn","error"].forEach((k)=>{
-  const old = console[k].bind(console);
-  console[k] = (...args) => {
-    old(...args);
-    debugLog(k.toUpperCase()+":", ...args);
-  };
+["log","warn","error"].forEach(k=>{
+ const old=console[k];
+ console[k]=function(){
+   old.apply(console,arguments);
+   debugLogWrapper(k.toUpperCase()+":",...arguments);
+ }
 });
-
-window.onerror = function(message, source, line, col, error){
-  debugLog("JS ERROR:", message, (source||"")+" :"+line+":"+col, error?.stack || "");
-};
-
-window.addEventListener("unhandledrejection", (event)=>{
-  debugLog("PROMISE ERROR:", event.reason?.message || event.reason);
-});
-
 console.log("App.js chargé ✅");
-// ===================================
 
 
 
@@ -3868,6 +3854,8 @@ function parseHashParams(){
 }
 
 async function registerWithInvite(fullName, code, email, password){
+  email = String(email||"").trim().toLowerCase();
+
   const invRef = doc(db,"invites",code);
   const invSnap = await getDoc(invRef);
   if(!invSnap.exists()) throw new Error("Code invitation invalide");
