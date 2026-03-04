@@ -39,6 +39,9 @@
 </div>
 <nav class="nav" id="navAuthed" style="display:none">
 <button class="btn btn-ghost" data-go="dashboard">Dashboard</button>
+
+<button class="btn btn-ghost" data-go="myHours" data-role="mechanic">Mes heures</button>
+<button class="btn btn-ghost" data-go="hoursAdmin" data-role="admin">Heures & Salaires</button>
 <button class="btn btn-ghost" data-go="clients">Clients</button>
 <button class="btn btn-ghost" data-go="repairs">Réparations</button>
 <button class="btn btn-ghost" data-go="notifications" data-role="admin">Notifications</button>
@@ -1177,6 +1180,122 @@
 </div>
 </section>
 </section>
+
+<!-- MY HOURS (MECHANIC) -->
+<section class="card" id="viewMyHours" style="display:none;">
+  <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <h2 style="margin:0">Mes heures</h2>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="btn" id="btnStartWork">Démarrer</button>
+      <button class="btn btn-danger" id="btnStopWork" disabled>Arrêter</button>
+    </div>
+  </div>
+  <div class="row" style="gap:12px;flex-wrap:wrap;margin-top:10px">
+    <div class="box" style="min-width:180px"><div class="muted">Aujourd’hui</div><div class="val" id="myHoursToday">—</div></div>
+    <div class="box" style="min-width:180px"><div class="muted">Cette semaine</div><div class="val" id="myHoursWeek">—</div></div>
+    <div class="box" style="min-width:180px"><div class="muted">Démarrages (aujourd’hui)</div><div class="val" id="myStartsToday">—</div></div>
+    <div class="box" style="min-width:240px"><div class="muted">Statut</div><div class="val" id="myWorkStatus">—</div></div>
+  </div>
+  <div class="note" style="margin-top:12px">
+    Tip: démarre quand tu commences à travailler et arrête pendant les pauses/fin de journée.
+  </div>
+
+  <h3 style="margin-top:18px">Historique</h3>
+  <div class="row" style="gap:10px;flex-wrap:wrap;align-items:end">
+    <div>
+      <label>Période</label>
+      <select id="myHoursRange">
+        <option value="month">Ce mois</option>
+        <option value="3m">3 mois</option>
+        <option value="6m">6 mois</option>
+        <option value="1y">1 année</option>
+        <option value="custom">Personnalisé</option>
+      </select>
+    </div>
+    <div>
+      <label>Du</label>
+      <input type="date" id="myHoursFrom"/>
+    </div>
+    <div>
+      <label>Au</label>
+      <input type="date" id="myHoursTo"/>
+    </div>
+    <button class="btn" id="btnMyHoursRefresh">Actualiser</button>
+  </div>
+
+  <div style="overflow:auto;margin-top:10px">
+    <table class="table">
+      <thead><tr><th>Date</th><th>Début</th><th>Fin</th><th>Durée</th></tr></thead>
+      <tbody id="myHoursTbody"><tr><td colspan="4" class="muted">—</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- HOURS ADMIN -->
+<section class="card" id="viewHoursAdmin" style="display:none;">
+  <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <h2 style="margin:0">Heures & Salaires</h2>
+    <button class="btn" id="btnExportPayrollCsv">Exporter CSV (paie)</button>
+  </div>
+
+  <div class="row" style="gap:10px;flex-wrap:wrap;align-items:end;margin-top:10px">
+    <div>
+      <label>Période</label>
+      <select id="hoursRange">
+        <option value="month">Ce mois</option>
+        <option value="3m">3 mois</option>
+        <option value="6m">6 mois</option>
+        <option value="1y">1 année</option>
+        <option value="custom">Personnalisé</option>
+      </select>
+    </div>
+    <div>
+      <label>Du</label>
+      <input type="date" id="hoursFrom"/>
+    </div>
+    <div>
+      <label>Au</label>
+      <input type="date" id="hoursTo"/>
+    </div>
+    <div>
+      <label>Paiement</label>
+      <select id="hoursPayFilter">
+        <option value="all">Tous</option>
+        <option value="cash">Cash</option>
+        <option value="interac">Interac</option>
+        <option value="card">Carte</option>
+      </select>
+    </div>
+    <button class="btn" id="btnHoursRefresh">Actualiser</button>
+  </div>
+
+  <div class="row" style="gap:12px;flex-wrap:wrap;margin-top:10px">
+    <div class="box" style="min-width:220px"><div class="muted">Revenus (TTC)</div><div class="val" id="admRevenueTotal">—</div></div>
+    <div class="box" style="min-width:220px"><div class="muted">Dépenses pièces (TTC)</div><div class="val" id="admPartsExpensesTotal">—</div></div>
+    <div class="box" style="min-width:220px"><div class="muted">Salaires</div><div class="val" id="admWagesTotal">—</div></div>
+    <div class="box" style="min-width:220px"><div class="muted">Profit (estim.)</div><div class="val" id="admProfitTotal">—</div></div>
+  </div>
+
+  <h3 style="margin-top:18px">Mécaniciens</h3>
+  <div style="overflow:auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Mécano</th>
+          <th>Heures</th>
+          <th>Démarrages</th>
+          <th>Taux ($/h)</th>
+          <th>Salaire</th>
+          <th>Limite jour (h)</th>
+          <th>Limite semaine (h)</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="hoursAdminTbody"><tr><td colspan="8" class="muted">—</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
 </main>
 <div id="toast" class="toast" style="display:none"></div>
 <footer class="footer no-print">
