@@ -687,6 +687,8 @@ const finByDayTbody = $("finByDayTbody");
 const chartSalesEl = $("chartSales");
 const chartNetEl = $("chartNet");
 const openRepairsTbody = $("openRepairsTbody");
+const unpaidRepairsCountEl = $("unpaidRepairsCount");
+const unpaidRepairsTbody = $("unpaidRepairsTbody");
 function getCustomer(id){ return customers.find(c=>c.id===id); }
 function getVehicle(id){ return vehicles.find(v=>v.id===id); }
 
@@ -736,7 +738,112 @@ function renderDashboard(){
       `;
     }).join("");
   }
+
+  // Unpaid repairs dashboard (per réparation)
+  renderUnpaidRepairsDashboard();
 }
+
+function _workorderIsPaid(w){
+  const st = (w && w.paymentStatus) ? String(w.paymentStatus) : "paid";
+  return st === "paid";
+}
+function _workorderAmountDue(w){
+  if(!w) return 0;
+  if(_workorderIsPaid(w)) return 0;
+  const due = (w.amountDue !== undefined && w.amountDue !== null) ? Number(w.amountDue) : Number(w.total||0);
+  return isFinite(due) ? due : 0;
+}
+
+async function __setWorkorderPaid(id, paid){
+  try{
+    const w = workorders.find(x=>x.id===id);
+    if(!w) return;
+    const total = Number(w.total||0);
+    await updateDoc(doc(colWorkorders(), id), {
+      paymentStatus: paid ? "paid" : "unpaid",
+      amountPaid: paid ? total : 0,
+      amountDue: paid ? 0 : total,
+      paidAt: paid ? serverTimestamp() : null,
+      updatedAt: serverTimestamp(),
+    });
+    showToast(paid ? "Réparation marquée Payée." : "Réparation marquée Non payée.");
+  }catch(e){
+    showToast("Erreur paiement. Vérifie tes droits Firestore.", true);
+  }
+}
+function __emailWorkorderPayment(id){
+  const w = workorders.find(x=>x.id===id);
+  if(!w) return;
+  const v = getVehicle(w.vehicleId);
+  const c = v ? getCustomer(v.customerId) : null;
+  const email = (c && c.email) ? String(c.email).trim() : "";
+  if(!email){
+    showToast("Ce client n'a pas d'email.", true);
+    return;
+  }
+  const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+  const due = _workorderAmountDue(w);
+  const subject = `Paiement réparation - Garage Pro One`;
+  const body =
+`Bonjour ${c?.fullName||""},
+
+Votre réparation (${veh}) est en attente de paiement.
+
+Montant dû: ${money(due)}
+
+Merci,
+Garage Pro One`;
+  window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+window.__setWorkorderPaid = __setWorkorderPaid;
+window.__emailWorkorderPayment = __emailWorkorderPayment;
+
+function renderUnpaidRepairsDashboard(){
+  try{
+    if(currentRole !== "admin") return;
+    if(!unpaidRepairsTbody || !unpaidRepairsCountEl) return;
+
+    const list = [...workorders]
+      .filter(w=>!_workorderIsPaid(w) && _workorderAmountDue(w) > 0)
+      .sort(byCreatedDesc)
+      .slice(0, 50);
+
+    unpaidRepairsCountEl.textContent = `${list.length} non payé(s)`;
+
+    if(list.length===0){
+      unpaidRepairsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucune réparation non payée.</td></tr>';
+      return;
+    }
+
+    unpaidRepairsTbody.innerHTML = list.map(w=>{
+      const v = getVehicle(w.vehicleId);
+      const c = v ? getCustomer(v.customerId) : null;
+      const client = c ? c.fullName : "—";
+      const emailOk = c && c.email;
+      const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+      const d = String(w.createdAt||"").slice(0,10);
+      const due = _workorderAmountDue(w);
+      return `
+        <tr>
+          <td>${safe(d)}</td>
+          <td>${safe(client)}</td>
+          <td>${safe(veh)}</td>
+          <td>${money(due)}</td>
+          <td><span class="pill pill-warn">Non payé</span></td>
+          <td class="nowrap">
+            <button class="btn btn-small" onclick="window.__setWorkorderPaid('${w.id}', true)">Marquer payé</button>
+            <button class="btn btn-small btn-ghost" ${emailOk?'':'disabled'} onclick="window.__emailWorkorderPayment('${w.id}')">Email</button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+  }catch(e){
+    // silent
+  }
+}
+
 
 function renderFinanceDashboard(){
   try{
