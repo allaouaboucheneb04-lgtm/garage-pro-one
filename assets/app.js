@@ -3836,8 +3836,6 @@ function parseHashParams(){
 }
 
 async function registerWithInvite(fullName, code, email, password){
-  email = String(email||"").trim().toLowerCase();
-
   const invRef = doc(db,"invites",code);
   const invSnap = await getDoc(invRef);
   if(!invSnap.exists()) throw new Error("Code invitation invalide");

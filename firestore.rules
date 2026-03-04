@@ -23,8 +23,8 @@ service cloud.firestore {
     function validInviteForStaff(code, email, roleStr) {
       return exists(inviteDoc(code))
         && get(inviteDoc(code)).data.used == false
-        && get(inviteDoc(code)).data.email == email
-        && get(inviteDoc(code)).data.role == roleStr;
+        && lower(get(inviteDoc(code)).data.email) == lower(email)
+        && lower(get(inviteDoc(code)).data.role) == lower(roleStr);
     }
 
     // USERS (optional profile; minimal)
