@@ -178,12 +178,6 @@ function applyRoleUI(){
     el.style.display = isAdmin ? "" : "none";
   });
 
-  const isMechRole = (currentRole === "mechanic");
-  document.querySelectorAll('[data-role="mechanic"]').forEach(el=>{
-    el.style.display = isMechRole ? "" : "none";
-  });
-
-
   // 2) fallback pour quelques ids (au cas où)
   const ids = ["btnNewClient","btnNewClient2","btnNewRepair","btnNewRepair2"];
   ids.forEach(id=>{ const el = $(id); if(el) el.style.display = isAdmin ? "" : "none"; });
@@ -229,38 +223,16 @@ const views = {
   partsExpenses: $("viewPartsExpenses"),
   invoices: $("viewInvoices"),
   fiscal: $("viewFiscal"),
-  myHours: $("viewMyHours"),
-  hoursAdmin: $("viewHoursAdmin"),
 };
 const pageTitle = $("pageTitle");
 
 function safe(s){ return String(s??"").replace(/[&<>"]/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
 function money(n){
   const x = Number(n||0);
-  return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2}) + " $";
 }
 
-function pad2
-function pad2(n){ return String(n).padStart(2,"0"); }
-function dateKey(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
-function startOfDayMs(d){ const x=new Date(d); x.setHours(0,0,0,0); return x.getTime(); }
-function endOfDayMs(d){ const x=new Date(d); x.setHours(23,59,59,999); return x.getTime(); }
-function startOfWeekMs(d){
-  const x=new Date(d); const day=(x.getDay()+6)%7; // lundi=0
-  x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x.getTime();
-}
-function minutesToHM(min){
-  const m=Math.max(0, Math.round(Number(min)||0));
-  const h=Math.floor(m/60); const r=m%60;
-  return h+"h"+pad2(r);
-}
-function msToTime(ms){
-  const d=new Date(ms);
-  return pad2(d.getHours())+":"+pad2(d.getMinutes());
-}
-
-// ---- Tax helpers
-
+// ---- Tax helpers (TPS/TVQ) ----
 function splitTaxTotal(taxTotal){
   const tps = Number(settings?.tpsRate ?? 0.05);
   const tvq = Number(settings?.tvqRate ?? 0.09975);
@@ -461,11 +433,11 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
-  if(currentRole === "mechanic" && (view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses" || view==="hoursAdmin" || view==="notifications")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses" || view==="notifications")){
     view = "repairs";
   }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres", myHours:"Mes heures", hoursAdmin:"Heures & Salaires"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
   try{ if(view==="notifications") renderNotifications(); }catch(e){}
 
@@ -499,11 +471,6 @@ function colInvoices(){
   if(DATA_MODE==="nested") return collection(db, "users", currentUid, "invoices");
   return collection(db, "invoices");
 }
-
-// Time tracking
-function colTimeSessions(){ return collection(db, "time_sessions"); }
-function colTimeAdjustments(){ return collection(db, "time_adjustments"); }
-function docTimeSettings(){ return doc(db, "meta", "time_settings"); }
 
 function colWorkorders(){
   if(DATA_MODE==="root") return collection(db, "workorders");
@@ -551,12 +518,6 @@ let invoices = [];
 let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"", garagePhone:"", garageEmail:"", signatureName:"" };
 
 let promotions = [];
-
-// ---- Time tracking state ----
-let timeSettings = { dailyLimitMin: 480, weeklyLimitMin: 2400 };
-let myOpenSessionId = null; // current mechanic open session doc id
-let mySessionsCache = [];   // cached sessions for current user
-let myAdjustmentsCache = [];
 let selectedPromotionId = null;
 
 // Dépenses pièces (achats)
@@ -682,28 +643,6 @@ function subscribeAll(){
         renderDashboard();
       }
     });
-
-
-    // Time settings (limits, default rates)
-    try{
-      onSnapshot(docTimeSettings(), (snap)=>{
-        if(snap.exists()){
-          const d = snap.data();
-          timeSettings = {
-            dailyLimitMin: Number(d.dailyLimitMin ?? d.defaultDailyLimitMin ?? 480),
-            weeklyLimitMin: Number(d.weeklyLimitMin ?? d.defaultWeeklyLimitMin ?? 2400),
-            perUserHourlyRate: d.perUserHourlyRate || {},
-            perUserDailyLimitMin: d.perUserDailyLimitMin || {},
-            perUserWeeklyLimitMin: d.perUserWeeklyLimitMin || {},
-          };
-        }else{
-          timeSettings = { dailyLimitMin: 480, weeklyLimitMin: 2400 };
-        }
-        // refresh hours views if open
-        try{ if(currentRole==="mechanic") renderMyHoursSummary(); }catch(e){}
-        try{ if(currentRole==="admin") renderHoursAdmin(); }catch(e){}
-      });
-    }catch(e){}
 
     // Promotions (admin only)
     unsubPromotions = onSnapshot(query(colPromotions(), orderBy("createdAt", "desc"), limit(200)), (snap)=>{
@@ -4648,28 +4587,7 @@ onAuthStateChanged(auth, async (user)=>{
       }
     });
 
-    
-    // time settings (limits + hourly rate). Readable by signed-in users.
-    try{
-      onSnapshot(docTimeSettings(), (snap)=>{
-        if(snap.exists()){
-          const d = snap.data();
-          timeSettings = {
-            dailyLimitMin: Number(d.dailyLimitMin ?? d.defaultDailyLimitMin ?? 480),
-            weeklyLimitMin: Number(d.weeklyLimitMin ?? d.defaultWeeklyLimitMin ?? 2400),
-            perUserHourlyRate: d.perUserHourlyRate || {},
-            perUserDailyLimitMin: d.perUserDailyLimitMin || {},
-            perUserWeeklyLimitMin: d.perUserWeeklyLimitMin || {},
-          };
-        }else{
-          timeSettings = { dailyLimitMin: 480, weeklyLimitMin: 2400 };
-        }
-        try{ if(currentRole==="mechanic") renderMyHoursSummary(); }catch(e){}
-        try{ if(currentRole==="admin") renderHoursAdmin(); }catch(e){}
-      });
-    }catch(e){}
-
-// settings/meta are admin-only (rules)
+    // settings/meta are admin-only (rules)
     if(currentRole === "admin"){
       if (currentRole === "admin") {
         await ensureSettingsDoc();
@@ -6210,498 +6128,3 @@ document.addEventListener('click', async (e)=>{
     btn.textContent = prev || 'Scanner';
   }
 });
-
-
-/* =========================================
-   Time tracking + Payroll (mechanic/admin)
-========================================= */
-
-function _getLimitDailyMin(uid){
-  const m = timeSettings?.perUserDailyLimitMin?.[uid];
-  return Number(m ?? timeSettings?.dailyLimitMin ?? 480);
-}
-function _getLimitWeeklyMin(uid){
-  const m = timeSettings?.perUserWeeklyLimitMin?.[uid];
-  return Number(m ?? timeSettings?.weeklyLimitMin ?? 2400);
-}
-function _getHourlyRate(uid){
-  const r = timeSettings?.perUserHourlyRate?.[uid];
-  return Number(r ?? 0);
-}
-
-async function findOpenSessionId(uid){
-  try{
-    const qs = await getDocs(query(colTimeSessions(),
-      where("uid","==",uid),
-      where("endedAtMs","==",null),
-      orderBy("startedAtMs","desc"),
-      limit(1)
-    ));
-    const d = qs.docs[0];
-    return d ? d.id : null;
-  }catch(e){
-    console.error("findOpenSessionId", e);
-    return null;
-  }
-}
-
-async function startWorkSession(){
-  if(!auth.currentUser) return;
-  const uid = auth.currentUser.uid;
-  if(myOpenSessionId){
-    showToast("Session déjà démarrée.", "error");
-    return;
-  }
-  const startedAtMs = Date.now();
-  try{
-    const ref = await addDoc(colTimeSessions(), {
-      uid,
-      startedAtMs,
-      endedAtMs: null,
-      durationMin: 0,
-      createdAt: serverTimestamp(),
-      source: "timer"
-    });
-    myOpenSessionId = ref.id;
-    showToast("Travail démarré ✅");
-    await renderMyHoursSummary();
-  }catch(e){
-    console.error(e);
-    showToast("Erreur démarrage: "+(e?.message||e), "error");
-  }
-}
-
-async function stopWorkSession(){
-  if(!auth.currentUser) return;
-  const uid = auth.currentUser.uid;
-  if(!myOpenSessionId){
-    // try to find in db
-    myOpenSessionId = await findOpenSessionId(uid);
-    if(!myOpenSessionId){
-      showToast("Aucune session en cours.", "error");
-      return;
-    }
-  }
-  try{
-    const snap = await getDoc(doc(db,"time_sessions", myOpenSessionId));
-    if(!snap.exists()){
-      myOpenSessionId = null;
-      showToast("Session introuvable.", "error");
-      return;
-    }
-    const s = snap.data();
-    const startMs = Number(s.startedAtMs||0);
-    const endMs = Date.now();
-    const durMin = Math.max(1, Math.round((endMs-startMs)/60000));
-    await updateDoc(doc(db,"time_sessions", myOpenSessionId), {
-      endedAtMs: endMs,
-      durationMin: durMin,
-      updatedAt: serverTimestamp()
-    });
-    myOpenSessionId = null;
-    showToast("Travail arrêté ✅");
-
-    // check limits -> notify admin via logs
-    try{
-      const totals = await computeUserTotals(uid, new Date());
-      const dailyLimit = _getLimitDailyMin(uid);
-      const weeklyLimit = _getLimitWeeklyMin(uid);
-
-      if(totals.todayMin > dailyLimit){
-        await addDoc(collection(db,"logs"), {
-          type: "TIME_LIMIT_EXCEEDED",
-          uid,
-          period: "daily",
-          limitMin: dailyLimit,
-          totalMin: totals.todayMin,
-          createdAt: serverTimestamp(),
-          seen: false
-        });
-      }
-      if(totals.weekMin > weeklyLimit){
-        await addDoc(collection(db,"logs"), {
-          type: "TIME_LIMIT_EXCEEDED",
-          uid,
-          period: "weekly",
-          limitMin: weeklyLimit,
-          totalMin: totals.weekMin,
-          createdAt: serverTimestamp(),
-          seen: false
-        });
-      }
-    }catch(e){ console.warn("limit check", e); }
-
-    await renderMyHoursSummary();
-  }catch(e){
-    console.error(e);
-    showToast("Erreur arrêt: "+(e?.message||e), "error");
-  }
-}
-
-function _rangeToMs(rangeKey, fromInput, toInput){
-  const now = new Date();
-  let startMs, endMs;
-  if(rangeKey==="month"){
-    const s = new Date(now.getFullYear(), now.getMonth(), 1);
-    const e = new Date(now.getFullYear(), now.getMonth()+1, 0);
-    startMs = startOfDayMs(s);
-    endMs = endOfDayMs(e);
-  }else if(rangeKey==="3m" || rangeKey==="6m" || rangeKey==="1y"){
-    const months = rangeKey==="3m"?3:rangeKey==="6m"?6:12;
-    const s = new Date(now.getFullYear(), now.getMonth()-months+1, 1);
-    startMs = startOfDayMs(s);
-    endMs = endOfDayMs(now);
-  }else{
-    const f = fromInput ? new Date(fromInput.value||dateKey(now)) : now;
-    const t = toInput ? new Date(toInput.value||dateKey(now)) : now;
-    startMs = startOfDayMs(f);
-    endMs = endOfDayMs(t);
-  }
-  return {startMs, endMs};
-}
-
-async function computeUserTotals(uid, whenDate){
-  const now = whenDate || new Date();
-  const todayStart = startOfDayMs(now);
-  const todayEnd = endOfDayMs(now);
-  const weekStart = startOfWeekMs(now);
-  const weekEnd = endOfDayMs(now);
-
-  let sessionsToday=[], sessionsWeek=[];
-  try{
-    const s1 = await getDocs(query(colTimeSessions(), where("uid","==",uid), where("startedAtMs",">=",todayStart), where("startedAtMs","<=",todayEnd), orderBy("startedAtMs","asc"), limit(500)));
-    sessionsToday = s1.docs.map(d=>d.data());
-  }catch(e){ console.warn(e); }
-  try{
-    const s2 = await getDocs(query(colTimeSessions(), where("uid","==",uid), where("startedAtMs",">=",weekStart), where("startedAtMs","<=",weekEnd), orderBy("startedAtMs","asc"), limit(1000)));
-    sessionsWeek = s2.docs.map(d=>d.data());
-  }catch(e){ console.warn(e); }
-
-  const todayMin = sessionsToday.reduce((a,s)=>a+Number(s.durationMin||0),0);
-  const weekMin = sessionsWeek.reduce((a,s)=>a+Number(s.durationMin||0),0);
-  const startsToday = sessionsToday.length;
-  return {todayMin, weekMin, startsToday};
-}
-
-async function renderMyHoursSummary(){
-  if(!$("myHoursToday")) return;
-  if(!auth.currentUser) return;
-  const uid = auth.currentUser.uid;
-
-  // open session check
-  myOpenSessionId = await findOpenSessionId(uid);
-  const totals = await computeUserTotals(uid, new Date());
-
-  $("myHoursToday").textContent = minutesToHM(totals.todayMin);
-  $("myHoursWeek").textContent = minutesToHM(totals.weekMin);
-  $("myStartsToday").textContent = String(totals.startsToday);
-  $("myWorkStatus").textContent = myOpenSessionId ? "En cours ⏱️" : "Arrêté";
-  const btnStart = $("btnStartWork");
-  const btnStop = $("btnStopWork");
-  if(btnStart && btnStop){
-    btnStart.disabled = !!myOpenSessionId;
-    btnStop.disabled = !myOpenSessionId;
-  }
-}
-
-async function renderMyHoursTable(){
-  const tbody = $("myHoursTbody");
-  if(!tbody || !auth.currentUser) return;
-  const uid = auth.currentUser.uid;
-  const range = $("myHoursRange")?.value || "month";
-  const {startMs, endMs} = _rangeToMs(range, $("myHoursFrom"), $("myHoursTo"));
-
-  tbody.innerHTML = '<tr><td colspan="4" class="muted">Chargement…</td></tr>';
-  try{
-    const snap = await getDocs(query(colTimeSessions(),
-      where("uid","==",uid),
-      where("startedAtMs",">=",startMs),
-      where("startedAtMs","<=",endMs),
-      orderBy("startedAtMs","desc"),
-      limit(500)
-    ));
-    const rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    if(rows.length===0){
-      tbody.innerHTML = '<tr><td colspan="4" class="muted">Aucune session.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map(r=>{
-      const d = new Date(Number(r.startedAtMs||0));
-      const date = dateKey(d);
-      const start = msToTime(Number(r.startedAtMs||0));
-      const end = r.endedAtMs ? msToTime(Number(r.endedAtMs)) : "—";
-      const dur = minutesToHM(Number(r.durationMin||0));
-      return `<tr><td>${date}</td><td>${start}</td><td>${end}</td><td>${dur}</td></tr>`;
-    }).join("");
-  }catch(e){
-    console.error(e);
-    tbody.innerHTML = '<tr><td colspan="4" class="muted">Erreur chargement.</td></tr>';
-  }
-}
-
-async function renderHoursAdmin(){
-  const tbody = $("hoursAdminTbody");
-  if(!tbody || currentRole!=="admin") return;
-
-  await loadMechanics();
-  const range = $("hoursRange")?.value || "month";
-  const {startMs, endMs} = _rangeToMs(range, $("hoursFrom"), $("hoursTo"));
-
-  tbody.innerHTML = '<tr><td colspan="8" class="muted">Chargement…</td></tr>';
-
-  // Sessions within range (all)
-  let sessions=[];
-  try{
-    const s = await getDocs(query(colTimeSessions(),
-      where("startedAtMs",">=",startMs),
-      where("startedAtMs","<=",endMs),
-      orderBy("startedAtMs","asc"),
-      limit(5000)
-    ));
-    sessions = s.docs.map(d=>d.data());
-  }catch(e){ console.error("sessions range", e); }
-
-  // adjustments within range
-  let adjs=[];
-  try{
-    const a = await getDocs(query(colTimeAdjustments(),
-      where("createdAtMs",">=",startMs),
-      where("createdAtMs","<=",endMs),
-      orderBy("createdAtMs","asc"),
-      limit(5000)
-    ));
-    adjs = a.docs.map(d=>d.data());
-  }catch(e){
-    // fallback: no index, try without range
-    try{
-      const a2 = await getDocs(query(colTimeAdjustments(), limit(2000)));
-      adjs = a2.docs.map(d=>d.data()).filter(x=>{
-        const ms = Number(x.createdAtMs||0);
-        return ms>=startMs && ms<=endMs;
-      });
-    }catch(e2){ console.warn(e2); }
-  }
-
-  const byUid = {};
-  sessions.forEach(s=>{
-    const uid = s.uid;
-    if(!uid) return;
-    if(!byUid[uid]) byUid[uid]={min:0, starts:0, adjMin:0};
-    byUid[uid].min += Number(s.durationMin||0);
-    byUid[uid].starts += 1;
-  });
-  adjs.forEach(a=>{
-    const uid=a.uid;
-    if(!uid) return;
-    if(!byUid[uid]) byUid[uid]={min:0, starts:0, adjMin:0};
-    byUid[uid].adjMin += Number(a.deltaMin||0);
-  });
-
-  // Revenue/expenses/profit for range (simple)
-  const payFilter = $("hoursPayFilter")?.value || "all";
-  const invs = invoices || [];
-  const partsExps = partsExpenses || [];
-  const inRangeInv = invs.filter(inv=>{
-    const ms = _docMs(inv.createdAtMs, inv.createdAt);
-    return ms>=startMs && ms<=endMs;
-  }).filter(inv=>{
-    if(payFilter==="all") return true;
-    return String(inv.paymentMethod||inv.payment||"").toLowerCase()===payFilter;
-  });
-  const revenue = inRangeInv.reduce((sum,inv)=>{
-    const g = Number(inv?.totals?.grandTotal ?? inv?.grandTotal ?? inv?.total ?? 0);
-    return sum + (isFinite(g)?g:0);
-  },0);
-
-  const inRangeExp = partsExps.filter(ex=>{
-    const ms = _docMs(ex.createdAtMs, ex.createdAt);
-    return ms>=startMs && ms<=endMs;
-  }).filter(ex=>{
-    if(payFilter==="all") return true;
-    return String(ex.paymentMethod||ex.payment||"").toLowerCase()===payFilter;
-  });
-  const expTotal = inRangeExp.reduce((sum,ex)=>{
-    const t = Number(ex.grandTotal ?? ex.total ?? ex.totalTTC ?? 0);
-    return sum + (isFinite(t)?t:0);
-  },0);
-
-  let wagesTotal=0;
-
-  const mechRows = mechanics.map(m=>{
-    const uid=m.uid;
-    const name=m.name||m.email||uid;
-    const totals = byUid[uid] || {min:0,starts:0,adjMin:0};
-    const totalMin = totals.min + totals.adjMin;
-    const hours = totalMin/60;
-    const rate = Number(m.hourlyRate ?? _getHourlyRate(uid) ?? 0);
-    const wage = hours * rate;
-    wagesTotal += wage;
-    const dailyLimitH = Number(m.dailyLimitMin ?? _getLimitDailyMin(uid))/60;
-    const weeklyLimitH = Number(m.weeklyLimitMin ?? _getLimitWeeklyMin(uid))/60;
-    return {uid,name,totalMin,starts:totals.starts,rate,wage,dailyLimitH,weeklyLimitH};
-  });
-
-  if(mechRows.length===0){
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Aucun mécanicien.</td></tr>';
-  }else{
-    tbody.innerHTML = mechRows.map(r=>{
-      return `<tr>
-        <td>${safe(r.name)}</td>
-        <td>${minutesToHM(r.totalMin)}</td>
-        <td>${r.starts}</td>
-        <td>${money(r.rate).replace(" $","")}</td>
-        <td>${money(r.wage)}</td>
-        <td>${r.dailyLimitH.toFixed(1)}</td>
-        <td>${r.weeklyLimitH.toFixed(1)}</td>
-        <td class="nowrap">
-          <button class="btn btn-small" onclick="window.__adjustHours('${r.uid}')">Ajuster</button>
-          <button class="btn btn-small" onclick="window.__editMechPay('${r.uid}')">Taux</button>
-        </td>
-      </tr>`;
-    }).join("");
-  }
-
-  const profit = revenue - expTotal - wagesTotal;
-  if($("admRevenueTotal")) $("admRevenueTotal").textContent = money(revenue);
-  if($("admPartsExpensesTotal")) $("admPartsExpensesTotal").textContent = money(expTotal);
-  if($("admWagesTotal")) $("admWagesTotal").textContent = money(wagesTotal);
-  if($("admProfitTotal")) $("admProfitTotal").textContent = money(profit);
-}
-
-function _docMs(msField, tsField){
-  const ms = Number(msField||0);
-  if(ms) return ms;
-  // tsField may be Firestore Timestamp-like
-  try{
-    if(tsField && typeof tsField.toMillis==="function") return tsField.toMillis();
-  }catch(e){}
-  // string fallback
-  try{
-    const s=String(tsField||"");
-    const d=new Date(s);
-    if(!isNaN(d.getTime())) return d.getTime();
-  }catch(e){}
-  return 0;
-}
-
-window.__adjustHours = async function(uid){
-  if(currentRole!=="admin") return;
-  const name = (mechanics.find(m=>m.uid===uid)?.name) || uid;
-  openModal("Ajuster heures — "+name, `
-    <div class="row" style="gap:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:180px">
-        <label>Minutes (+/-)</label>
-        <input id="adjMin" type="number" value="0"/>
-      </div>
-      <div style="flex:2;min-width:240px">
-        <label>Raison</label>
-        <input id="adjReason" placeholder="ex: pause, correction"/>
-      </div>
-    </div>
-    <div class="row" style="justify-content:flex-end;gap:10px;margin-top:12px">
-      <button class="btn" id="btnAdjSave">Enregistrer</button>
-      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-    </div>
-  `);
-  $("btnAdjSave").onclick = async ()=>{
-    const deltaMin = Number($("adjMin").value||0);
-    const reason = String($("adjReason").value||"");
-    try{
-      await addDoc(colTimeAdjustments(), {
-        uid,
-        deltaMin,
-        reason,
-        byAdminUid: auth.currentUser.uid,
-        createdAt: serverTimestamp(),
-        createdAtMs: Date.now()
-      });
-      await addDoc(collection(db,"logs"), { type:"TIME_ADJUSTMENT", uid, deltaMin, reason, createdAt: serverTimestamp(), seen:false });
-      showToast("Ajustement enregistré ✅");
-      closeModal();
-      renderHoursAdmin();
-    }catch(e){
-      console.error(e);
-      showToast("Erreur ajustement: "+(e?.message||e), "error");
-    }
-  };
-};
-
-window.__editMechPay = async function(uid){
-  if(currentRole!=="admin") return;
-  const mech = mechanics.find(m=>m.uid===uid) || {uid};
-  const name = mech.name || mech.email || uid;
-  openModal("Salaire — "+name, `
-    <div class="row" style="gap:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:180px">
-        <label>Taux horaire ($/h)</label>
-        <input id="rateH" type="number" value="${Number(mech.hourlyRate||0)}" step="0.01"/>
-      </div>
-      <div style="flex:1;min-width:180px">
-        <label>Limite jour (minutes)</label>
-        <input id="limDay" type="number" value="${Number(mech.dailyLimitMin||_getLimitDailyMin(uid))}"/>
-      </div>
-      <div style="flex:1;min-width:180px">
-        <label>Limite semaine (minutes)</label>
-        <input id="limWeek" type="number" value="${Number(mech.weeklyLimitMin||_getLimitWeeklyMin(uid))}"/>
-      </div>
-    </div>
-    <div class="row" style="justify-content:flex-end;gap:10px;margin-top:12px">
-      <button class="btn" id="btnPaySave">Enregistrer</button>
-      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-    </div>
-  `);
-  $("btnPaySave").onclick = async ()=>{
-    const hourlyRate = Number($("rateH").value||0);
-    const dailyLimitMin = Number($("limDay").value||480);
-    const weeklyLimitMin = Number($("limWeek").value||2400);
-    try{
-      await updateDoc(doc(db,"staff",uid), { hourlyRate, dailyLimitMin, weeklyLimitMin, updatedAt: serverTimestamp() });
-      showToast("Sauvegardé ✅");
-      closeModal();
-      renderHoursAdmin();
-    }catch(e){
-      console.error(e);
-      showToast("Erreur: "+(e?.message||e), "error");
-    }
-  };
-};
-
-function exportPayrollCsv(){
-  if(currentRole!=="admin") return;
-  const range = $("hoursRange")?.value || "month";
-  const {startMs, endMs} = _rangeToMs(range, $("hoursFrom"), $("hoursTo"));
-  const rows = [];
-  rows.push(["uid","name","minutes","hours","hourly_rate","wage"]);
-  document.querySelectorAll("#hoursAdminTbody tr").forEach(tr=>{
-    const tds=[...tr.querySelectorAll("td")].map(td=>td.innerText.trim());
-    if(tds.length<8) return;
-    const name=tds[0];
-    // we don't have uid in table, so compute from mechanics by name (best effort)
-    const mech=mechanics.find(m=> (m.name||m.email||m.uid)===name);
-    const uid=mech?mech.uid:"";
-    const mins = tds[1]; // hMM string
-    const rate = tds[3].replace("$","").trim();
-    const wage = tds[4].replace("$","").trim();
-    rows.push([uid,name,mins,"",rate,wage]);
-  });
-  const csv = rows.map(r=>r.map(x=>('"'+String(x).replace(/"/g,'""')+'"')).join(",")).join("\n");
-  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=`paie_${new Date(startMs).toISOString().slice(0,10)}_${new Date(endMs).toISOString().slice(0,10)}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-}
-
-function setupHoursUI(){
-  // mechanic
-  const b1=$("btnStartWork"); if(b1) b1.onclick=startWorkSession;
-  const b2=$("btnStopWork"); if(b2) b2.onclick=stopWorkSession;
-  const r1=$("btnMyHoursRefresh"); if(r1) r1.onclick=async()=>{ await renderMyHoursSummary(); await renderMyHoursTable(); };
-  const sel=$("myHoursRange"); if(sel) sel.onchange=()=>{ const isCustom = sel.value==="custom"; $("myHoursFrom").disabled=!isCustom; $("myHoursTo").disabled=!isCustom; };
-  // admin
-  const r2=$("btnHoursRefresh"); if(r2) r2.onclick=renderHoursAdmin;
-  const sel2=$("hoursRange"); if(sel2) sel2.onchange=()=>{ const isCustom=sel2.value==="custom"; $("hoursFrom").disabled=!isCustom; $("hoursTo").disabled=!isCustom; };
-  const exp=$("btnExportPayrollCsv"); if(exp) exp.onclick=exportPayrollCsv;
-}
-
-try{ setupHoursUI(); }catch(e){}
