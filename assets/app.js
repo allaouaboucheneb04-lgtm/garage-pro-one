@@ -201,6 +201,18 @@ function money(n){
   return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2}) + " $";
 }
 
+// ---- Tax helpers (TPS/TVQ) ----
+function splitTaxTotal(taxTotal){
+  const tps = Number(settings?.tpsRate ?? 0.05);
+  const tvq = Number(settings?.tvqRate ?? 0.09975);
+  const totalRate = tps + tvq;
+  const tt = Number(taxTotal||0);
+  if(!totalRate) return {tps:0, tvq:0};
+  const tpsAmt = tt * (tps/totalRate);
+  const tvqAmt = tt - tpsAmt;
+  return {tps: tpsAmt, tvq: tvqAmt};
+}
+
 function monthKey(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
@@ -1140,12 +1152,18 @@ const fiscRevenueEl = $("fiscRevenue");
 const fiscExpensesEl = $("fiscExpenses");
 const fiscProfitEl = $("fiscProfit");
 const fiscTaxCollectedEl = $("fiscTaxCollected");
+const fiscTPSCollectedEl = $("fiscTPSCollected");
+const fiscTVQCollectedEl = $("fiscTVQCollected");
 const fiscTaxPaidEl = $("fiscTaxPaid");
+const fiscTPSPaidEl = $("fiscTPSPaid");
+const fiscTVQPaidEl = $("fiscTVQPaid");
 const fiscTaxPayableEl = $("fiscTaxPayable");
 const fiscNetAfterTaxEl = $("fiscNetAfterTax");
 const fiscCountEl = $("fiscCount");
 const fiscTbody = $("fiscTbody");
 const btnFiscExportCsv = $("btnFiscExportCsv");
+const btnFiscExportComptable = $("btnFiscExportComptable");
+const btnFiscExportComptablePdf = $("btnFiscExportComptablePdf");
 
 /* ============
    Invoices (Parts) / Profit
@@ -1165,6 +1183,8 @@ const invHoursEl = $("invHours");
 const invLaborEl = $("invLabor");
 const invSubTotalEl = $("invSubTotal");
 const invTaxTotalEl = $("invTaxTotal");
+const invTpsTotalEl = $("invTpsTotal");
+const invTvqTotalEl = $("invTvqTotal");
 const invGrandTotalEl = $("invGrandTotal");
 const invCardFeeEl = $("invCardFee");
 const invNetProfitEl = $("invNetProfit");
@@ -1282,8 +1302,10 @@ function recalcInvoiceTotals(){
 
   const tps = Number(settings.tpsRate||0);
   const tvq = Number(settings.tvqRate||0);
-  const tax = subTotal * (tps + tvq);
-  const grandTotal = subTotal + tax;
+  const tpsAmount = subTotal * tps;
+  const tvqAmount = subTotal * tvq;
+  const taxTotal = tpsAmount + tvqAmount;
+  const grandTotal = subTotal + taxTotal;
 
   const isCard = (invPayMethodEl?.value || "") === "card";
   const cardFeeRate = Number(settings.cardFeeRate||0);
@@ -1294,7 +1316,9 @@ function recalcInvoiceTotals(){
 
   if(invCostTotalEl) invCostTotalEl.textContent = money(partsCost);
   if(invSubTotalEl) invSubTotalEl.textContent = money(subTotal);
-  if(invTaxTotalEl) invTaxTotalEl.textContent = money(tax);
+  if(invTpsTotalEl) invTpsTotalEl.textContent = money(tpsAmount);
+  if(invTvqTotalEl) invTvqTotalEl.textContent = money(tvqAmount);
+  if(invTaxTotalEl) invTaxTotalEl.textContent = money(taxTotal);
   if(invGrandTotalEl) invGrandTotalEl.textContent = money(grandTotal);
   if(invCardFeeEl) invCardFeeEl.textContent = money(cardFee);
   if(invNetProfitEl) invNetProfitEl.textContent = money(netProfit);
@@ -1440,11 +1464,15 @@ async function createInvoiceFromForm(e){
   const hours = Number(existing.hours||0);
   const labor = Number(existing.labor||0);
   const subTotal = sTot + labor;
-  const tax = subTotal * (Number(settings.tpsRate||0)+Number(settings.tvqRate||0));
-  const grandTotal = subTotal + tax;
+  const tpsRate = Number(settings.tpsRate||0);
+  const tvqRate = Number(settings.tvqRate||0);
+  const tpsAmount = subTotal * tpsRate;
+  const tvqAmount = subTotal * tvqRate;
+  const taxTotal = tpsAmount + tvqAmount;
+  const grandTotal = subTotal + taxTotal;
   const cardFee = (String(upd.paymentMethod||"").toLowerCase()==="card") ? (grandTotal*Number(settings.cardFeeRate||0)) : 0;
   const netProfit = subTotal - cTot - cardFee;
-  return { partsCost: cTot, partsSell: sTot, labor, subTotal, tax, grandTotal, cardFee, netProfit };
+  return { partsCost: cTot, partsSell: sTot, labor, subTotal, tpsAmount, tvqAmount, taxTotal, tax: taxTotal, grandTotal, cardFee, netProfit };
 })(),
             updatedAt: serverTimestamp(),
             updatedBy: currentUid,
@@ -1481,7 +1509,11 @@ async function createInvoiceFromForm(e){
   const hoursCalc = Math.max(0, Number(invHoursEl?.value || 0));
   const laborCalc = hoursCalc>0 ? (hoursCalc*Number(settings.laborRate||0)) : Math.max(0, Number(invLaborEl?.value || 0));
   const subCalc = sellTotal + laborCalc;
-  const taxCalc = subCalc * (Number(settings.tpsRate||0) + Number(settings.tvqRate||0));
+  const tpsRate = Number(settings.tpsRate||0);
+  const tvqRate = Number(settings.tvqRate||0);
+  const tpsCalc = subCalc * tpsRate;
+  const tvqCalc = subCalc * tvqRate;
+  const taxCalc = tpsCalc + tvqCalc;
   const grandCalc = subCalc + taxCalc;
   const cardCalc = ((invPayMethodEl?.value||"")==="card") ? (grandCalc*Number(settings.cardFeeRate||0)) : 0;
   const netCalc = subCalc - costTotal - cardCalc;
@@ -1506,6 +1538,9 @@ async function createInvoiceFromForm(e){
       partsSell: sellTotal,
       labor: laborCalc,
       subTotal: subCalc,
+      tpsAmount: tpsCalc,
+      tvqAmount: tvqCalc,
+      taxTotal: taxCalc,
       tax: taxCalc,
       grandTotal: grandCalc,
       cardFee: cardCalc,
@@ -2199,15 +2234,19 @@ function renderPartsExpenses(){
 
   pexTbody.innerHTML = rows.map(x=>{
     const d = _partsExpDateAsDate(x);
-    const taxes = Number(x.taxTotal||0);
+    const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
+    const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
+    const taxes = (x.tpsAmount!=null || x.tvqAmount!=null)?(tps+tvq):Number(x.taxTotal||0);
     return `<tr>
       <td>${isoDate(d)}</td>
       <td>${safe(x.supplier||"")}</td>
       <td>${safe(x.description||"")}</td>
       <td>${safe(invPaymentLabel(x.paymentMethod))}</td>
       <td style="text-align:right">${money(x.subtotal||0)}</td>
+      <td style="text-align:right">${money(tps)}</td>
+      <td style="text-align:right">${money(tvq)}</td>
       <td style="text-align:right">${money(taxes)}</td>
-      <td style="text-align:right"><b>${money(x.total||0)}</b></td>
+      <td style="text-align:right"><b>${money(x.total||0)}</b></td
       <td class="no-print" style="white-space:nowrap">
         <button class="btn btn-ghost btn-small" onclick="window.__editPartsExpense('${x.id}')">Modifier</button>
         <button class="btn btn-ghost btn-small" onclick="window.__deletePartsExpense('${x.id}')">Supprimer</button>
@@ -2237,8 +2276,12 @@ function openPartsExpenseModal(existing){
           <input class="input" name="subtotal" type="number" step="0.01" required value="${Number(x.subtotal||0)}" />
         </div>
         <div style="flex:1; min-width:160px">
-          <label>Taxes (TPS+TVQ)</label>
-          <input class="input" name="taxTotal" type="number" step="0.01" required value="${Number(x.taxTotal||0)}" />
+          <label>TPS (5%)</label>
+          <input class="input" name="tpsAmount" type="number" step="0.01" required value="${Number(x.tpsAmount!=null?x.tpsAmount:splitTaxTotal(Number(x.taxTotal||0)).tps)}" />
+        </div>
+        <div style="flex:1; min-width:160px">
+          <label>TVQ (9.975%)</label>
+          <input class="input" name="tvqAmount" type="number" step="0.01" required value="${Number(x.tvqAmount!=null?x.tvqAmount:splitTaxTotal(Number(x.taxTotal||0)).tvq)}" />
         </div>
         <div style="flex:1; min-width:160px">
           <label>Total TTC</label>
@@ -2274,7 +2317,9 @@ function openPartsExpenseModal(existing){
       supplier: String(fd.get("supplier")||"").trim(),
       description: String(fd.get("description")||"").trim(),
       subtotal: Number(fd.get("subtotal")||0),
-      taxTotal: Number(fd.get("taxTotal")||0),
+      tpsAmount: Number(fd.get("tpsAmount")||0),
+      tvqAmount: Number(fd.get("tvqAmount")||0),
+      taxTotal: (Number(fd.get("tpsAmount")||0) + Number(fd.get("tvqAmount")||0)),
       total: Number(fd.get("total")||0),
       paymentMethod: String(fd.get("paymentMethod")||"other"),
       updatedAt: serverTimestamp(),
@@ -2324,7 +2369,9 @@ function exportPartsExpensesCSV(){
       const supplier = String(x.supplier||"").replaceAll('"','""');
       const desc = String(x.description||"").replaceAll('"','""');
       const pm = String(invPaymentLabel(x.paymentMethod)).replaceAll('"','""');
-      lines.push([dt, `"${supplier}"`, `"${desc}"`, `"${pm}"`, Number(x.subtotal||0), Number(x.taxTotal||0), Number(x.total||0)].join(","));
+      const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
+      const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
+      lines.push([dt, `"${supplier}"`, `"${desc}"`, `"${pm}"`, Number(x.subtotal||0), tps, tvq, Number(x.taxTotal||0), Number(x.total||0)].join(","));
     }
     downloadText("depenses_pieces.csv", lines.join("\n"));
     showToast("CSV exporté ✅");
@@ -2366,6 +2413,20 @@ function _getInvoiceTaxCollected(inv){
   return Number(t.taxTotal ?? t.tax ?? t.taxes ?? 0);
 }
 
+function _getInvoiceTaxSplit(inv){
+  const t = inv?.totals || inv?.total || {};
+  const hasSplit = (t.tpsAmount != null) || (t.tvqAmount != null);
+  if(hasSplit){
+    const tps = Number(t.tpsAmount||0);
+    const tvq = Number(t.tvqAmount||0);
+    const total = Number(t.taxTotal != null ? t.taxTotal : (tps + tvq));
+    return { tps, tvq, total };
+  }
+  const total = Number(t.taxTotal ?? t.tax ?? t.taxes ?? 0);
+  const sp = splitTaxTotal(total);
+  return { tps: sp.tps, tvq: sp.tvq, total };
+}
+
 function filterFiscalInvoices(){
   const list = Array.isArray(invoices) ? invoices : [];
   const preset = (fiscPresetEl && fiscPresetEl.value) ? String(fiscPresetEl.value) : "month";
@@ -2399,7 +2460,11 @@ function renderFiscal(){
     if(fiscExpensesEl) fiscExpensesEl.textContent = money(0);
     if(fiscProfitEl) fiscProfitEl.textContent = money(0);
     if(fiscTaxCollectedEl) fiscTaxCollectedEl.textContent = money(0);
+    if(fiscTPSCollectedEl) fiscTPSCollectedEl.textContent = money(0);
+    if(fiscTVQCollectedEl) fiscTVQCollectedEl.textContent = money(0);
     if(fiscTaxPaidEl) fiscTaxPaidEl.textContent = money(0);
+    if(fiscTPSPaidEl) fiscTPSPaidEl.textContent = money(0);
+    if(fiscTVQPaidEl) fiscTVQPaidEl.textContent = money(0);
     if(fiscTaxPayableEl) fiscTaxPayableEl.textContent = money(0);
     if(fiscNetAfterTaxEl) fiscNetAfterTaxEl.textContent = money(0);
     if(fiscCountEl) fiscCountEl.textContent = "0";
@@ -2411,10 +2476,15 @@ function renderFiscal(){
   // Revenus (factures pièces)
   let revenue = 0;
   let taxCollected = 0;
+  let taxCollectedTPS = 0;
+  let taxCollectedTVQ = 0;
   for(const inv of rows){
     const t = getInvoiceTotals(inv);
     revenue += Number(t.sell||0);
-    taxCollected += _getInvoiceTaxCollected(inv);
+    const sp = _getInvoiceTaxSplit(inv);
+    taxCollected += sp.total;
+    taxCollectedTPS += sp.tps;
+    taxCollectedTVQ += sp.tvq;
   }
 
   // Dépenses pièces (achats fournisseurs) — exactes
@@ -2431,10 +2501,23 @@ function renderFiscal(){
 
   let purchasesSubtotal = 0;
   let purchasesTax = 0;
+  let purchasesTaxTPS = 0;
+  let purchasesTaxTVQ = 0;
   let purchasesTotal = 0;
   for(const p of purchases){
     purchasesSubtotal += Number(p.subtotal||0);
-    purchasesTax += Number(p.taxTotal||0);
+    const pTax = (p.tpsAmount!=null || p.tvqAmount!=null)
+      ? (Number(p.tpsAmount||0) + Number(p.tvqAmount||0))
+      : Number(p.taxTotal||0);
+    purchasesTax += pTax;
+    if(p.tpsAmount!=null || p.tvqAmount!=null){
+      purchasesTaxTPS += Number(p.tpsAmount||0);
+      purchasesTaxTVQ += Number(p.tvqAmount||0);
+    } else {
+      const sp = splitTaxTotal(pTax);
+      purchasesTaxTPS += sp.tps;
+      purchasesTaxTVQ += sp.tvq;
+    }
     purchasesTotal += Number(p.total||0);
   }
 
@@ -2450,7 +2533,11 @@ function renderFiscal(){
   if(fiscExpensesEl) fiscExpensesEl.textContent = money(expenses);
   if(fiscProfitEl) fiscProfitEl.textContent = money(profit);
   if(fiscTaxCollectedEl) fiscTaxCollectedEl.textContent = money(taxCollected);
+  if(fiscTPSCollectedEl) fiscTPSCollectedEl.textContent = money(taxCollectedTPS);
+  if(fiscTVQCollectedEl) fiscTVQCollectedEl.textContent = money(taxCollectedTVQ);
   if(fiscTaxPaidEl) fiscTaxPaidEl.textContent = money(taxPaid);
+  if(fiscTPSPaidEl) fiscTPSPaidEl.textContent = money(purchasesTaxTPS);
+  if(fiscTVQPaidEl) fiscTVQPaidEl.textContent = money(purchasesTaxTVQ);
   if(fiscTaxPayableEl) fiscTaxPayableEl.textContent = money(taxPayable);
   if(fiscNetAfterTaxEl) fiscNetAfterTaxEl.textContent = money(netAfterTax);
   if(fiscCountEl) fiscCountEl.textContent = String(rows.length);
@@ -2483,15 +2570,16 @@ function exportFiscalCSV(){
     if(currentRole !== "admin") return;
     const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
     const lines = [];
-    lines.push(["Date","Ref","Client","Paiement","Taxes","Total","Cout","Benefice"].join(","));
+    lines.push(["Date","Ref","Client","Paiement","SousTotal_HT","TPS","TVQ","Taxes_Total","Total_TTC","Cout_Pieces","Benefice_Net"].join(","));
     for(const inv of rows){
       const dt = isoDate(invoiceDateAsDate(inv));
       const ref = String(inv.ref||"").replaceAll('"','""');
       const client = String(inv.customerName||"").replaceAll('"','""');
       const pm = String(invPaymentLabel(inv.paymentMethod)).replaceAll('"','""');
       const t = getInvoiceTotals(inv);
-      const tax = _getInvoiceTaxCollected(inv);
-      lines.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, tax, t.sell, t.cost, t.profit].join(","));
+      const sp = _getInvoiceTaxSplit(inv);
+      const subHT = Number(inv.totals?.subTotal ?? 0);
+      lines.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, subHT, sp.tps, sp.tvq, sp.total, t.sell, t.cost, t.profit].join(","));
     }
     downloadText("infos_fiscaux.csv", lines.join("\n"));
   }catch(e){
@@ -2499,6 +2587,319 @@ function exportFiscalCSV(){
     showToast("Erreur export CSV fiscaux: "+(e.message||e), true);
   }
 }
+
+
+
+function exportComptableCSVs(){
+  try{
+    if(currentRole !== "admin") return;
+
+    // période / filtres venant de la page fiscaux
+    const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
+    const pay = fiscPayFilterEl ? String(fiscPayFilterEl.value||"").toLowerCase() : "";
+    const from = (fiscFromEl && fiscFromEl.value) ? new Date(fiscFromEl.value+"T00:00:00") : null;
+    const to = (fiscToEl && fiscToEl.value) ? new Date(fiscToEl.value+"T23:59:59") : null;
+
+    // --- VENTES (Factures)
+    const ventes = [];
+    ventes.push(["Date","Ref","Client","Paiement","SousTotal_HT","TPS","TVQ","Taxes_Total","Total_TTC","Cout_Pieces","Benefice_Net"].join(","));
+
+    let ventesTotalTTC=0, ventesSubHT=0, ventesTPS=0, ventesTVQ=0, ventesTaxes=0, ventesCout=0, ventesProfit=0;
+
+    for(const inv of rows){
+      if(pay && String(inv.paymentMethod||"").toLowerCase() !== pay) continue;
+
+      const dt = isoDate(invoiceDateAsDate(inv));
+      const ref = String(inv.ref||"").replaceAll('"','""');
+      const client = String(inv.customerName||"").replaceAll('"','""');
+      const pm = String(invPaymentLabel(inv.paymentMethod)).replaceAll('"','""');
+
+      const t = getInvoiceTotals(inv);
+      const sp = _getInvoiceTaxSplit(inv);
+      const subHT = Number(inv.totals?.subTotal ?? 0);
+
+      ventes.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, subHT, sp.tps, sp.tvq, sp.total, Number(t.sell||0), Number(t.cost||0), Number(t.profit||0)].join(","));
+
+      ventesTotalTTC += Number(t.sell||0);
+      ventesSubHT += subHT;
+      ventesTPS += sp.tps;
+      ventesTVQ += sp.tvq;
+      ventesTaxes += sp.total;
+      ventesCout += Number(t.cost||0);
+      ventesProfit += Number(t.profit||0);
+    }
+
+    // --- ACHATS (Dépenses pièces)
+    const achats = [];
+    achats.push(["Date","Fournisseur","Description","Paiement","SousTotal_HT","TPS","TVQ","Taxes_Total","Total_TTC"].join(","));
+
+    const purchases = (Array.isArray(partsExpenses) ? partsExpenses : []).filter(x=>{
+      const d = x?.date ? new Date(String(x.date)+"T12:00:00") : null;
+      if(d && from && d < from) return false;
+      if(d && to && d > to) return false;
+      if(pay) return String(x.paymentMethod||"").toLowerCase() === pay;
+      return true;
+    }).sort((a,b)=>{
+      const da = a?.date ? new Date(String(a.date)+"T12:00:00") : new Date(0);
+      const db = b?.date ? new Date(String(b.date)+"T12:00:00") : new Date(0);
+      return da - db;
+    });
+
+    let achatsTotalTTC=0, achatsSubHT=0, achatsTPS=0, achatsTVQ=0, achatsTaxes=0;
+
+    for(const x of purchases){
+      const dt = x?.date ? String(x.date) : "";
+      const supplier = String(x.supplier||"").replaceAll('"','""');
+      const desc = String(x.description||"").replaceAll('"','""');
+      const pm = String(invPaymentLabel(x.paymentMethod)).replaceAll('"','""');
+
+      const sub = Number(x.subtotal||0);
+      const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
+      const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
+      const taxes = Number(x.taxTotal!=null ? x.taxTotal : (tps+tvq));
+      const total = Number(x.total || (sub + taxes));
+
+      achats.push([dt, `"${supplier}"`, `"${desc}"`, `"${pm}"`, sub, tps, tvq, taxes, total].join(","));
+
+      achatsTotalTTC += total;
+      achatsSubHT += sub;
+      achatsTPS += tps;
+      achatsTVQ += tvq;
+      achatsTaxes += taxes;
+    }
+
+    // --- RÉSUMÉ
+    const resume = [];
+    const labelFrom = from ? isoDate(from) : "";
+    const labelTo = to ? isoDate(to) : "";
+    resume.push(["Periode_de","Periode_a","Filtre_paiement","Ventes_TTC","Ventes_HT","TPS_collectee","TVQ_collectee","Taxes_collectees","Achats_TTC","Achats_HT","TPS_payee","TVQ_payee","Taxes_payees","Taxes_a_payer_estimees","Benefice_net_estime"].join(","));
+    const taxesPayables = (ventesTaxes - achatsTaxes);
+    const beneficeNet = (ventesSubHT - achatsSubHT); // hors taxes
+    resume.push([labelFrom, labelTo, `"${(pay||"tous")}"`, ventesTotalTTC, ventesSubHT, ventesTPS, ventesTVQ, ventesTaxes, achatsTotalTTC, achatsSubHT, achatsTPS, achatsTVQ, achatsTaxes, taxesPayables, beneficeNet].join(","));
+
+    // Téléchargements
+    downloadText(`rapport_comptable_resume_${labelFrom}_au_${labelTo}.csv`, resume.join("\n"));
+    downloadText(`rapport_comptable_ventes_${labelFrom}_au_${labelTo}.csv`, ventes.join("\n"));
+    downloadText(`rapport_comptable_achats_pieces_${labelFrom}_au_${labelTo}.csv`, achats.join("\n"));
+
+    showToast("Rapport comptable exporté (3 CSV).");
+  }catch(e){
+    console.error(e);
+    showToast("Erreur rapport comptable: "+(e.message||e), true);
+  }
+}
+
+
+function exportComptablePDF(){
+  try{
+    if(currentRole !== "admin") return;
+
+    // Vérifier que jsPDF est chargé
+    const jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null;
+    if(!jsPDF){
+      showToast("PDF indisponible: jsPDF non chargé.", true);
+      return;
+    }
+
+    // période / filtres venant de la page fiscaux
+    const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
+    const pay = fiscPayFilterEl ? String(fiscPayFilterEl.value||"").toLowerCase() : "";
+    const from = (fiscFromEl && fiscFromEl.value) ? new Date(fiscFromEl.value+"T00:00:00") : null;
+    const to = (fiscToEl && fiscToEl.value) ? new Date(fiscToEl.value+"T23:59:59") : null;
+
+    const labelFrom = from ? isoDate(from) : "";
+    const labelTo = to ? isoDate(to) : "";
+    const payLabel = pay ? invPaymentLabel(pay) : "Tous";
+
+    // --- Totaux ventes
+    let ventesTotalTTC=0, ventesSubHT=0, ventesTPS=0, ventesTVQ=0, ventesTaxes=0, ventesCout=0, ventesProfit=0;
+    const ventesRows = [];
+
+    for(const inv of rows){
+      if(pay && String(inv.paymentMethod||"").toLowerCase() !== pay) continue;
+      const dt = isoDate(invoiceDateAsDate(inv));
+      const ref = String(inv.ref||"");
+      const client = String(inv.customerName||"");
+      const pm = invPaymentLabel(inv.paymentMethod);
+      const t = getInvoiceTotals(inv);
+      const sp = _getInvoiceTaxSplit(inv);
+      const subHT = Number(inv.totals?.subTotal ?? 0);
+
+      ventesRows.push([
+        dt, ref, client, pm,
+        money(subHT), money(sp.tps), money(sp.tvq), money(sp.total),
+        money(Number(t.sell||0)), money(Number(t.cost||0)), money(Number(t.profit||0))
+      ]);
+
+      ventesTotalTTC += Number(t.sell||0);
+      ventesSubHT += subHT;
+      ventesTPS += sp.tps;
+      ventesTVQ += sp.tvq;
+      ventesTaxes += sp.total;
+      ventesCout += Number(t.cost||0);
+      ventesProfit += Number(t.profit||0);
+    }
+
+    // --- Totaux achats pièces
+    const purchases = (Array.isArray(partsExpenses) ? partsExpenses : []).filter(x=>{
+      const d = x?.date ? new Date(String(x.date)+"T12:00:00") : null;
+      if(d && from && d < from) return false;
+      if(d && to && d > to) return false;
+      if(pay) return String(x.paymentMethod||"").toLowerCase() === pay;
+      return true;
+    }).sort((a,b)=>{
+      const da = a?.date ? new Date(String(a.date)+"T12:00:00") : new Date(0);
+      const db = b?.date ? new Date(String(b.date)+"T12:00:00") : new Date(0);
+      return da - db;
+    });
+
+    let achatsTotalTTC=0, achatsSubHT=0, achatsTPS=0, achatsTVQ=0, achatsTaxes=0;
+    const achatsRows = [];
+
+    for(const x of purchases){
+      const dt = x?.date ? String(x.date) : "";
+      const supplier = String(x.supplier||"");
+      const desc = String(x.description||"");
+      const pm = invPaymentLabel(x.paymentMethod);
+
+      const sub = Number(x.subtotal||0);
+      const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
+      const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
+      const taxes = Number(x.taxTotal!=null ? x.taxTotal : (tps+tvq));
+      const total = Number(x.total || (sub + taxes));
+
+      achatsRows.push([dt, supplier, desc, pm, money(sub), money(tps), money(tvq), money(taxes), money(total)]);
+
+      achatsTotalTTC += total;
+      achatsSubHT += sub;
+      achatsTPS += tps;
+      achatsTVQ += tvq;
+      achatsTaxes += taxes;
+    }
+
+    // Calculs principaux pour le comptable
+    const ventesHT = ventesTotalTTC - ventesTaxes;
+    const achatsHT = achatsTotalTTC - achatsTaxes;
+    const profitHT = ventesHT - achatsHT;
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 40;
+    let y = 48;
+
+    // Logo (optionnel)
+    try{
+      const logoEl = document.getElementById("logoImg");
+      if(logoEl && logoEl.complete){
+        // no-op: logo in DOM may be cross-origin blocked on github pages; fallback to text
+      }
+    }catch(e){}
+
+    doc.setFontSize(16);
+    doc.text("Rapport fiscal / comptable", margin, y);
+    y += 22;
+
+    doc.setFontSize(10);
+    doc.text(`Période: ${labelFrom || "-"}  →  ${labelTo || "-"}`, margin, y); y += 14;
+    doc.text(`Paiement: ${payLabel}`, margin, y); y += 14;
+    doc.text(`Généré: ${new Date().toLocaleString()}`, margin, y); y += 18;
+
+    doc.setFontSize(12);
+    doc.text("Résumé", margin, y); y += 10;
+
+    // Tableau résumé
+    const resumeBody = [
+      ["Ventes (TTC)", money(ventesTotalTTC)],
+      ["Ventes (HT)", money(ventesHT)],
+      ["TPS collectée", money(ventesTPS)],
+      ["TVQ collectée", money(ventesTVQ)],
+      ["Taxes collectées (TPS+TVQ)", money(ventesTaxes)],
+      ["Achats pièces (TTC)", money(achatsTotalTTC)],
+      ["Achats pièces (HT)", money(achatsHT)],
+      ["TPS payée (achats)", money(achatsTPS)],
+      ["TVQ payée (achats)", money(achatsTVQ)],
+      ["Taxes payées (achats)", money(achatsTaxes)],
+      ["Profit (HT)", money(profitHT)],
+    ];
+
+    doc.autoTable({
+      startY: y + 6,
+      head: [["Indicateur", "Montant"]],
+      body: resumeBody,
+      theme: "grid",
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [30, 30, 30] },
+      margin: { left: margin, right: margin },
+    });
+    y = doc.lastAutoTable.finalY + 20;
+
+    // Ventes détaillées
+    doc.setFontSize(12);
+    doc.text("Détails ventes (factures)", margin, y); y += 8;
+
+    doc.autoTable({
+      startY: y + 6,
+      head: [["Date","Réf","Client","Paiement","HT","TPS","TVQ","Taxes","TTC","Coût pièces","Profit"]],
+      body: ventesRows.map(r=>{
+        // HT recalculé depuis TTC et Taxes
+        const ttc = parseMoney(r[8]);
+        const taxes = parseMoney(r[7]);
+        const ht = money(ttc - taxes);
+        return [r[0], r[1], r[2], r[3], ht, r[5], r[6], r[7], r[8], r[9], r[10]];
+      }),
+      theme: "grid",
+      styles: { fontSize: 7, cellPadding: 3 },
+      headStyles: { fillColor: [30, 30, 30] },
+      margin: { left: margin, right: margin },
+      didDrawPage: function(data){
+        doc.setFontSize(8);
+        doc.text(`Rapport fiscal / comptable  •  ${labelFrom || "-"} → ${labelTo || "-"}`, margin, 20);
+        doc.text(`Page ${doc.getNumberOfPages()}`, pageW - margin, 20, { align: "right" });
+      }
+    });
+
+    // Achats détaillés
+    doc.addPage();
+    y = 48;
+    doc.setFontSize(12);
+    doc.text("Détails achats pièces", margin, y); y += 8;
+
+    doc.autoTable({
+      startY: y + 6,
+      head: [["Date","Fournisseur","Description","Paiement","HT","TPS","TVQ","Taxes","TTC"]],
+      body: achatsRows,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [30, 30, 30] },
+      margin: { left: margin, right: margin },
+      didDrawPage: function(data){
+        doc.setFontSize(8);
+        doc.text(`Rapport fiscal / comptable  •  ${labelFrom || "-"} → ${labelTo || "-"}`, margin, 20);
+        doc.text(`Page ${doc.getNumberOfPages()}`, pageW - margin, 20, { align: "right" });
+      }
+    });
+
+    const fname = `rapport_fiscal_comptable_${labelFrom || "debut"}_au_${labelTo || "fin"}.pdf`;
+    doc.save(fname);
+    showToast("Rapport comptable PDF généré.");
+  }catch(e){
+    console.error(e);
+    showToast("Erreur PDF: "+(e.message||e), true);
+  }
+}
+
+// Convertit "1 234,56 $" en nombre (fallback)
+function parseMoney(v){
+  try{
+    if(typeof v === "number") return v;
+    let s = String(v||"").replace(/\$/g,"").replace(/\s/g,"").replace(/,/g,".");
+    const n = Number(s);
+    return isNaN(n) ? 0 : n;
+  }catch(e){ return 0; }
+}
+
+
+
 
 
 // init revenue controls
@@ -2525,6 +2926,8 @@ if(revPresetEl && revFromEl && revToEl){
   if(fiscFromEl) fiscFromEl.addEventListener("change", ()=>{ if(fiscPresetEl) fiscPresetEl.value="custom"; renderFiscal(); });
   if(fiscToEl) fiscToEl.addEventListener("change", ()=>{ if(fiscPresetEl) fiscPresetEl.value="custom"; renderFiscal(); });
   if(btnFiscExportCsv) btnFiscExportCsv.addEventListener("click", ()=>exportFiscalCSV());
+  if(btnFiscExportComptable) btnFiscExportComptable.addEventListener("click", ()=>exportComptableCSVs());
+  if(btnFiscExportComptablePdf) btnFiscExportComptablePdf.addEventListener("click", ()=>exportComptablePDF());
 
   // Parts expenses filters
   if(pexPresetEl && pexFromEl && pexToEl){

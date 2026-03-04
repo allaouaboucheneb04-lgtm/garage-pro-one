@@ -494,6 +494,7 @@
     <div class="box">
       <div class="muted">Taxes collectées</div>
       <div class="val" id="fiscTaxCollected">—</div>
+      <div class="muted" style="font-size:12px">TPS: <span id="fiscTPSCollected">—</span> • TVQ: <span id="fiscTVQCollected">—</span></div>
       <div class="muted" style="font-size:12px">Basé sur totals.taxTotal</div>
     </div>
   </div>
@@ -502,6 +503,7 @@
     <div class="box">
       <div class="muted">Taxes sur achats</div>
       <div class="val" id="fiscTaxPaid">—</div>
+      <div class="muted" style="font-size:12px">TPS: <span id="fiscTPSPaid">—</span> • TVQ: <span id="fiscTVQPaid">—</span></div>
       <div class="muted" style="font-size:12px">Basé sur Dépenses pièces (TPS+TVQ)</div>
     </div>
     <div class="box">
@@ -525,6 +527,8 @@
     </div>
     <div class="row" style="gap:10px;flex-wrap:wrap">
       <button class="btn btn-ghost" id="btnFiscExportCsv">Exporter CSV</button>
+      <button class="btn" id="btnFiscExportComptable">Rapport comptable (CSV)</button>
+      <button class="btn btn-ghost" id="btnFiscExportComptablePdf">Rapport comptable (PDF)</button>
     </div>
   </div>
 
@@ -611,6 +615,8 @@
           <th>Description</th>
           <th>Paiement</th>
           <th style="text-align:right">HT</th>
+          <th style="text-align:right">TPS</th>
+          <th style="text-align:right">TVQ</th>
           <th style="text-align:right">Taxes</th>
           <th style="text-align:right">TTC</th>
           <th class="no-print">Actions</th>
@@ -734,6 +740,8 @@
         
         <div class="row" style="gap:16px; flex-wrap:wrap">
           <div class="muted">Sous-total: <b id="invSubTotal">$0.00</b></div>
+          <div class="muted">TPS: <b id="invTpsTotal">$0.00</b></div>
+          <div class="muted">TVQ: <b id="invTvqTotal">$0.00</b></div>
           <div class="muted">Taxes (TPS+TVQ): <b id="invTaxTotal">$0.00</b></div>
           <div class="muted">Total client: <b id="invGrandTotal">$0.00</b></div>
           <div class="muted">Frais carte: <b id="invCardFee">$0.00</b></div>
@@ -1270,6 +1278,8 @@
 </script>
 
 <script src="./assets/firebase-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script type="module" src="./assets/app.js"></script>
 
 <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
