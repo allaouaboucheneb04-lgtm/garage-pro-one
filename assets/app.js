@@ -1,20 +1,4 @@
 
-// ===== FIX helpers added =====
-function showToast(msg,time){
-  try{
-    console.log("TOAST:",msg);
-    alert(msg);
-  }catch(e){console.log(msg);}
-}
-let modalBody = document.getElementById("modalBody");
-if(!modalBody){
-  const m=document.createElement("div");
-  m.id="modalBody";
-  document.body.appendChild(m);
-  modalBody=m;
-}
-// ===== END FIX =====
-
 function debugLogWrapper(){
   try{
     if(window.debugLog){
@@ -46,6 +30,37 @@ function normalizeEmail(data){
   return String(v).trim().toLowerCase();
 }
 // ===== End helper =====
+
+
+// ===== UI helpers: showToast + showModal alias =====
+function showToast(message, duration=3500, type="info"){
+  try{
+    const msg = String(message ?? "");
+    const toast = document.createElement("div");
+    toast.textContent = msg;
+    toast.style.position="fixed";
+    toast.style.left="50%";
+    toast.style.bottom="84px";
+    toast.style.transform="translateX(-50%)";
+    toast.style.background = (type==="error") ? "#b71c1c" : "#1b5e20";
+    toast.style.color="#fff";
+    toast.style.padding="10px 14px";
+    toast.style.borderRadius="10px";
+    toast.style.fontSize="14px";
+    toast.style.zIndex="999999";
+    toast.style.maxWidth="92vw";
+    toast.style.textAlign="center";
+    toast.style.boxShadow="0 6px 18px rgba(0,0,0,.25)";
+    document.body.appendChild(toast);
+    setTimeout(()=>{ try{ toast.remove(); }catch(e){} }, Number(duration)||3500);
+  }catch(e){
+    try{ alert(message); }catch(e2){}
+  }
+}
+// showModal() is used across the codebase; keep it as an alias of openModal()
+function showModal(title, html){ openModal(title, html); }
+// ===== end UI helpers =====
+
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
@@ -338,10 +353,10 @@ modalBody.addEventListener("click", async (e)=>{
       await window.__printWorkorder(btn.dataset.id);
     }else if(act==="setWoStatus"){
       await window.__setWoStatus(btn.dataset.id, btn.dataset.status);
-    }else if(act==="editWoInvoice"){
-      await window.__editWorkorderInvoice(btn.dataset.id);
     }else if(act==="deleteWo"){
       await window.__deleteWo(btn.dataset.id);
+    }else if(act==="editInvoice"){
+      await window.__editInvoiceFromWorkorder(btn.dataset.id);
     }
   }catch(err){
 
@@ -363,6 +378,8 @@ function _handleModalAction(e){
         await window.__setWoStatus(btn.dataset.id, btn.dataset.status);
       }else if(act==="deleteWo"){
         await window.__deleteWo(btn.dataset.id);
+      }else if(act==="editInvoice"){
+        await window.__editInvoiceFromWorkorder(btn.dataset.id);
       }
     }catch(err){
 
@@ -4408,7 +4425,7 @@ function openWorkorderView(workorderId){
       </div>
       <div class="row">
         <button type="button" class="btn btn-small" data-act="printWo" data-id="${wo.id}">Imprimer / PDF</button>
-        <button type="button" class="btn btn-small btn-ghost" data-act="editWoInvoice" data-id="${wo.id}">Modifier facture</button>
+        ${currentRole==="admin" ? `<button type="button" class="btn btn-small btn-ghost" data-act="editInvoice" data-id="${wo.id}">Modifier facture</button>` : ``}
         ${wo.status!=="EN_COURS" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="EN_COURS">Démarrer</button>` : ``}
         ${wo.status!=="TERMINE" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="TERMINE">Terminer</button>` : `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="OUVERT">Rouvrir</button>`}
         ${currentRole==="admin" ? `<button type="button" class="btn btn-small btn-danger" data-act="deleteWo" data-id="${wo.id}">Supprimer</button>` : ``}
@@ -4453,57 +4470,6 @@ function openWorkorderView(workorderId){
 }
 window.__setWoStatus = async (id, next)=>{ await setWorkorderStatus(id, next); closeModal(); try{ toast("Statut mis à jour ✅"); }catch(e){} };
 window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
-
-window.__editWorkorderInvoice = async (workorderId)=>{
-  const wo = workorders.find(w=>w.id===workorderId);
-  if(!wo){ alert("Réparation introuvable."); return; }
-
-  // Ferme la fenêtre de réparation puis va aux Factures
-  try{ closeModal(); }catch(e){}
-  try{ go("invoices"); }catch(e){}
-
-  // Ouvre le formulaire Facture
-  openInvoiceForm(true);
-
-  // Trouve la facture liée à cette réparation
-  const inv = invoices.find(i=>i.workorderId === workorderId);
-
-  // Prépare les champs
-  const v = getVehicle(wo.vehicleId);
-  const customerId = v?.customerId || "";
-  if(invCustomerEl) invCustomerEl.value = (inv?.customerId || customerId || "");
-  invDateEl.value = inv ? isoDate(inv.date instanceof Date ? inv.date : inv.date.toDate()) : todayISO();
-  if(invPayMethodEl) invPayMethodEl.value = (inv?.paymentMethod || wo.paymentMethod || "cash").toLowerCase();
-  if(invEmailEl){
-    const c = v ? getCustomer(v.customerId) : null;
-    invEmailEl.value = inv?.customerEmail || c?.email || "";
-  }
-  if(invWorkorderEl) invWorkorderEl.value = workorderId;
-
-  // Mode édition ou création
-  editingInvoiceId = inv ? inv.id : null;
-
-  // Remplit les lignes
-  invItemsTbody.innerHTML = "";
-  if(inv && Array.isArray(inv.items) && inv.items.length){
-    inv.items.forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
-  }else if(Array.isArray(wo.items) && wo.items.length){
-    // Convertit les lignes de réparation -> facture
-    wo.items.forEach(it=>{
-      const desc = it.desc || "";
-      const qty = Number(it.qty||1);
-      const price = Number(it.unit||0);
-      const cost = Number(it.cost||0);
-      ensureInvoiceLine(desc, qty, cost, price);
-    });
-  }else{
-    ensureInvoiceLine();
-  }
-
-  // Totaux
-  recalcInvoiceTotals();
-  try{ toast(inv ? "Facture ouverte en modification ✅" : "Facture prête à créer ✅"); }catch(e){}
-};
 
 /* Print */
 window.__printWorkorder = async (workorderId)=>{
