@@ -433,12 +433,14 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
-  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses" || view==="notifications")){
     view = "repairs";
   }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
+  try{ if(view==="notifications") renderNotifications(); }catch(e){}
+
 }
 document.querySelectorAll("[data-go]").forEach(btn=>{
   btn.addEventListener("click", ()=>go(btn.getAttribute("data-go")));
@@ -4376,7 +4378,18 @@ function openWorkorderForm(vehicleId){
 
 async function setWorkorderStatus(id, status){
   const ref = doc(colWorkorders(), id);
-  await updateDoc(ref, { status, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid });
+  const payload = { status, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid, updatedByName: (profile && profile.fullName) ? profile.fullName : (auth?.currentUser?.email||"") };
+  if(currentRole==="mechanic"){
+    payload.needsAdminReview = true;
+    payload.lastEditedBy = currentUid;
+    payload.lastEditedByName = payload.updatedByName;
+  }
+  await updateDoc(ref, payload);
+  if(currentRole==="mechanic"){
+    await addLog("WORKORDER_STATUS", { workorderId: id, message: `Statut changé à ${status} par un mécanicien (${payload.updatedByName}).` });
+  }else{
+    await addLog("WORKORDER_STATUS", { workorderId: id, message: `Statut changé à ${status} par l'admin (${payload.updatedByName}).` });
+  }
 
   // Update local cache immediately (meilleure UX + évite impression "ça marche pas")
   const wo = workorders.find(w=>w.id===id);

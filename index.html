@@ -41,6 +41,7 @@
 <button class="btn btn-ghost" data-go="dashboard">Dashboard</button>
 <button class="btn btn-ghost" data-go="clients">Clients</button>
 <button class="btn btn-ghost" data-go="repairs">Réparations</button>
+<button class="btn btn-ghost" data-go="notifications" data-role="admin">Notifications</button>
 <button class="btn btn-ghost" data-go="promotions" data-role="admin">Promotions</button>
 <button class="btn btn-ghost" data-go="revenue" data-role="admin">Revenus</button>
 <button class="btn btn-ghost" data-go="fiscal" data-role="admin">Info fiscaux</button>
@@ -220,6 +221,82 @@
   </div>
 </div>
 </section>
+
+
+<!-- NOTIFICATIONS -->
+<section class="card" id="viewNotifications" style="display:none">
+  <div class="row-between">
+    <div>
+      <h2 style="margin-top:0">Notifications</h2>
+      <div class="muted">Modifications des mécaniciens et réparations à valider.</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-ghost" id="btnMarkAllNotifRead" type="button">Tout marquer lu</button>
+      <button class="btn btn-ghost" id="btnRefreshNotif" type="button">Rafraîchir</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="row" style="gap:12px; flex-wrap:wrap">
+    <div class="box" style="min-width:220px">
+      <div class="muted">À valider</div>
+      <div class="val" id="notifPendingCount">0</div>
+    </div>
+    <div class="box" style="min-width:220px">
+      <div class="muted">Nouveaux événements</div>
+      <div class="val" id="notifLogNewCount">0</div>
+    </div>
+  </div>
+
+  <h3>Réparations à valider</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Client</th><th>Véhicule</th><th>Par</th><th></th>
+      </tr></thead>
+      <tbody id="notifPendingTbody">
+        <tr><td class="muted" colspan="5">Chargement…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-top:18px">Historique</h3>
+  <div class="row" style="gap:12px; flex-wrap:wrap; align-items:flex-end">
+    <div style="min-width:220px">
+      <label class="muted" style="display:block;margin-bottom:6px">Période</label>
+      <select id="notifPeriod">
+        <option value="30">30 jours</option>
+        <option value="90">3 mois</option>
+        <option value="180">6 mois</option>
+        <option value="365">1 année</option>
+        <option value="all">Tout</option>
+      </select>
+    </div>
+    <div style="min-width:220px">
+      <label class="muted" style="display:block;margin-bottom:6px">Type</label>
+      <select id="notifType">
+        <option value="">Tous</option>
+        <option value="WORKORDER_UPDATED">Modif réparation</option>
+        <option value="WORKORDER_STATUS">Changement statut</option>
+        <option value="WORKORDER_APPROVED">Validation admin</option>
+        <option value="INVOICE_UPDATED">Modif facture</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:10px">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Type</th><th>Détails</th><th></th>
+      </tr></thead>
+      <tbody id="notifLogsTbody">
+        <tr><td class="muted" colspan="4">Chargement…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
 <!-- CLIENTS -->
 <section class="card" id="viewClients" style="display:none">
 <div class="row-between">
