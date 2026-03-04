@@ -240,6 +240,7 @@ function money(n){
   return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
+function pad2
 function pad2(n){ return String(n).padStart(2,"0"); }
 function dateKey(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
 function startOfDayMs(d){ const x=new Date(d); x.setHours(0,0,0,0); return x.getTime(); }
@@ -258,8 +259,8 @@ function msToTime(ms){
   return pad2(d.getHours())+":"+pad2(d.getMinutes());
 }
 
-// ---- Tax helpers (TPS/TVQ) ----
- (TPS/TVQ) ----
+// ---- Tax helpers
+
 function splitTaxTotal(taxTotal){
   const tps = Number(settings?.tpsRate ?? 0.05);
   const tvq = Number(settings?.tvqRate ?? 0.09975);
