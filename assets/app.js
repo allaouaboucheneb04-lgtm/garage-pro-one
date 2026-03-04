@@ -1,4 +1,36 @@
 
+// ===== Debug console (in-page) =====
+function debugLog(...args){
+  try {
+    const s = args.map(a => {
+      if (a instanceof Error) return a.stack || a.message;
+      if (typeof a === "object") return JSON.stringify(a);
+      return String(a);
+    }).join(" ");
+    window.__dbg?.append(s);
+  } catch(e) {}
+}
+
+["log","warn","error"].forEach((k)=>{
+  const old = console[k].bind(console);
+  console[k] = (...args) => {
+    old(...args);
+    debugLog(k.toUpperCase()+":", ...args);
+  };
+});
+
+window.onerror = function(message, source, line, col, error){
+  debugLog("JS ERROR:", message, (source||"")+" :"+line+":"+col, error?.stack || "");
+};
+
+window.addEventListener("unhandledrejection", (event)=>{
+  debugLog("PROMISE ERROR:", event.reason?.message || event.reason);
+});
+
+console.log("App.js chargé ✅");
+// ===================================
+
+
 
 // ===== Helper: normalizeEmail (added fix) =====
 function normalizeEmail(data){

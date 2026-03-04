@@ -1011,134 +1011,68 @@
        display:none;">
 </div>
 
-<script>
-(function () {
-  const box = document.getElementById("debugConsole");
-  function safeStr(v){
-    try{
-      if (typeof v === "string") return v;
-      if (v instanceof Error) return (v.name + ": " + v.message);
-      return JSON.stringify(v);
-    }catch(e){ return String(v); }
-  }
-  function logToScreen(type, args) {
-    box.style.display = "block";
-    const line = document.createElement("div");
-    line.textContent =
-      "[" + type + "] " +
-      Array.from(args).map(safeStr).join(" ");
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-  }
 
-  const oldLog = console.log;
-  const oldError = console.error;
-  const oldWarn = console.warn;
-
-  console.log = function () {
-    logToScreen("LOG", arguments);
-    oldLog.apply(console, arguments);
-  };
-
-  console.error = function () {
-    logToScreen("ERROR", arguments);
-    oldError.apply(console, arguments);
-  };
-
-  console.warn = function () {
-    logToScreen("WARN", arguments);
-    oldWarn.apply(console, arguments);
-  };
-
-  window.onerror = function (msg, src, line, col, err) {
-    logToScreen("JS ERROR", [msg, "line:" + line, "col:" + col, src || ""]);
-  };
-
-  window.onunhandledrejection = function (ev) {
-    logToScreen("PROMISE", [ev.reason || ev]);
-  };
-
-})();
-</script>
-
-<script src="./assets/firebase-config.js"></script>
-<script type="module" src="./assets/app.js"></script>
-
-<script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
-
-<!-- VIN SCAN MODAL -->
-<!-- VIN SCAN MODAL (overlay) -->
-<div aria-hidden="true" class="modal-backdrop" id="vinScanModal" inert style="display:none">
-  <div class="modal" style="width:min(720px, 100%)">
-    <div class="card">
-      <div class="row-between" style="gap:10px">
-        <h2 style="margin:0">Scanner VIN (code-barres)</h2>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-ghost btn-small" id="btnToggleTorchVin" type="button" title="Lampe (si supportée)">Lampe</button>
-          <button class="btn btn-ghost btn-small" id="btnVinOcr" type="button" title="Lecture VIN par photo (beta)">Lire VIN (photo)</button>
-          <button class="btn btn-ghost btn-small" id="btnCloseVinScan" type="button">Fermer</button>
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div id="vinScanViewport" class="vin-viewport"></div>
-      <small class="muted" style="display:block;margin-top:8px">
-        Astuce: vise le code‑barres VIN (pare‑brise ou porte). Si ça ne lit pas, augmente la lumière.
-      </small>
-      <small class="muted" style="display:block;margin-top:6px">
-        Mode PRO (beta): “Lire VIN (photo)” peut reconnaître le VIN même sans code‑barres, mais c’est plus lent.
-      </small>
-    </div>
+<div id="debug-console" style="
+position:fixed;
+bottom:0;
+left:0;
+width:100%;
+background:#000;
+color:#00ff00;
+font-size:12px;
+z-index:999999;
+border-top:1px solid #333;
+">
+  <div style="display:flex;gap:8px;align-items:center;padding:8px;">
+    <b style="flex:1">DEBUG CONSOLE</b>
+    <button id="dbgToggle" style="padding:6px 10px;">Ouvrir</button>
+    <button id="dbgClear" style="padding:6px 10px;">Effacer</button>
+    <button id="dbgCopy" style="padding:6px 10px;">Copier</button>
   </div>
+  <pre id="dbgOut" style="
+    margin:0;
+    display:none;
+    max-height:220px;
+    overflow:auto;
+    padding:8px;
+    white-space:pre-wrap;
+    word-break:break-word;
+    border-top:1px solid #222;
+  "></pre>
 </div>
 
-<!-- PLATE SCAN MODAL (OCR via camera photo) -->
-<div aria-hidden="true" class="modal-backdrop" id="plateScanModal" inert style="display:none">
-  <div class="modal" style="width:min(720px, 100%)">
-    <div class="card">
-      <div class="row-between" style="gap:10px">
-        <h2 style="margin:0">Scanner plaque (caméra)</h2>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-ghost btn-small" id="btnToggleTorchPlate" type="button" title="Lampe (si supportée)">Lampe</button>
-          <button class="btn btn-ghost btn-small" id="btnPlateOcr" type="button" title="Capture manuelle (si besoin)">Capture</button>
-          <button class="btn btn-ghost btn-small" id="btnClosePlateScan" type="button">Fermer</button>
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div id="plateScanViewport" class="vin-viewport"></div>
-<div class="row-between" style="margin-top:10px;gap:10px">
-  <div class="muted" id="plateScanStatus">Prêt…</div>
-  <div class="muted" id="plateScanLast">—</div>
-</div>
-      <small class="muted" style="display:block;margin-top:8px">
-        Astuce: pointe la plaque dans le cadre. La lecture se fait automatiquement (Canada + USA).
-      </small>
-      <small class="muted" style="display:block;margin-top:6px">
-        Dès que la plaque est stable, elle est copiée dans la recherche rapide et la recherche se lance.
-      </small>
-    </div>
-  </div>
-</div>
-
-
-<div id="debug-console" style="position:fixed;bottom:0;left:0;width:100%;max-height:220px;overflow:auto;background:#000;color:#0f0;font-size:12px;padding:8px;z-index:999999;">
-<b>DEBUG CONSOLE</b>
-</div>
 <script>
-function debugLog(m){
- const box=document.getElementById('debug-console');
- if(!box) return;
- const d=document.createElement('div');
- d.textContent=m;
- box.appendChild(d);
-}
-window.onerror=function(msg,src,line,col,err){
- debugLog("JS ERROR: "+msg);
-};
-window.addEventListener("unhandledrejection",function(e){
- debugLog("PROMISE: "+e.reason);
-});
-console.log=function(m){debugLog("LOG: "+m);}
-console.error=function(m){debugLog("ERROR: "+m);}
+  (function(){
+    const out = document.getElementById("dbgOut");
+    const toggle = document.getElementById("dbgToggle");
+    const clearBtn = document.getElementById("dbgClear");
+    const copyBtn = document.getElementById("dbgCopy");
+
+    function append(line){
+      if(!out) return;
+      out.textContent += line + "\n";
+      out.scrollTop = out.scrollHeight;
+    }
+
+    window.__dbg = { append };
+
+    toggle.onclick = () => {
+      const open = out.style.display !== "none";
+      out.style.display = open ? "none" : "block";
+      toggle.textContent = open ? "Ouvrir" : "Fermer";
+    };
+    clearBtn.onclick = () => { out.textContent = ""; };
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(out.textContent || "");
+        alert("Logs copiés ✅");
+      } catch(e) {
+        alert("Impossible de copier. Sélectionne le texte manuellement.");
+      }
+    };
+
+    append("Debug ready ✅ " + new Date().toISOString());
+  })();
 </script>
 
 </body>
