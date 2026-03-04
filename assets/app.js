@@ -1,4 +1,20 @@
 
+// ===== FIX helpers added =====
+function showToast(msg,time){
+  try{
+    console.log("TOAST:",msg);
+    alert(msg);
+  }catch(e){console.log(msg);}
+}
+let modalBody = document.getElementById("modalBody");
+if(!modalBody){
+  const m=document.createElement("div");
+  m.id="modalBody";
+  document.body.appendChild(m);
+  modalBody=m;
+}
+// ===== END FIX =====
+
 function debugLogWrapper(){
   try{
     if(window.debugLog){
