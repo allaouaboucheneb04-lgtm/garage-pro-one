@@ -190,6 +190,7 @@ const views = {
   settings: $("viewSettings"),
   revenue: $("viewRevenue"),
   invoices: $("viewInvoices"),
+  fiscal: $("viewFiscal"),
 };
 const pageTitle = $("pageTitle");
 
@@ -384,11 +385,11 @@ function closeModal(){
    Navigation
 =========== */
 function go(view){
-  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal")){
     view = "repairs";
   }
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", invoices:"Factures pièces", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", invoices:"Factures pièces", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
 }
 document.querySelectorAll("[data-go]").forEach(btn=>{
@@ -629,6 +630,7 @@ function subscribeAll(){
     fillInvoiceCustomers();
     fillInvoiceWorkorders();
     if(currentRole === "admin") renderRevenue();
+    if(currentRole === "admin") renderFiscal();
     if(currentRole === "admin") renderPromotions();
   });
 
@@ -639,6 +641,7 @@ function subscribeAll(){
     fillInvoiceCustomers();
     fillInvoiceWorkorders();
     if(currentRole === "admin") renderRevenue();
+    if(currentRole === "admin") renderFiscal();
   });
 
   const woQ = (currentRole === "mechanic")
@@ -668,6 +671,7 @@ function subscribeAll(){
         invoices = snap.docs.map(d=>({id:d.id, ...d.data()}));
         renderInvoices();
         renderRevenue();
+        renderFiscal();
         renderFinanceDashboard();
       },
       (err)=>{
@@ -2043,6 +2047,158 @@ function exportRevenueCSV(){
     alert("Impossible d’exporter le CSV: " + (err?.message||err));
   }
 }
+/* ============
+   Fiscal (info fiscaux)
+=========== */
+function _startOfMonth(d){
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+function _endOfDay(d){
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999);
+}
+
+function setFiscalPreset(preset){
+  if(!fiscFromEl || !fiscToEl) return;
+  const now = new Date();
+  let from, to;
+  if(preset === "custom"){
+    return;
+  }
+  if(preset === "month"){
+    from = _startOfMonth(now);
+    to = _endOfDay(now);
+  }else if(preset === "3m"){
+    from = _startOfMonth(new Date(now.getFullYear(), now.getMonth()-2, 1));
+    to = _endOfDay(now);
+  }else if(preset === "6m"){
+    from = _startOfMonth(new Date(now.getFullYear(), now.getMonth()-5, 1));
+    to = _endOfDay(now);
+  }else if(preset === "12m"){
+    from = _startOfMonth(new Date(now.getFullYear(), now.getMonth()-11, 1));
+    to = _endOfDay(now);
+  }else{
+    from = _startOfMonth(now);
+    to = _endOfDay(now);
+  }
+  fiscFromEl.value = isoDate(from);
+  fiscToEl.value = isoDate(to);
+}
+
+function _getInvoiceTaxCollected(inv){
+  const t = inv?.totals || inv?.total || {};
+  return Number(t.taxTotal ?? t.tax ?? t.taxes ?? 0);
+}
+
+function filterFiscalInvoices(){
+  const list = Array.isArray(invoices) ? invoices : [];
+  const preset = (fiscPresetEl && fiscPresetEl.value) ? String(fiscPresetEl.value) : "month";
+  let from = fiscFromEl && fiscFromEl.value ? new Date(fiscFromEl.value+"T00:00:00") : null;
+  let to = fiscToEl && fiscToEl.value ? new Date(fiscToEl.value+"T23:59:59") : null;
+
+  if(!from || !to){
+    setFiscalPreset(preset);
+    from = fiscFromEl && fiscFromEl.value ? new Date(fiscFromEl.value+"T00:00:00") : null;
+    to = fiscToEl && fiscToEl.value ? new Date(fiscToEl.value+"T23:59:59") : null;
+  }
+
+  const pay = fiscPayFilterEl ? String(fiscPayFilterEl.value||"").toLowerCase() : "";
+
+  return list.filter(inv=>{
+    const dt = invoiceDateAsDate(inv);
+    if(from && dt < from) return false;
+    if(to && dt > to) return false;
+    if(pay){
+      return String(inv.paymentMethod||"").toLowerCase() === pay;
+    }
+    return true;
+  });
+}
+
+function renderFiscal(){
+  if(!$("viewFiscal")) return;
+  if(currentRole !== "admin"){
+    if(fiscTbody) fiscTbody.innerHTML = '<tr><td colspan="8" class="muted">Accès réservé à l\'administrateur.</td></tr>';
+    if(fiscRevenueEl) fiscRevenueEl.textContent = money(0);
+    if(fiscExpensesEl) fiscExpensesEl.textContent = money(0);
+    if(fiscProfitEl) fiscProfitEl.textContent = money(0);
+    if(fiscTaxCollectedEl) fiscTaxCollectedEl.textContent = money(0);
+    if(fiscTaxPaidEl) fiscTaxPaidEl.textContent = money(0);
+    if(fiscTaxPayableEl) fiscTaxPayableEl.textContent = money(0);
+    if(fiscNetAfterTaxEl) fiscNetAfterTaxEl.textContent = money(0);
+    if(fiscCountEl) fiscCountEl.textContent = "0";
+    return;
+  }
+
+  const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(b) - invoiceDateAsDate(a));
+
+  let revenue=0, expenses=0, profit=0, taxCollected=0;
+  for(const inv of rows){
+    const t = getInvoiceTotals(inv);
+    revenue += t.sell;
+    expenses += t.cost;
+    profit += t.profit;
+    taxCollected += _getInvoiceTaxCollected(inv);
+  }
+
+  const rate = fiscPurchaseTaxRateEl ? Number(fiscPurchaseTaxRateEl.value||0) : 0.14975;
+  const taxPaid = (rate>0) ? (expenses * (rate/(1+rate))) : 0;
+  const taxPayable = taxCollected - taxPaid;
+  const netAfterTax = profit - taxPayable;
+
+  if(fiscRevenueEl) fiscRevenueEl.textContent = money(revenue);
+  if(fiscExpensesEl) fiscExpensesEl.textContent = money(expenses);
+  if(fiscProfitEl) fiscProfitEl.textContent = money(profit);
+  if(fiscTaxCollectedEl) fiscTaxCollectedEl.textContent = money(taxCollected);
+  if(fiscTaxPaidEl) fiscTaxPaidEl.textContent = money(taxPaid);
+  if(fiscTaxPayableEl) fiscTaxPayableEl.textContent = money(taxPayable);
+  if(fiscNetAfterTaxEl) fiscNetAfterTaxEl.textContent = money(netAfterTax);
+  if(fiscCountEl) fiscCountEl.textContent = String(rows.length);
+
+  if(!fiscTbody) return;
+  if(rows.length===0){
+    fiscTbody.innerHTML = '<tr><td colspan="8" class="muted">Aucune facture pour ce filtre.</td></tr>';
+    return;
+  }
+
+  fiscTbody.innerHTML = rows.map(inv=>{
+    const dt = invoiceDateAsDate(inv);
+    const t = getInvoiceTotals(inv);
+    const tax = _getInvoiceTaxCollected(inv);
+    return `<tr>
+      <td>${isoDate(dt)}</td>
+      <td>${safe(inv.ref||"")}</td>
+      <td>${safe(inv.customerName||"")}</td>
+      <td>${safe(invPaymentLabel(inv.paymentMethod))}</td>
+      <td style="text-align:right">${money(tax)}</td>
+      <td style="text-align:right">${money(t.sell)}</td>
+      <td style="text-align:right">${money(t.cost)}</td>
+      <td style="text-align:right"><b>${money(t.profit)}</b></td>
+    </tr>`;
+  }).join("");
+}
+
+function exportFiscalCSV(){
+  try{
+    if(currentRole !== "admin") return;
+    const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
+    const lines = [];
+    lines.push(["Date","Ref","Client","Paiement","Taxes","Total","Cout","Benefice"].join(","));
+    for(const inv of rows){
+      const dt = isoDate(invoiceDateAsDate(inv));
+      const ref = String(inv.ref||"").replaceAll('"','""');
+      const client = String(inv.customerName||"").replaceAll('"','""');
+      const pm = String(invPaymentLabel(inv.paymentMethod)).replaceAll('"','""');
+      const t = getInvoiceTotals(inv);
+      const tax = _getInvoiceTaxCollected(inv);
+      lines.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, tax, t.sell, t.cost, t.profit].join(","));
+    }
+    downloadText("infos_fiscaux.csv", lines.join("\n"));
+  }catch(e){
+    console.error(e);
+    showToast("Erreur export CSV fiscaux: "+(e.message||e), true);
+  }
+}
+
 
 // init revenue controls
 if(revPresetEl && revFromEl && revToEl){
@@ -2053,7 +2209,22 @@ if(revPresetEl && revFromEl && revToEl){
   });
   if(btnRevApply) btnRevApply.addEventListener("click", ()=>renderRevenue());
   if(btnRevExport) btnRevExport.addEventListener("click", ()=>exportRevenueCSV());
-  if(revPayFilterEl) revPayFilterEl.addEventListener("change", ()=>renderRevenue());
+  if(revPayFilterEl) revPayFilterEl.addEventListener("change", ()=>renderRevenue())
+
+  // Fiscal filters
+  if(fiscPresetEl && fiscFromEl && fiscToEl){
+    setFiscalPreset(fiscPresetEl.value || "month");
+    fiscPresetEl.addEventListener("change", ()=>{
+      setFiscalPreset(fiscPresetEl.value);
+      renderFiscal();
+    });
+  }
+  if(fiscPayFilterEl) fiscPayFilterEl.addEventListener("change", ()=>renderFiscal());
+  if(fiscPurchaseTaxRateEl) fiscPurchaseTaxRateEl.addEventListener("change", ()=>renderFiscal());
+  if(fiscFromEl) fiscFromEl.addEventListener("change", ()=>{ if(fiscPresetEl) fiscPresetEl.value="custom"; renderFiscal(); });
+  if(fiscToEl) fiscToEl.addEventListener("change", ()=>{ if(fiscPresetEl) fiscPresetEl.value="custom"; renderFiscal(); });
+  if(btnFiscExportCsv) btnFiscExportCsv.addEventListener("click", ()=>exportFiscalCSV());
+;
 }
 
 // ===== Promo selection (clients) =====
