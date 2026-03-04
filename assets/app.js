@@ -3944,16 +3944,21 @@ async function logEvent(type, data){
 }
 
 async function createInviteCode(email, role){
+  const emailLower = String(email || "").trim().toLowerCase();
   const code = "GP-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+
   await setDoc(doc(db,"invites",code), {
-    email: String(email||"").toLowerCase(),
-    role: String(role||"mechanic"),
+    email: emailLower,
+    emailLower: emailLower,
+    role: String(role || "mechanic"),
     used: false,
     createdAt: serverTimestamp()
   });
-  try{ await logEvent("invite_created",{code,email,role}); }catch(e){}
+
+  try{ await logEvent("invite_created",{code,email: emailLower,role}); }catch(e){}
   return code;
 }
+
 
 async function loadInvites(){
   const tbody = $("invitesTbody");
