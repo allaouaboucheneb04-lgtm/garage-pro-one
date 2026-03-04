@@ -237,7 +237,9 @@ const pageTitle = $("pageTitle");
 function safe(s){ return String(s??"").replace(/[&<>"]/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
 function money(n){
   const x = Number(n||0);
-  return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits
+  return x.toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
 function pad2(n){ return String(n).padStart(2,"0"); }
 function dateKey(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
 function startOfDayMs(d){ const x=new Date(d); x.setHours(0,0,0,0); return x.getTime(); }
