@@ -1289,73 +1289,8 @@
   </div>
 </div>
 
-<!-- DEBUG CONSOLE (mobile) -->
-<div id="debugConsole"
-     style="
-       position:fixed;
-       bottom:0;
-       left:0;
-       right:0;
-       max-height:40%;
-       overflow:auto;
-       background:#000;
-       color:#0f0;
-       font-size:12px;
-       padding:8px;
-       z-index:99999;
-       font-family:monospace;
-       display:none;">
-</div>
 
-<script>
-(function () {
-  const box = document.getElementById("debugConsole");
-  function safeStr(v){
-    try{
-      if (typeof v === "string") return v;
-      if (v instanceof Error) return (v.name + ": " + v.message);
-      return JSON.stringify(v);
-    }catch(e){ return String(v); }
-  }
-  function logToScreen(type, args) {
-    box.style.display = "block";
-    const line = document.createElement("div");
-    line.textContent =
-      "[" + type + "] " +
-      Array.from(args).map(safeStr).join(" ");
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-  }
 
-  const oldLog = console.log;
-  const oldError = console.error;
-  const oldWarn = console.warn;
-
-  console.log = function () {
-    logToScreen("LOG", arguments);
-    oldLog.apply(console, arguments);
-  };
-
-  console.error = function () {
-    logToScreen("ERROR", arguments);
-    oldError.apply(console, arguments);
-  };
-
-  console.warn = function () {
-    logToScreen("WARN", arguments);
-    oldWarn.apply(console, arguments);
-  };
-
-  window.onerror = function (msg, src, line, col, err) {
-    logToScreen("JS ERROR", [msg, "line:" + line, "col:" + col, src || ""]);
-  };
-
-  window.onunhandledrejection = function (ev) {
-    logToScreen("PROMISE", [ev.reason || ev]);
-  };
-
-})();
-</script>
 
 <script src="./assets/firebase-config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1418,37 +1353,8 @@
 </div>
 
 
-<div id="debug-console" style="
-position:fixed;
-bottom:0;
-left:0;
-width:100%;
-background:#000;
-color:#00ff00;
-font-size:12px;
-z-index:999999;
-border-top:1px solid #333;">
-  <div style="display:flex;gap:8px;align-items:center;padding:8px;">
-    <b style="flex:1">DEBUG CONSOLE</b>
-    <button id="dbgToggle">Ouvrir</button>
-    <button id="dbgClear">Effacer</button>
-  </div>
-  <pre id="dbgOut" style="display:none;max-height:220px;overflow:auto;margin:0;padding:8px;border-top:1px solid #222;"></pre>
-</div>
-<script>
-(function(){
- const out=document.getElementById("dbgOut");
- const toggle=document.getElementById("dbgToggle");
- const clearBtn=document.getElementById("dbgClear");
- function log(m){ if(!out) return; out.textContent+=m+"\n"; out.scrollTop=out.scrollHeight; }
- window.debugLog=log;
- toggle.onclick=()=>{ out.style.display=(out.style.display==="none")?"block":"none"; };
- clearBtn.onclick=()=>{ out.textContent=""; };
- log("Debug ready ✅ "+new Date().toISOString());
- window.onerror=function(m,s,l,c,e){ log("JS ERROR: "+m); };
- window.addEventListener("unhandledrejection",e=>log("PROMISE ERROR: "+e.reason));
-})();
-</script>
+
+
 
 </body>
 </html>
