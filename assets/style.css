@@ -443,6 +443,31 @@ th{color:rgba(249,250,251,.85)}
 td{color:rgba(249,250,251,.92)}
 tr:hover td{background:rgba(255,255,255,.03)}
 
+/* Dark tables (screen): remove the white header blocks */
+@media screen{
+  .app-shell .table-wrap{
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.02);
+  }
+  .app-shell table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    background:transparent;
+  }
+  /* Override the base (light) header background */
+  .app-shell thead th,
+  .app-shell th{
+    background:rgba(255,255,255,.06);
+    color:rgba(229,231,235,.92);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .app-shell td{
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .app-shell tbody tr:last-child td{border-bottom:none;}
+}
+
 /* Mobile */
 .sidebar-overlay{
   position:fixed; inset:0;
