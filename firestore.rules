@@ -94,15 +94,39 @@ service cloud.firestore {
     }
 
     match /workorders/{id} {
+      function isUnassigned(d) {
+        return !(d.keys().hasAny(["assignedTo"])) || d.assignedTo == null || d.assignedTo == "";
+      }
+
+      // Admin: tout
+      // Mécano: ses réparations (assignées) OU celles qu'il a créées si non assignées
       allow read: if isAdmin()
-        || (isMech() && resource.data.assignedTo == request.auth.uid);
+        || (isMech() && (
+          resource.data.assignedTo == request.auth.uid
+          || (isUnassigned(resource.data) && resource.data.createdBy == request.auth.uid)
+        ));
 
-      allow create: if isAdmin();
+      // Mécano peut créer une réparation pour lui-même
+      allow create: if isAdmin()
+        || (isMech() && request.resource.data.createdBy == request.auth.uid);
 
+      // Update: admin tout
+      // Mécano: seulement sur ses réparations (assignées) OU qu'il a créées si non assignées
+      // Et il ne peut pas ré-assigner vers quelqu'un d'autre
       allow update: if isAdmin()
-        || (isMech()
-            && resource.data.assignedTo == request.auth.uid
-            && request.resource.data.assignedTo == resource.data.assignedTo);
+        || (
+          isMech()
+          && (
+            resource.data.assignedTo == request.auth.uid
+            || (isUnassigned(resource.data) && resource.data.createdBy == request.auth.uid)
+          )
+          && (
+            request.resource.data.assignedTo == resource.data.assignedTo
+            || (
+              isUnassigned(resource.data)
+              && request.resource.data.assignedTo == request.auth.uid
+            )
+          );
 
       allow delete: if isAdmin();
     }

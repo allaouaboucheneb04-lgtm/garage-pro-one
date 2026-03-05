@@ -357,6 +357,8 @@ modalBody.addEventListener("click", async (e)=>{
       await window.__deleteWo(btn.dataset.id);
     }else if(act==="editInvoice"){
       await window.__editInvoiceFromWorkorder(btn.dataset.id);
+    }else if(act==="requestAdmin"){
+      await window.__requestAdminValidationFromWorkorder(btn.dataset.id);
     }
   }catch(err){
 
@@ -380,6 +382,8 @@ function _handleModalAction(e){
         await window.__deleteWo(btn.dataset.id);
       }else if(act==="editInvoice"){
         await window.__editInvoiceFromWorkorder(btn.dataset.id);
+      }else if(act==="requestAdmin"){
+        await window.__requestAdminValidationFromWorkorder(btn.dataset.id);
       }
     }catch(err){
 
@@ -4757,7 +4761,11 @@ function openWorkorderView(workorderId){
       <div class="row">
         <!-- data-act (delegation) + onclick (fallback iOS pour éviter boutons "qui ne répondent pas") -->
         <button type="button" class="btn btn-small" data-act="printWo" data-id="${wo.id}" onclick="window.__printWorkorder && window.__printWorkorder('${wo.id}')">Imprimer / PDF</button>
-        ${currentRole==="admin" ? `<button type="button" class="btn btn-small btn-ghost" data-act="editInvoice" data-id="${wo.id}" onclick="window.__editInvoiceFromWorkorder && window.__editInvoiceFromWorkorder('${wo.id}')">Modifier facture</button>` : ``}
+        ${currentRole==="admin" ?
+          `<button type="button" class="btn btn-small btn-ghost" data-act="editInvoice" data-id="${wo.id}" onclick="window.__editInvoiceFromWorkorder && window.__editInvoiceFromWorkorder('${wo.id}')">Modifier facture</button>`
+          :
+          `<button type="button" class="btn btn-small btn-ghost" data-act="requestAdmin" data-id="${wo.id}" onclick="window.__requestAdminValidationFromWorkorder && window.__requestAdminValidationFromWorkorder('${wo.id}')">Demander validation admin</button>`
+        }
         ${wo.status!=="EN_COURS" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="EN_COURS" onclick="window.__setWoStatus && window.__setWoStatus('${wo.id}','EN_COURS')">Démarrer</button>` : ``}
         ${wo.status!=="TERMINE" ? `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="TERMINE" onclick="window.__setWoStatus && window.__setWoStatus('${wo.id}','TERMINE')">Terminer</button>` : `<button type="button" class="btn btn-small btn-ghost" data-act="setWoStatus" data-id="${wo.id}" data-status="OUVERT" onclick="window.__setWoStatus && window.__setWoStatus('${wo.id}','OUVERT')">Rouvrir</button>`}
         ${currentRole==="admin" ? `<button type="button" class="btn btn-small btn-danger" data-act="deleteWo" data-id="${wo.id}" onclick="window.__deleteWo && window.__deleteWo('${wo.id}')">Supprimer</button>` : ``}
@@ -4802,6 +4810,23 @@ function openWorkorderView(workorderId){
 }
 window.__setWoStatus = async (id, next)=>{ await setWorkorderStatus(id, next); closeModal(); try{ toast("Statut mis à jour ✅"); }catch(e){} };
 window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
+
+// Mécanicien: demande à l'admin de valider / finaliser la facture
+window.__requestAdminValidationFromWorkorder = async (id)=>{
+  // Ici on ne modifie PAS la facture (Option A: admin only)
+  // On marque juste la réparation comme nécessitant l'intervention admin.
+  const uid = auth?.currentUser?.uid || null;
+  if(!uid) throw new Error("not-authenticated");
+  const ref = doc(colWorkorders(), id);
+  await updateDoc(ref, {
+    needsAdminReview: true,
+    adminRequestedAt: serverTimestamp(),
+    adminRequestedBy: uid,
+    updatedAtTs: serverTimestamp(),
+    updatedBy: uid,
+  });
+  try{ toast("Demande envoyée à l'admin ✅"); }catch(e){}
+};
 
 /* Print */
 window.__printWorkorder = async (workorderId)=>{
