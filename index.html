@@ -9,6 +9,8 @@
 </head>
 <body>
 <header class="topbar no-print">
+<button class="icon-btn" id="btnMenu" type="button" aria-label="Menu">☰</button>
+
 <div class="brand">
 <img src="assets/logo.png" style="height:48px;margin-right:10px;border-radius:8px" />
 <div class="logo">G</div>
@@ -16,6 +18,9 @@
 <div class="name">Garage Pro One</div>
 <div class="muted" style="font-size:12px">Synchro automatique (Firebase)</div>
 </div>
+<div class="top-title"><div id="pageTitle" class="page-title">Dashboard</div></div>
+<div class="top-actions" id="topActions"></div>
+
 
 <!-- BARCODE SCAN MODAL (Parts / Inventory) -->
 <div aria-hidden="true" class="modal-backdrop" id="barcodeScanModal" inert style="display:none">
@@ -37,21 +42,41 @@
   </div>
 </div>
 </div>
-<nav class="nav" id="navAuthed" style="display:none">
-<button class="btn btn-ghost" data-go="dashboard">Dashboard</button>
-<button class="btn btn-ghost" data-go="clients">Clients</button>
-<button class="btn btn-ghost" data-go="repairs">Réparations</button>
-<button class="btn btn-ghost" data-go="notifications" data-role="admin">Notifications</button>
-<button class="btn btn-ghost" data-go="promotions" data-role="admin">Promotions</button>
-<button class="btn btn-ghost" data-go="revenue" data-role="admin">Revenus</button>
-<button class="btn btn-ghost" data-go="fiscal" data-role="admin">Info fiscaux</button>
-<button class="btn btn-ghost" data-go="partsExpenses" data-role="admin">Dépenses pièces</button>
-<button class="btn btn-ghost" data-go="invoices" data-role="admin">Factures pièces</button><button class="btn btn-ghost" data-go="settings" data-role="admin">Paramètres</button>
-<button class="btn btn-ghost" id="btnLogout">Déconnexion</button>
-</nav>
+
+
 </header>
 <main class="container">
 <!-- AUTH VIEW -->
+
+<div class="app-shell">
+  <aside class="sidebar no-print" id="sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-brand">
+        <img src="assets/logo.png" alt="Garage Pro One" class="sidebar-logo"/>
+        <div>
+          <div class="sidebar-name">Garage Pro One</div>
+          <div class="sidebar-sub">Gestion &amp; facturation</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-inner">
+      <nav class="nav" id="navAuthed" style="display:none">
+<button class="btn btn-ghost" data-go="dashboard">🏠 Dashboard</button>
+<button class="btn btn-ghost" data-go="clients">👥 Clients</button>
+<button class="btn btn-ghost" data-go="repairs">🔧 Réparations</button>
+<button class="btn btn-ghost" data-go="notifications" data-role="admin">🔔 Notifications</button>
+<button class="btn btn-ghost" data-go="promotions" data-role="admin">🏷️ Promotions</button>
+<button class="btn btn-ghost" data-go="revenue" data-role="admin">💰 Revenus</button>
+<button class="btn btn-ghost" data-go="fiscal" data-role="admin">🧾 Info fiscaux</button>
+<button class="btn btn-ghost" data-go="partsExpenses" data-role="admin">🧩 Dépenses pièces</button>
+<button class="btn btn-ghost" data-go="invoices" data-role="admin">📄 Factures pièces</button><button class="btn btn-ghost" data-go="settings" data-role="admin">⚙️ Paramètres</button>
+<button class="btn btn-ghost" id="btnLogout">🚪 Déconnexion</button>
+</nav>
+    </div>
+    <div class="sidebar-foot muted">© Garage Pro One</div>
+  </aside>
+  <div class="sidebar-overlay no-print" id="sidebarOverlay" style="display:none"></div>
+  <main class="main">
 <section class="card" id="viewAuth" style="max-width:560px;margin:18px auto; display:none;">
 <h1 style="margin-top:0">Connexion</h1>
 <p class="muted">Connexion par email/mot de passe. Tes données seront synchronisées automatiquement entre iPhone et PC.</p>
@@ -102,7 +127,7 @@
 </section>
 <!-- APP VIEW -->
 <section id="viewApp" style="display:none">
-<h1 id="pageTitle">Dashboard</h1>
+
 <!-- DASHBOARD -->
 <section class="grid" id="viewDashboard">
 <div class="card" style="grid-column:1/-1">
@@ -1282,6 +1307,9 @@
 
 
 
+
+  </main>
+</div>
 <script src="./assets/firebase-config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>

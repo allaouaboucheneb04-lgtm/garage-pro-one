@@ -439,6 +439,40 @@ function go(view){
   for(const k in views) views[k].style.display = (k===view) ? "" : "none";
   const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
+  // highlight active menu
+  document.querySelectorAll("[data-go]").forEach(b=>{
+    b.classList.toggle("active", b.getAttribute("data-go")===view);
+  });
+
+// Mobile sidebar toggle
+(function(){
+  const btn = document.getElementById("btnMenu");
+  const sb  = document.getElementById("sidebar");
+  const ov  = document.getElementById("sidebarOverlay");
+  if(!btn || !sb || !ov) return;
+  function open(){ sb.classList.add("open"); ov.style.display=""; }
+  function close(){ sb.classList.remove("open"); ov.style.display="none"; }
+  btn.addEventListener("click", ()=>{
+    if(sb.classList.contains("open")) close(); else open();
+  });
+  ov.addEventListener("click", close);
+  window.addEventListener("resize", ()=>{
+    try{
+      if(!window.matchMedia("(max-width: 980px)").matches){ close(); }
+    }catch(e){}
+  });
+})();
+
+  // close sidebar on mobile
+  try{
+    if(window.matchMedia("(max-width: 980px)").matches){
+      const sb = document.getElementById("sidebar");
+      const ov = document.getElementById("sidebarOverlay");
+      if(sb) sb.classList.remove("open");
+      if(ov) ov.style.display = "none";
+    }
+  }catch(e){}
+
   try{ if(view==="notifications") renderNotifications(); }catch(e){}
 
 }
