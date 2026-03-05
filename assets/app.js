@@ -714,9 +714,21 @@ function subscribeAll(){
       if(snap.exists()){
         const d = snap.data();
         settings = {
-          tpsRate: Number(d.tpsRate ?? 0.05),
-          tvqRate: Number(d.tvqRate ?? 0.09975),
+          // keep defaults for missing fields
+          tpsRate: Number(d.tpsRate ?? settings.tpsRate ?? 0.05),
+          tvqRate: Number(d.tvqRate ?? settings.tvqRate ?? 0.09975),
+          cardFeeRate: Number(d.cardFeeRate ?? settings.cardFeeRate ?? 0.025),
+          laborRate: Number(d.laborRate ?? settings.laborRate ?? 80),
+          garageName: String(d.garageName ?? settings.garageName ?? "Garage Pro One"),
+          garageAddress: String(d.garageAddress ?? settings.garageAddress ?? ""),
+          garagePhone: String(d.garagePhone ?? settings.garagePhone ?? ""),
+          garageEmail: String(d.garageEmail ?? settings.garageEmail ?? ""),
+          signatureName: String(d.signatureName ?? settings.signatureName ?? ""),
         };
+        renderSettings();
+        renderDashboard();
+      } else {
+        // doc not created yet -> show defaults
         renderSettings();
         renderDashboard();
       }
@@ -3601,6 +3613,15 @@ function renderSettings(){
   $("setTps").value = (settings.tpsRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setTvq").value = (settings.tvqRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setCardFee").value = (Number(settings.cardFeeRate||0)*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
+  // Tarif main-d'œuvre
+  const laborEl = $("setLaborRate");
+  if(laborEl) laborEl.value = String(Number(settings.laborRate||0));
+  // Infos garage (facture)
+  const gn = $("setGarageName"); if(gn) gn.value = String(settings.garageName||"");
+  const ga = $("setGarageAddress"); if(ga) ga.value = String(settings.garageAddress||"");
+  const gp = $("setGaragePhone"); if(gp) gp.value = String(settings.garagePhone||"");
+  const ge = $("setGarageEmail"); if(ge) ge.value = String(settings.garageEmail||"");
+  const sn = $("setSignatureName"); if(sn) sn.value = String(settings.signatureName||"");
 }
 
 /* Export / Import */
