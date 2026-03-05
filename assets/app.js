@@ -467,14 +467,28 @@ function resetScrollToTop(){
   // iOS Safari can keep scroll position when toggling display:none blocks.
   // Reset both window and potential scroll containers.
   const main = document.querySelector(".main");
+  const container = document.querySelector(".container");
+  const scrollingEl = document.scrollingElement || document.documentElement;
   const doReset = ()=>{
+    // window
     try{ window.scrollTo(0,0); }catch(e){}
+
+    // standard scrolling element (best for iOS Safari)
+    try{ if(scrollingEl) scrollingEl.scrollTop = 0; }catch(e){}
+
+    // legacy fallbacks
     try{ document.documentElement.scrollTop = 0; }catch(e){}
     try{ document.body.scrollTop = 0; }catch(e){}
+
+    // in case a wrapper becomes scrollable
+    try{ if(container) container.scrollTop = 0; }catch(e){}
     try{ if(main) main.scrollTop = 0; }catch(e){}
   };
   doReset();
+  // Extra passes for iOS (layout/paint timing)
   try{ requestAnimationFrame(()=>{ doReset(); }); }catch(e){}
+  try{ setTimeout(()=>{ doReset(); }, 30); }catch(e){}
+  try{ setTimeout(()=>{ doReset(); }, 120); }catch(e){}
 }
 
 function go(view){
