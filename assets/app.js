@@ -4607,70 +4607,174 @@ window.__printWorkorder = async (workorderId)=>{
   const v = getVehicle(wo.vehicleId);
   const c = v ? getCustomer(v.customerId) : null;
   const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "—";
+  const baseHref = String(new URL('.', window.location.href));
+  const gName = (settings?.garageName || GARAGE.name || "Garage");
+  const gAddr = (settings?.garageAddress || [GARAGE.address1, GARAGE.address2, GARAGE.country].filter(Boolean).join(" — "));
+  const gPhone = (settings?.garagePhone || GARAGE.phone || "");
+  const gEmail = (settings?.garageEmail || GARAGE.email || "");
+  const gSign = (settings?.signatureName || "");
+  const invNo = safe(wo.invoiceNo || ("WO-" + String(wo.id||"").slice(0,6).toUpperCase()));
   const rows = (wo.items||[]).map(it=>`
     <tr>
       <td>${it.type==="MO"?"Main d'œuvre":"Pièce"}</td>
       <td>${safe(it.desc)}</td>
-      <td>${safe(it.qty)}</td>
-      <td>${money(it.unit)}</td>
-      <td>${money(it.line)}</td>
+      <td class="num">${safe(it.qty)}</td>
+      <td class="num">${money(it.unit)}</td>
+      <td class="num">${money(it.line)}</td>
     </tr>
   `).join("") || `<tr><td colspan="5">Aucune ligne</td></tr>`;
 
-    const html = `
-  <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${safe(wo.invoiceNo||"Réparation")} — ${safe(GARAGE.name)}</title>
-  <style>
-  body{font-family:Arial,sans-serif;margin:24px;color:#111;}
-  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
-  h1{margin:0 0 6px 0;font-size:20px;}
-  h2{margin:0 0 2px 0;font-size:16px;}
-  .muted{color:#555;font-size:12px;}
-  .small{font-size:11px;color:#555;}
-  .box{border:1px solid #ddd;padding:12px;border-radius:10px;}
-  .headerCard{border:1px solid #ddd;border-radius:12px;padding:14px;}
-  .brandRow{display:flex;gap:12px;align-items:center;}
-  table{width:100%;border-collapse:collapse;margin-top:12px;}
-  th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px;}
-  th{background:#fafafa;}
-  .tot{margin-top:12px;max-width:360px;margin-left:auto;}
-  .tot div{display:flex;justify-content:space-between;padding:4px 0;}
-  .grand{font-weight:bold;font-size:16px;border-top:1px solid #ddd;padding-top:8px;}
-  @media print{.no-print{display:none;}body{margin:0;}}
-  </style></head><body>
-  <div class="no-print" style="margin-bottom:12px;"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
-  
-  <div class="headerCard">
-    <div class="top">
-      <div class="brandRow">
-        <div>${GARAGE_LOGO_SVG}</div>
-        <div>
-          <h1>${safe(GARAGE.name)}</h1>
-          <div class="muted">${safe(GARAGE.address1)} — ${safe(GARAGE.address2)} — ${safe(GARAGE.country)}</div>
-          <div class="muted">${safe(GARAGE.email)} • ${safe(GARAGE.phone)}</div>
-          <div class="small">${safe(GARAGE.tagline)}</div>
+  const html = `
+  <!doctype html><html lang="fr"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <base href="${baseHref}">
+    <title>Facture ${invNo} — ${safe(gName)}</title>
+    <style>
+      /* Facture pro — optimisée PDF */
+      :root{ --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --soft:#f3f4f6; }
+      *{ box-sizing:border-box; }
+      body{ margin:24px; font-family: Arial, Helvetica, sans-serif; color:var(--ink); background:#fff; }
+      .no-print{ margin-bottom:12px; }
+      .no-print button{ padding:10px 14px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+      .sheet{ max-width: 920px; margin: 0 auto; }
+      .header{ display:flex; justify-content:space-between; gap:18px; align-items:flex-start; padding-bottom:16px; border-bottom:2px solid var(--ink); }
+      .brand{ display:flex; gap:14px; align-items:flex-start; }
+      .logo{ width:64px; height:64px; border-radius:14px; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+      .logo img{ width:100%; height:100%; object-fit:contain; background:#fff; }
+      .brand h1{ margin:0; font-size:22px; letter-spacing:.2px; }
+      .brand .lines{ margin-top:4px; color:var(--muted); font-size:12px; line-height:1.35; }
+      .meta{ text-align:right; min-width: 240px; }
+      .meta .tag{ font-size:12px; color:var(--muted); }
+      .meta .inv{ font-size:18px; font-weight:700; margin:2px 0 8px 0; }
+      .meta .kv{ font-size:12px; color:var(--ink); line-height:1.55; }
+      .pill{ display:inline-block; padding:4px 10px; border-radius:999px; border:1px solid var(--line); background:var(--soft); font-weight:700; font-size:12px; }
+      .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:16px; }
+      .card{ border:1px solid var(--line); border-radius:14px; padding:14px; }
+      .card h3{ margin:0 0 8px 0; font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+      .card .txt{ font-size:13px; line-height:1.45; }
+      .section{ margin-top:16px; }
+      .section h2{ margin:0 0 8px 0; font-size:14px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+      .note{ border:1px dashed var(--line); border-radius:14px; padding:12px 14px; font-size:13px; color:var(--ink); background:#fff; }
+      table{ width:100%; border-collapse:collapse; margin-top:10px; }
+      th, td{ padding:10px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:top; }
+      th{ text-align:left; background:var(--soft); font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:#374151; }
+      td.num{ text-align:right; white-space:nowrap; }
+      .totalsWrap{ display:flex; justify-content:flex-end; margin-top:14px; }
+      .totals{ width: 340px; border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
+      .totals .row{ display:flex; justify-content:space-between; padding:6px 0; font-size:13px; }
+      .totals .row strong{ font-weight:700; }
+      .totals .grand{ border-top:2px solid var(--ink); margin-top:8px; padding-top:10px; font-size:16px; font-weight:800; }
+      .footer{ margin-top:18px; padding-top:14px; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:16px; }
+      .footer .thanks{ color:var(--muted); font-size:12px; line-height:1.4; }
+      .sign{ min-width: 240px; text-align:right; }
+      .sign .line{ margin-top:26px; border-top:1px solid var(--line); padding-top:6px; font-size:12px; color:var(--muted); }
+      @page{ margin: 14mm; }
+      @media print{
+        .no-print{ display:none; }
+        body{ margin:0; }
+        .sheet{ max-width:none; }
+      }
+      @media (max-width: 700px){
+        body{ margin:14px; }
+        .header{ flex-direction:column; }
+        .meta{ text-align:left; min-width: unset; }
+        .grid{ grid-template-columns: 1fr; }
+        .totals{ width:100%; }
+        .footer{ flex-direction:column; }
+        .sign{ text-align:left; }
+      }
+    </style>
+  </head><body>
+    <div class="no-print"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
+
+    <div class="sheet">
+      <div class="header">
+        <div class="brand">
+          <div class="logo"><img src="assets/logo.png" alt="Logo"></div>
+          <div>
+            <h1>${safe(gName)}</h1>
+            <div class="lines">
+              ${safe(gAddr)}<br>
+              ${safe(gEmail)} ${gEmail && gPhone ? "•" : ""} ${safe(gPhone)}<br>
+              ${safe(GARAGE.tagline || "")}
+            </div>
+          </div>
+        </div>
+        <div class="meta">
+          <div class="tag">FACTURE</div>
+          <div class="inv">${invNo}</div>
+          <div class="kv"><strong>Date:</strong> ${safe(String(wo.createdAt||"").slice(0,16))}</div>
+          <div class="kv"><strong>Statut:</strong> <span class="pill">${safe(wo.status||"")}</span></div>
+          <div class="kv" style="margin-top:8px; color:var(--muted)">
+            <strong>TPS/TVH:</strong> ${safe(GARAGE.tps)}<br>
+            <strong>TVQ:</strong> ${safe(GARAGE.tvq)}
+          </div>
         </div>
       </div>
-      <div class="muted" style="text-align:right">
-        <div><strong>Date:</strong> ${safe(String(wo.createdAt||"").slice(0,16))}</div>
-        <div><strong>Statut:</strong> ${safe(wo.status)}</div>
-        <div class="small" style="margin-top:6px">TPS/TVH: ${safe(GARAGE.tps)}<br/>TVQ: ${safe(GARAGE.tvq)}</div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Client</h3>
+          <div class="txt">
+            <strong>${safe(c?.fullName||"—")}</strong><br>
+            ${safe(c?.phone||"")}<br>
+            ${safe(c?.email||"")}
+          </div>
+        </div>
+        <div class="card">
+          <h3>Véhicule</h3>
+          <div class="txt">
+            <strong>${safe(vehTxt)}</strong><br>
+            Plaque: ${safe(v?.plate||"")}<br>
+            VIN: ${safe(v?.vin||"")}<br>
+            KM (visite): ${safe(wo.km||"")}
+          </div>
+        </div>
+      </div>
+
+      ${wo.reportedIssue ? `<div class="section"><h2>Problème rapporté</h2><div class="note">${safe(wo.reportedIssue).replace(/\n/g,'<br>')}</div></div>` : ""}
+      ${wo.diagnostic ? `<div class="section"><h2>Diagnostic</h2><div class="note">${safe(wo.diagnostic).replace(/\n/g,'<br>')}</div></div>` : ""}
+      ${wo.workDone ? `<div class="section"><h2>Travaux effectués</h2><div class="note">${safe(wo.workDone).replace(/\n/g,'<br>')}</div></div>` : ""}
+
+      <div class="section">
+        <h2>Détails</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:110px">Type</th>
+              <th>Description</th>
+              <th style="width:70px" class="num">Qté</th>
+              <th style="width:110px" class="num">Prix</th>
+              <th style="width:120px" class="num">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="totalsWrap">
+        <div class="totals">
+          <div class="row"><span>Sous-total</span><strong>${money(wo.subtotal)}</strong></div>
+          <div class="row"><span>TPS (${pct(wo.tpsRate)})</span><strong>${money(wo.tpsAmount)}</strong></div>
+          <div class="row"><span>TVQ (${pct(wo.tvqRate)})</span><strong>${money(wo.tvqAmount)}</strong></div>
+          <div class="row grand"><span>Total</span><span>${money(wo.total)}</span></div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="thanks">
+          Merci pour votre confiance.<br>
+          Pour toute question, contactez-nous: ${safe(gEmail)} ${gEmail && gPhone ? "•" : ""} ${safe(gPhone)}
+        </div>
+        <div class="sign">
+          ${gSign ? `<div><strong>${safe(gSign)}</strong></div>` : `<div><strong>${safe(gName)}</strong></div>`}
+          <div class="line">Signature</div>
+        </div>
       </div>
     </div>
-  </div>
-  
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
-    <div class="box"><strong>Client</strong><br>${safe(c?.fullName||"—")}<br>${safe(c?.phone||"")}<br>${safe(c?.email||"")}</div>
-    <div class="box"><strong>Véhicule</strong><br>${safe(vehTxt)}<br>Plaque: ${safe(v?.plate||"")}<br>VIN: ${safe(v?.vin||"")}<br>KM (visite): ${safe(wo.km||"")}</div>
-  </div>
-  <h2 style="margin-top:14px;">Détails</h2>
-  <table><thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="tot">
-    <div><span>Sous-total</span><span>${money(wo.subtotal)}</span></div>
-    <div><span>TPS (${pct(wo.tpsRate)})</span><span>${money(wo.tpsAmount)}</span></div>
-    <div><span>TVQ (${pct(wo.tvqRate)})</span><span>${money(wo.tvqAmount)}</span></div>
-    <div class="grand"><span>Total TTC</span><span>${money(wo.total)}</span></div>
-  </div>
   </body></html>`;
   // Sauvegarde automatique (HTML) dans l'historique
   try{ await updateDoc(doc(colWorkorders(), workorderId), { invoiceHtml: html, invoiceSavedAt: serverTimestamp() }); }catch(e){}
