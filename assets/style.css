@@ -311,6 +311,9 @@ body.modal-open{overflow:hidden}
 body{background:radial-gradient(1200px 600px at 10% -10%, rgba(239,68,68,.18), transparent 55%), var(--bg);}
 
 .topbar{
+  position:sticky;
+  top:0;
+  z-index:60;
   background:rgba(11,15,20,.75);
   backdrop-filter: blur(10px);
   border-bottom:1px solid rgba(255,255,255,.06);

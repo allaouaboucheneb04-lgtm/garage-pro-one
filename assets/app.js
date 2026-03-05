@@ -432,6 +432,51 @@ function closeModal(){
 /* ============
    Navigation
 =========== */
+// Sidebar helpers (mobile)
+function closeSidebar(){
+  const sb = document.getElementById("sidebar");
+  const ov = document.getElementById("sidebarOverlay");
+  if(sb) sb.classList.remove("open");
+  if(ov) ov.style.display = "none";
+}
+function openSidebar(){
+  const sb = document.getElementById("sidebar");
+  const ov = document.getElementById("sidebarOverlay");
+  if(sb) sb.classList.add("open");
+  if(ov) ov.style.display = "block";
+}
+
+// Attach sidebar listeners once (avoid duplicate handlers)
+(function initSidebarToggle(){
+  const btn = document.getElementById("btnMenu");
+  const ov  = document.getElementById("sidebarOverlay");
+  const sb  = document.getElementById("sidebar");
+  if(!btn || !ov || !sb) return;
+  if(btn.dataset.bound === "1") return; // already bound
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", ()=>{
+    if(sb.classList.contains("open")) closeSidebar(); else openSidebar();
+  });
+  ov.addEventListener("click", closeSidebar);
+  window.addEventListener("resize", ()=>{
+    try{ if(!window.matchMedia("(max-width: 980px)").matches) closeSidebar(); }catch(e){}
+  });
+})();
+
+function resetScrollToTop(){
+  // iOS Safari can keep scroll position when toggling display:none blocks.
+  // Reset both window and potential scroll containers.
+  const main = document.querySelector(".main");
+  const doReset = ()=>{
+    try{ window.scrollTo(0,0); }catch(e){}
+    try{ document.documentElement.scrollTop = 0; }catch(e){}
+    try{ document.body.scrollTop = 0; }catch(e){}
+    try{ if(main) main.scrollTop = 0; }catch(e){}
+  };
+  doReset();
+  try{ requestAnimationFrame(()=>{ doReset(); }); }catch(e){}
+}
+
 function go(view){
   if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses" || view==="notifications")){
     view = "repairs";
@@ -444,41 +489,11 @@ function go(view){
     b.classList.toggle("active", b.getAttribute("data-go")===view);
   });
 
-  // Always reset scroll position when changing views (mobile UX)
-  try{
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }catch(e){
-    try{ window.scrollTo(0,0); }catch(e2){}
-  }
+  // Always close sidebar after navigation (mobile UX)
+  closeSidebar();
 
-// Mobile sidebar toggle
-(function(){
-  const btn = document.getElementById("btnMenu");
-  const sb  = document.getElementById("sidebar");
-  const ov  = document.getElementById("sidebarOverlay");
-  if(!btn || !sb || !ov) return;
-  function open(){ sb.classList.add("open"); ov.style.display="block"; }
-  function close(){ sb.classList.remove("open"); ov.style.display="none"; }
-  btn.addEventListener("click", ()=>{
-    if(sb.classList.contains("open")) close(); else open();
-  });
-  ov.addEventListener("click", close);
-  window.addEventListener("resize", ()=>{
-    try{
-      if(!window.matchMedia("(max-width: 980px)").matches){ close(); }
-    }catch(e){}
-  });
-})();
-
-  // close sidebar on mobile
-  try{
-    if(window.matchMedia("(max-width: 980px)").matches){
-      const sb = document.getElementById("sidebar");
-      const ov = document.getElementById("sidebarOverlay");
-      if(sb) sb.classList.remove("open");
-      if(ov) ov.style.display = "none";
-    }
-  }catch(e){}
+  // Always reset scroll position when changing views
+  resetScrollToTop();
 
   try{ if(view==="notifications") renderNotifications(); }catch(e){}
 
