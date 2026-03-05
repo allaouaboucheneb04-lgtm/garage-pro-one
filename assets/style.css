@@ -589,46 +589,6 @@ tr:hover td{background:rgba(255,255,255,.03)}
   gap:8px;
 }
 
-/* Repairs - Mobile cards */
-.repair-cards{ display:flex; flex-direction:column; gap:12px; }
-.repair-card{
-  background: rgba(17,17,17,0.9);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-}
-.repair-top{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
-.repair-title{ font-weight:800; font-size:15px; letter-spacing:.2px; }
-.repair-sub{ margin-top:6px; color: rgba(255,255,255,0.75); font-size:13px; line-height:1.35; }
-.repair-meta{ margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
-.repair-amount{ font-weight:900; font-size:16px; }
-.repair-actions{ margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
-
-/* Revenue - Mobile cards */
-.rev-cards{ display:flex; flex-direction:column; gap:12px; margin-top:14px; }
-.rev-card{
-  background: rgba(17,17,17,0.9);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-}
-.rev-card-top{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
-.rev-ref{ font-weight:900; }
-.rev-date{ color: rgba(255,255,255,0.72); font-size:12px; margin-top:4px; }
-.rev-client{ margin-top:10px; font-weight:800; }
-.rev-repair{ margin-top:4px; color: rgba(255,255,255,0.75); font-size:13px; }
-.rev-bottom{ margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
-.rev-total{ font-weight:900; font-size:16px; }
-.rev-pill{ display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); font-size:12px; font-weight:800; }
-
-.stat-cards{ display:flex; flex-direction:column; gap:10px; }
-.stat-card{ display:flex; justify-content:space-between; gap:10px; align-items:center; padding:12px; border-radius:14px; border:1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); }
-.stat-k{ font-weight:800; }
-.stat-v{ text-align:right; font-weight:900; }
-.stat-sub{ display:block; font-size:12px; font-weight:700; opacity:.75; margin-top:2px; }
-
 /* Mobile: cards instead of table */
 @media (max-width: 860px){
   .desktop-only{ display:none !important; }

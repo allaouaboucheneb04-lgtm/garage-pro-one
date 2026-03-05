@@ -1,9 +1,3 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
-
 
 function debugLogWrapper(){
   try{
@@ -67,6 +61,12 @@ function showToast(message, duration=3500, type="info"){
 function showModal(title, html){ openModal(title, html); }
 // ===== end UI helpers =====
 
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
 /* ============
    Firebase init
@@ -1352,9 +1352,6 @@ const revProfitEl = $("revProfit");
 const revTbody = $("revTbody");
 const revByPayTbody = $("revByPayTbody");
 const revByDateTbody = $("revByDateTbody");
-const revCards = $("revCards");
-const revByPayCards = $("revByPayCards");
-const revByDateCards = $("revByDateCards");
 const btnRevApply = $("btnRevApply");
 const btnRevExport = $("btnRevExport");
 
@@ -2218,9 +2215,6 @@ function renderRevenue(){
     if(revTbody) revTbody.innerHTML = '<tr><td colspan="9" class="muted">Accès réservé à l\'administrateur.</td></tr>';
     if(revByPayTbody) revByPayTbody.innerHTML = '<tr><td class="muted" colspan="4">—</td></tr>';
     if(revByDateTbody) revByDateTbody.innerHTML = '<tr><td class="muted" colspan="4">—</td></tr>';
-    if(revCards) revCards.innerHTML = '<div class="muted">Accès réservé à l\'administrateur.</div>';
-    if(revByPayCards) revByPayCards.innerHTML = '<div class="muted">—</div>';
-    if(revByDateCards) revByDateCards.innerHTML = '<div class="muted">—</div>';
     return;
   }
 
@@ -2316,17 +2310,6 @@ function renderRevenue(){
         <td style="text-align:right"><b>${money(r.profit)}</b></td>
       </tr>
     `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
-
-    if(revByPayCards){
-      revByPayCards.innerHTML = list.map(r=>`
-        <div class="stat-card">
-          <div class="stat-k">${safe(invPaymentLabel(r.k))}</div>
-          <div class="stat-v">${money(r.total)}
-            <span class="stat-sub">Pièces: ${money(r.cost)} · Bénéf.: ${money(r.profit)}</span>
-          </div>
-        </div>
-      `).join('') || '<div class="muted">Aucune donnée.</div>';
-    }
   }
 
   // ---- Par date (par jour) ----
@@ -2350,56 +2333,6 @@ function renderRevenue(){
         <td style="text-align:right"><b>${money(r.profit)}</b></td>
       </tr>
     `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
-
-    if(revByDateCards){
-      revByDateCards.innerHTML = list.map(r=>`
-        <div class="stat-card">
-          <div class="stat-k">${safe(r.k)}</div>
-          <div class="stat-v">${money(r.total)}
-            <span class="stat-sub">Pièces: ${money(r.cost)} · Bénéf.: ${money(r.profit)}</span>
-          </div>
-        </div>
-      `).join('') || '<div class="muted">Aucune donnée.</div>';
-    }
-  }
-
-  // ---- Mobile cards (liste des factures) ----
-  if(revCards){
-    if(count === 0){
-      revCards.innerHTML = '<div class="muted">Aucune facture pour cette période.</div>';
-    }else{
-      revCards.innerHTML = rows.map(inv=>{
-        const ref = String(inv.ref || '—');
-        const date = invoiceDateKey(inv) || '—';
-        const client = String(inv.customerName || '—');
-        const repair = String(inv.workorderLabel || '—');
-        const method = invPaymentLabel(inv.paymentMethod);
-        const t = getInvoiceTotals(inv);
-        const tot = money(t.sell);
-        const cst = money(t.cost);
-        const prf = money(t.profit);
-        return `
-          <div class="rev-card">
-            <div class="rev-card-top">
-              <div>
-                <div class="rev-ref"># ${safe(ref)}</div>
-                <div class="rev-date">${safe(date)}</div>
-              </div>
-              <span class="rev-pill">${safe(method)}</span>
-            </div>
-            <div class="rev-client">${safe(client)}</div>
-            <div class="rev-repair">${safe(repair)}</div>
-            <div class="rev-bottom">
-              <div class="rev-total">${tot}</div>
-              <div class="muted" style="font-size:12px">Pièces: ${cst} · Bénéf.: ${prf}</div>
-            </div>
-            <div style="margin-top:10px; display:flex; justify-content:flex-end">
-              <button class="btn btn-ghost" onclick="(function(){ try{ go('invoices'); const b=document.querySelector('[data-edit-inv=\\"${inv.id}\\"]'); if(b) b.click(); }catch(e){} })()">Voir</button>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
   }
 }
 
@@ -3494,7 +3427,6 @@ window.__openClientStats = openClientStats;
 
 /* Repairs view */
 const repairsTbody = $("repairsTbody");
-const repairsCards = $("repairsCards");
 const repairsCount = $("repairsCount");
 $("btnRepairsFilter").onclick = ()=>renderRepairs();
       if(currentRole === "admin") renderRevenue();
@@ -3517,61 +3449,29 @@ function renderRepairs(){
   }
   repairsCount.textContent = `${list.length} réparation(s)`;
   if(list.length===0){
-    if(repairsTbody) repairsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucune réparation.</td></tr>';
-    if(repairsCards) repairsCards.innerHTML = '<div class="muted">Aucune réparation.</div>';
+    repairsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucune réparation.</td></tr>';
     return;
   }
-  if(repairsTbody){
-    repairsTbody.innerHTML = list.map(w=>{
-      const v = getVehicle(w.vehicleId);
-      const c = v ? getCustomer(v.customerId) : null;
-      const client = c ? c.fullName : "—";
-      const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-      const d = String(w.createdAt||"").slice(0,10);
-      const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
-      return `
-        <tr>
-          <td>${safe(d)}</td>
-          <td>${safe(client)}</td>
-          <td>${safe(veh)}</td>
-          <td><span class="pill ${pill}">${safe(w.status)}</span></td>
-          <td>${money(w.total)}</td>
-          <td class="nowrap">
-            <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
-          </td>
-        </tr>
-      `;
-    }).join("");
-  }
-
-  if(repairsCards){
-    repairsCards.innerHTML = list.map(w=>{
-      const v = getVehicle(w.vehicleId);
-      const c = v ? getCustomer(v.customerId) : null;
-      const client = c ? c.fullName : "—";
-      const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-      const d = String(w.createdAt||"").slice(0,10);
-      const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
-      return `
-        <div class="repair-card">
-          <div class="repair-top">
-            <div>
-              <div class="repair-title">${safe(client)}</div>
-              <div class="repair-sub">${safe(veh)}</div>
-              <div class="repair-sub">${safe(d)}</div>
-            </div>
-            <span class="pill ${pill}">${safe(w.status)}</span>
-          </div>
-          <div class="repair-meta">
-            <div class="repair-amount">${money(w.total)}</div>
-          </div>
-          <div class="repair-actions">
-            <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
-          </div>
-        </div>
-      `;
-    }).join("");
-  }
+  repairsTbody.innerHTML = list.map(w=>{
+    const v = getVehicle(w.vehicleId);
+    const c = v ? getCustomer(v.customerId) : null;
+    const client = c ? c.fullName : "—";
+    const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+    const d = String(w.createdAt||"").slice(0,10);
+    const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
+    return `
+      <tr>
+        <td>${safe(d)}</td>
+        <td>${safe(client)}</td>
+        <td>${safe(veh)}</td>
+        <td><span class="pill ${pill}">${safe(w.status)}</span></td>
+        <td>${money(w.total)}</td>
+        <td class="nowrap">
+          <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
 }
 
 /* Promotions */

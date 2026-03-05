@@ -380,13 +380,10 @@
 </input></form>
 <div class="divider"></div>
 <div class="table-wrap">
-  <div class="desktop-only">
-    <table>
-      <thead><tr><th>Date</th><th>Client</th><th>Réparation</th><th>Statut</th><th>Total TTC</th><th></th></tr></thead>
-      <tbody id="repairsTbody"></tbody>
-    </table>
-  </div>
-  <div id="repairsCards" class="repair-cards mobile-only"></div>
+<table>
+<thead><tr><th>Date</th><th>Client</th><th>Réparation</th><th>Statut</th><th>Total TTC</th><th></th></tr></thead>
+<tbody id="repairsTbody"></tbody>
+</table>
 </div>
  </section>
 
@@ -461,7 +458,7 @@
 </div>
 </div>
 
-<div class="rev-table-wrap desktop-only">
+<div class="rev-table-wrap">
 <table class="table">
 <thead>
 <tr>
@@ -482,13 +479,11 @@
 </table>
 </div>
 
-<div id="revCards" class="rev-cards mobile-only"></div>
-
 <div class="divider"></div>
 <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px">
   <div class="box">
     <h3 style="margin-top:0">Par méthode de paiement</h3>
-    <div class="desktop-only" style="overflow:auto">
+    <div style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -503,12 +498,11 @@
         </tbody>
       </table>
     </div>
-    <div id="revByPayCards" class="stat-cards mobile-only"></div>
   </div>
   <div class="box">
     <h3 style="margin-top:0">Par date</h3>
     <div class="muted" style="margin-bottom:8px">Somme par jour (selon filtre).</div>
-    <div class="desktop-only" style="overflow:auto">
+    <div style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -523,7 +517,6 @@
         </tbody>
       </table>
     </div>
-    <div id="revByDateCards" class="stat-cards mobile-only"></div>
   </div>
 </div>
 
