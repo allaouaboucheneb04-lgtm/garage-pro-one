@@ -444,13 +444,20 @@ function go(view){
     b.classList.toggle("active", b.getAttribute("data-go")===view);
   });
 
+  // Always reset scroll position when changing views (mobile UX)
+  try{
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }catch(e){
+    try{ window.scrollTo(0,0); }catch(e2){}
+  }
+
 // Mobile sidebar toggle
 (function(){
   const btn = document.getElementById("btnMenu");
   const sb  = document.getElementById("sidebar");
   const ov  = document.getElementById("sidebarOverlay");
   if(!btn || !sb || !ov) return;
-  function open(){ sb.classList.add("open"); ov.style.display=""; }
+  function open(){ sb.classList.add("open"); ov.style.display="block"; }
   function close(){ sb.classList.remove("open"); ov.style.display="none"; }
   btn.addEventListener("click", ()=>{
     if(sb.classList.contains("open")) close(); else open();
