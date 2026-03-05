@@ -1,10 +1,72 @@
-
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
+
+
+function debugLogWrapper(){
+  try{
+    if(window.debugLog){
+      const args=[...arguments].map(a=>typeof a==="object"?JSON.stringify(a):String(a)).join(" ");
+      window.debugLog(args);
+    }
+  }catch(e){}
+}
+["log","warn","error"].forEach(k=>{
+ const old=console[k];
+ console[k]=function(){
+   old.apply(console,arguments);
+   debugLogWrapper(k.toUpperCase()+":",...arguments);
+ }
+});
+(()=>{})("App.js chargé ✅");
+
+
+
+// ===== Helper: normalizeEmail (added fix) =====
+function normalizeEmail(data){
+  const v =
+    data?.email ??
+    data?.Email ??
+    data?.courriel ??
+    data?.mail ??
+    data?.Mail ??
+    "";
+  return String(v).trim().toLowerCase();
+}
+// ===== End helper =====
+
+
+// ===== UI helpers: showToast + showModal alias =====
+function showToast(message, duration=3500, type="info"){
+  try{
+    const msg = String(message ?? "");
+    const toast = document.createElement("div");
+    toast.textContent = msg;
+    toast.style.position="fixed";
+    toast.style.left="50%";
+    toast.style.bottom="84px";
+    toast.style.transform="translateX(-50%)";
+    toast.style.background = (type==="error") ? "#b71c1c" : "#1b5e20";
+    toast.style.color="#fff";
+    toast.style.padding="10px 14px";
+    toast.style.borderRadius="10px";
+    toast.style.fontSize="14px";
+    toast.style.zIndex="999999";
+    toast.style.maxWidth="92vw";
+    toast.style.textAlign="center";
+    toast.style.boxShadow="0 6px 18px rgba(0,0,0,.25)";
+    document.body.appendChild(toast);
+    setTimeout(()=>{ try{ toast.remove(); }catch(e){} }, Number(duration)||3500);
+  }catch(e){
+    try{ alert(message); }catch(e2){}
+  }
+}
+// showModal() is used across the codebase; keep it as an alias of openModal()
+function showModal(title, html){ openModal(title, html); }
+// ===== end UI helpers =====
+
 
 /* ============
    Firebase init
@@ -6488,68 +6550,3 @@ document.addEventListener('click', async (e)=>{
     btn.textContent = prev || 'Scanner';
   }
 });
-
-
-// ===== moved debug wrapper after imports (iOS module fix) =====
-
-function debugLogWrapper(){
-  try{
-    if(window.debugLog){
-      const args=[...arguments].map(a=>typeof a==="object"?JSON.stringify(a):String(a)).join(" ");
-      window.debugLog(args);
-    }
-  }catch(e){}
-}
-["log","warn","error"].forEach(k=>{
- const old=console[k];
- console[k]=function(){
-   old.apply(console,arguments);
-   debugLogWrapper(k.toUpperCase()+":",...arguments);
- }
-});
-(()=>{})("App.js chargé ✅");
-
-
-
-// ===== Helper: normalizeEmail (added fix) =====
-function normalizeEmail(data){
-  const v =
-    data?.email ??
-    data?.Email ??
-    data?.courriel ??
-    data?.mail ??
-    data?.Mail ??
-    "";
-  return String(v).trim().toLowerCase();
-}
-// ===== End helper =====
-
-
-// ===== UI helpers: showToast + showModal alias =====
-function showToast(message, duration=3500, type="info"){
-  try{
-    const msg = String(message ?? "");
-    const toast = document.createElement("div");
-    toast.textContent = msg;
-    toast.style.position="fixed";
-    toast.style.left="50%";
-    toast.style.bottom="84px";
-    toast.style.transform="translateX(-50%)";
-    toast.style.background = (type==="error") ? "#b71c1c" : "#1b5e20";
-    toast.style.color="#fff";
-    toast.style.padding="10px 14px";
-    toast.style.borderRadius="10px";
-    toast.style.fontSize="14px";
-    toast.style.zIndex="999999";
-    toast.style.maxWidth="92vw";
-    toast.style.textAlign="center";
-    toast.style.boxShadow="0 6px 18px rgba(0,0,0,.25)";
-    document.body.appendChild(toast);
-    setTimeout(()=>{ try{ toast.remove(); }catch(e){} }, Number(duration)||3500);
-  }catch(e){
-    try{ alert(message); }catch(e2){}
-  }
-}
-// showModal() is used across the codebase; keep it as an alias of openModal()
-function showModal(title, html){ openModal(title, html); }
-// ===== end UI helpers =====
