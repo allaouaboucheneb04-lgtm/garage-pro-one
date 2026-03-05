@@ -156,7 +156,7 @@
 <h2>Réparations ouvertes</h2>
 <button class="btn btn-ghost" data-go="repairs">Voir tout</button>
 </div>
-<div class="table-wrap">
+<div class="table-wrap desktop-only">
 <table>
 <thead><tr>
 <th>Date</th><th>Client</th><th>Réparation</th><th>Total TTC</th><th></th>
@@ -167,6 +167,7 @@
 </table>
 
 </div>
+<div id="openRepairsCards" class="mobile-only cards-list"></div>
 </div>
 
 <div class="card" style="grid-column:1/-1" data-role="admin">
@@ -177,7 +178,7 @@
     </div>
     <button class="btn btn-ghost" data-go="repairs">Voir tout</button>
   </div>
-  <div class="table-wrap">
+  <div class="table-wrap desktop-only">
     <table>
       <thead><tr>
         <th>Date</th><th>Client</th><th>Véhicule</th><th>Montant dû</th><th>Statut</th><th></th>
@@ -187,6 +188,7 @@
       </tbody>
     </table>
   </div>
+  <div id="unpaidRepairsCards" class="mobile-only cards-list"></div>
 </div>
 
 <div class="card" style="grid-column:1/-1">
@@ -202,7 +204,7 @@
 <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px">
   <div class="box">
     <h3 style="margin-top:0">Par méthode (mois)</h3>
-    <div style="overflow:auto">
+    <div class="desktop-only" style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -215,10 +217,11 @@
         <tbody id="finByPayTbody"><tr><td class="muted" colspan="4">Aucune donnée.</td></tr></tbody>
       </table>
     </div>
+    <div id="finByPayCards" class="mobile-only cards-list"></div>
   </div>
   <div class="box">
     <h3 style="margin-top:0">Par jour (14 derniers jours)</h3>
-    <div style="overflow:auto">
+    <div class="desktop-only" style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -231,6 +234,7 @@
         <tbody id="finByDayTbody"><tr><td class="muted" colspan="4">Aucune donnée.</td></tr></tbody>
       </table>
     </div>
+    <div id="finByDayCards" class="mobile-only cards-list"></div>
   </div>
 </div>
 

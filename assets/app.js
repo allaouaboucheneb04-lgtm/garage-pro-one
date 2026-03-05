@@ -869,8 +869,12 @@ const finByDayTbody = $("finByDayTbody");
 const chartSalesEl = $("chartSales");
 const chartNetEl = $("chartNet");
 const openRepairsTbody = $("openRepairsTbody");
+const openRepairsCards = $("openRepairsCards");
 const unpaidRepairsCountEl = $("unpaidRepairsCount");
 const unpaidRepairsTbody = $("unpaidRepairsTbody");
+const unpaidRepairsCards = $("unpaidRepairsCards");
+const finByPayCards = $("finByPayCards");
+const finByDayCards = $("finByDayCards");
 function getCustomer(id){ return customers.find(c=>c.id===id); }
 function getVehicle(id){ return vehicles.find(v=>v.id===id); }
 
@@ -900,6 +904,7 @@ function renderDashboard(){
   const open = [...workorders].filter(w=>w.status==="OUVERT").sort(byCreatedDesc).slice(0,20);
   if(open.length===0){
     openRepairsTbody.innerHTML = '<tr><td colspan="5" class="muted">Aucune réparation ouverte.</td></tr>';
+    if(openRepairsCards) openRepairsCards.innerHTML = '<div class="note">Aucune réparation ouverte.</div>';
   }else{
     openRepairsTbody.innerHTML = open.map(w=>{
       const v = getVehicle(w.vehicleId);
@@ -919,6 +924,34 @@ function renderDashboard(){
         </tr>
       `;
     }).join("");
+
+    if(openRepairsCards){
+      openRepairsCards.innerHTML = open.map(w=>{
+        const v = getVehicle(w.vehicleId);
+        const c = v ? getCustomer(v.customerId) : null;
+        const client = c ? c.fullName : "—";
+        const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+        const d = String(w.createdAt||"").slice(0,10);
+        return `
+          <div class="mcard">
+            <div class="top">
+              <div>
+                <div class="title">${safe(client)}</div>
+                <div class="sub">${safe(veh)}</div>
+              </div>
+              <div class="amount">${money(w.total)}</div>
+            </div>
+            <div class="meta">
+              <span>📅 ${safe(d)}</span>
+              <span><span class="pill pill-warn">OUVERT</span></span>
+            </div>
+            <div class="actions">
+              <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
   }
 
   // Unpaid repairs dashboard (per réparation)
@@ -995,6 +1028,7 @@ function renderUnpaidRepairsDashboard(){
 
     if(list.length===0){
       unpaidRepairsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucune réparation non payée.</td></tr>';
+      if(unpaidRepairsCards) unpaidRepairsCards.innerHTML = '<div class="note">Aucune réparation non payée.</div>';
       return;
     }
 
@@ -1020,6 +1054,38 @@ function renderUnpaidRepairsDashboard(){
         </tr>
       `;
     }).join("");
+
+    if(unpaidRepairsCards){
+      unpaidRepairsCards.innerHTML = list.map(w=>{
+        const v = getVehicle(w.vehicleId);
+        const c = v ? getCustomer(v.customerId) : null;
+        const client = c ? c.fullName : "—";
+        const emailOk = c && c.email;
+        const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+        const d = String(w.createdAt||"").slice(0,10);
+        const due = _workorderAmountDue(w);
+        return `
+          <div class="mcard">
+            <div class="top">
+              <div>
+                <div class="title">${safe(client)}</div>
+                <div class="sub">${safe(veh)}</div>
+              </div>
+              <div class="amount">${money(due)}</div>
+            </div>
+            <div class="meta">
+              <span>📅 ${safe(d)}</span>
+              <span class="pill pill-warn">Non payé</span>
+            </div>
+            <div class="actions">
+              <button class="btn btn-small" onclick="window.__setWorkorderPaid('${w.id}', true)">Marquer payé</button>
+              <button class="btn btn-small btn-ghost" ${emailOk?'':'disabled'} onclick="window.__emailWorkorderPayment('${w.id}')">Email</button>
+              <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
 
   }catch(e){
     // silent
@@ -1075,6 +1141,24 @@ function renderFinanceDashboard(){
           <td style="text-align:right"><b>${money(r.profit)}</b></td>
         </tr>
       `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+
+      if(finByPayCards){
+        finByPayCards.innerHTML = (list.length ? list : []).map(r=>`
+          <div class="mcard">
+            <div class="top">
+              <div>
+                <div class="title">${safe(invPaymentLabel(r.k))}</div>
+                <div class="sub">Total: ${money(r.total)}</div>
+              </div>
+              <div class="amount">${money(r.profit)}</div>
+            </div>
+            <div class="meta">
+              <span>Coût pièces: ${money(r.cost)}</span>
+              <span>Bénéfice: <b>${money(r.profit)}</b></span>
+            </div>
+          </div>
+        `).join('') || '<div class="note">Aucune donnée.</div>';
+      }
     }
 
     // Par jour (14 derniers jours)
@@ -1101,6 +1185,24 @@ function renderFinanceDashboard(){
           <td style="text-align:right"><b>${money(r.profit)}</b></td>
         </tr>
       `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+
+      if(finByDayCards){
+        finByDayCards.innerHTML = (list.length ? list : []).map(r=>`
+          <div class="mcard">
+            <div class="top">
+              <div>
+                <div class="title">${safe(r.k)}</div>
+                <div class="sub">Total: ${money(r.total)}</div>
+              </div>
+              <div class="amount">${money(r.profit)}</div>
+            </div>
+            <div class="meta">
+              <span>Coût pièces: ${money(r.cost)}</span>
+              <span>Bénéfice: <b>${money(r.profit)}</b></span>
+            </div>
+          </div>
+        `).join('') || '<div class="note">Aucune donnée.</div>';
+      }
     }
   
 
