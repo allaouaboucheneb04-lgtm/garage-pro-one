@@ -14,7 +14,7 @@ function debugLogWrapper(){
    debugLogWrapper(k.toUpperCase()+":",...arguments);
  }
 });
-(()=>{})("App.js chargé ✅");
+console.log("App.js chargé ✅");
 
 
 
