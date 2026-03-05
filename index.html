@@ -64,6 +64,7 @@
 <button class="btn btn-ghost" data-go="dashboard">🏠 Dashboard</button>
 <button class="btn btn-ghost" data-go="clients">👥 Clients</button>
 <button class="btn btn-ghost" data-go="repairs">🔧 Réparations</button>
+<button class="btn btn-ghost" data-go="aiEstimate">🤖 Estimation IA</button>
 <button class="btn btn-ghost" data-go="notifications" data-role="admin">🔔 Notifications</button>
 <button class="btn btn-ghost" data-go="promotions" data-role="admin">🏷️ Promotions</button>
 <button class="btn btn-ghost" data-go="revenue" data-role="admin">💰 Revenus</button>
@@ -380,12 +381,108 @@
 </input></form>
 <div class="divider"></div>
 <div class="table-wrap">
-<table>
-<thead><tr><th>Date</th><th>Client</th><th>Réparation</th><th>Statut</th><th>Total TTC</th><th></th></tr></thead>
-<tbody id="repairsTbody"></tbody>
-</table>
+  <div class="desktop-only">
+    <table>
+      <thead><tr><th>Date</th><th>Client</th><th>Réparation</th><th>Statut</th><th>Total TTC</th><th></th></tr></thead>
+      <tbody id="repairsTbody"></tbody>
+    </table>
+  </div>
+  <div id="repairsCards" class="repair-cards mobile-only"></div>
 </div>
  </section>
+
+<section class="card" id="viewAiEstimate" style="display:none">
+  <div class="ai-head">
+    <div>
+      <h2>Estimation intelligente</h2>
+      <div class="muted">Crée une estimation rapide (main-d’œuvre + pièces + taxes). Tu peux l’imprimer ou la copier.</div>
+    </div>
+    <button class="btn btn-primary" id="btnAiEstimate">Calculer</button>
+  </div>
+
+  <div class="ai-grid">
+    <div class="ai-card">
+      <div class="ai-row">
+        <label>Type de service</label>
+        <select id="aiService" class="input">
+          <option value="">Choisir…</option>
+          <option value="oil">Vidange</option>
+          <option value="brakes">Freins (plaquettes/disques)</option>
+          <option value="tires">Pneus (montage/équilibrage)</option>
+          <option value="diagnostic">Diagnostic</option>
+          <option value="battery">Batterie</option>
+          <option value="suspension">Suspension (amortisseurs/bras)</option>
+          <option value="other">Autre</option>
+        </select>
+      </div>
+
+      <div class="ai-row ai-2">
+        <div>
+          <label>Main-d’œuvre (heures)</label>
+          <input id="aiHours" class="input" type="number" min="0" step="0.1" placeholder="ex: 1.5" />
+          <div class="hint">Tarif actuel: <span id="aiLaborRate"></span> $/h</div>
+        </div>
+        <div>
+          <label>Coût pièces ($)</label>
+          <input id="aiParts" class="input" type="number" min="0" step="0.01" placeholder="ex: 120" />
+          <div class="hint">Tu peux laisser à 0 si aucune pièce.</div>
+        </div>
+      </div>
+
+      <div class="ai-row">
+        <label>Description / symptômes</label>
+        <textarea id="aiNotes" class="input" rows="4" placeholder="ex: Bruit en freinant, vibration au volant, etc."></textarea>
+      </div>
+
+      <div class="ai-row ai-2">
+        <div>
+          <label>Nom client (optionnel)</label>
+          <input id="aiClientName" class="input" placeholder="ex: Allaoua" />
+        </div>
+        <div>
+          <label>Véhicule (optionnel)</label>
+          <input id="aiVehicle" class="input" placeholder="ex: Toyota Sienna 2023" />
+        </div>
+      </div>
+
+      <div class="ai-row">
+        <div class="ai-suggest" id="aiSuggest"></div>
+      </div>
+    </div>
+
+    <div class="ai-card ai-result">
+      <div class="ai-result-head">
+        <div class="ai-result-title">Résumé</div>
+        <div class="ai-badges">
+          <span class="badge" id="aiTaxesBadge"></span>
+          <span class="badge badge-red" id="aiTotalBadge"></span>
+        </div>
+      </div>
+
+      <div class="ai-lines">
+        <div class="ai-line"><span>Main-d’œuvre</span><span id="aiLaborLine">$0.00</span></div>
+        <div class="ai-line"><span>Pièces</span><span id="aiPartsLine">$0.00</span></div>
+        <div class="ai-line"><span>Sous-total</span><span id="aiSubLine">$0.00</span></div>
+        <div class="ai-line"><span>TPS</span><span id="aiTpsLine">$0.00</span></div>
+        <div class="ai-line"><span>TVQ</span><span id="aiTvqLine">$0.00</span></div>
+        <div class="ai-line ai-total"><span>Total</span><span id="aiTotalLine">$0.00</span></div>
+      </div>
+
+      <div class="ai-actions">
+        <button class="btn btn-ghost" id="btnAiCopy">Copier</button>
+        <button class="btn btn-ghost" id="btnAiPrint">Imprimer</button>
+        <button class="btn btn-ghost" id="btnAiSave">Enregistrer</button>
+      </div>
+
+      <div class="muted small" id="aiSavedMsg" style="display:none"></div>
+
+      <div class="ai-history">
+        <div class="ai-result-title">Historique</div>
+        <div id="aiHistory" class="ai-history-list"></div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="card" id="viewRevenue" style="display:none">
 
@@ -458,7 +555,7 @@
 </div>
 </div>
 
-<div class="rev-table-wrap">
+<div class="rev-table-wrap desktop-only">
 <table class="table">
 <thead>
 <tr>
@@ -479,11 +576,13 @@
 </table>
 </div>
 
+<div id="revCards" class="rev-cards mobile-only"></div>
+
 <div class="divider"></div>
 <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px">
   <div class="box">
     <h3 style="margin-top:0">Par méthode de paiement</h3>
-    <div style="overflow:auto">
+    <div class="desktop-only" style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -498,11 +597,12 @@
         </tbody>
       </table>
     </div>
+    <div id="revByPayCards" class="stat-cards mobile-only"></div>
   </div>
   <div class="box">
     <h3 style="margin-top:0">Par date</h3>
     <div class="muted" style="margin-bottom:8px">Somme par jour (selon filtre).</div>
-    <div style="overflow:auto">
+    <div class="desktop-only" style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -517,6 +617,7 @@
         </tbody>
       </table>
     </div>
+    <div id="revByDateCards" class="stat-cards mobile-only"></div>
   </div>
 </div>
 

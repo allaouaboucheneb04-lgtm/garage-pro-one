@@ -107,6 +107,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+
+match /aiEstimates/{id} {
+  // User can read/create their own estimates; admin can read all.
+  allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+  allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+  allow update, delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+}
+
     match /appointments/{id} {
       allow read: if signedIn();
       allow create, update, delete: if isAdmin();

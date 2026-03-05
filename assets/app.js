@@ -217,6 +217,7 @@ const views = {
   dashboard: $("viewDashboard"),
   clients: $("viewClients"),
   repairs: $("viewRepairs"),
+  aiEstimate: $("viewAiEstimate"),
   promotions: $("viewPromotions"),
   settings: $("viewSettings"),
   revenue: $("viewRevenue"),
@@ -504,7 +505,7 @@ for(const k in views){ if(views[k]) views[k].style.display = 'none'; }
 
 // Show requested view
 if(views[view]){ views[view].style.display = ''; }
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", aiEstimate:"Estimation IA", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
   // highlight active menu
   document.querySelectorAll("[data-go]").forEach(b=>{
@@ -518,6 +519,7 @@ if(views[view]){ views[view].style.display = ''; }
   resetScrollToTop();
 
   try{ if(view==="notifications") renderNotifications(); }catch(e){}
+  try{ if(view==="aiEstimate") initAiEstimateUI(); }catch(e){}
 
 }
 document.querySelectorAll("[data-go]").forEach(btn=>{
@@ -1352,6 +1354,9 @@ const revProfitEl = $("revProfit");
 const revTbody = $("revTbody");
 const revByPayTbody = $("revByPayTbody");
 const revByDateTbody = $("revByDateTbody");
+const revCards = $("revCards");
+const revByPayCards = $("revByPayCards");
+const revByDateCards = $("revByDateCards");
 const btnRevApply = $("btnRevApply");
 const btnRevExport = $("btnRevExport");
 
@@ -2215,6 +2220,9 @@ function renderRevenue(){
     if(revTbody) revTbody.innerHTML = '<tr><td colspan="9" class="muted">Accès réservé à l\'administrateur.</td></tr>';
     if(revByPayTbody) revByPayTbody.innerHTML = '<tr><td class="muted" colspan="4">—</td></tr>';
     if(revByDateTbody) revByDateTbody.innerHTML = '<tr><td class="muted" colspan="4">—</td></tr>';
+    if(revCards) revCards.innerHTML = '<div class="muted">Accès réservé à l\'administrateur.</div>';
+    if(revByPayCards) revByPayCards.innerHTML = '<div class="muted">—</div>';
+    if(revByDateCards) revByDateCards.innerHTML = '<div class="muted">—</div>';
     return;
   }
 
@@ -2310,6 +2318,17 @@ function renderRevenue(){
         <td style="text-align:right"><b>${money(r.profit)}</b></td>
       </tr>
     `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+
+    if(revByPayCards){
+      revByPayCards.innerHTML = list.map(r=>`
+        <div class="stat-card">
+          <div class="stat-k">${safe(invPaymentLabel(r.k))}</div>
+          <div class="stat-v">${money(r.total)}
+            <span class="stat-sub">Pièces: ${money(r.cost)} · Bénéf.: ${money(r.profit)}</span>
+          </div>
+        </div>
+      `).join('') || '<div class="muted">Aucune donnée.</div>';
+    }
   }
 
   // ---- Par date (par jour) ----
@@ -2333,6 +2352,56 @@ function renderRevenue(){
         <td style="text-align:right"><b>${money(r.profit)}</b></td>
       </tr>
     `).join('') || '<tr><td class="muted" colspan="4">Aucune donnée.</td></tr>';
+
+    if(revByDateCards){
+      revByDateCards.innerHTML = list.map(r=>`
+        <div class="stat-card">
+          <div class="stat-k">${safe(r.k)}</div>
+          <div class="stat-v">${money(r.total)}
+            <span class="stat-sub">Pièces: ${money(r.cost)} · Bénéf.: ${money(r.profit)}</span>
+          </div>
+        </div>
+      `).join('') || '<div class="muted">Aucune donnée.</div>';
+    }
+  }
+
+  // ---- Mobile cards (liste des factures) ----
+  if(revCards){
+    if(count === 0){
+      revCards.innerHTML = '<div class="muted">Aucune facture pour cette période.</div>';
+    }else{
+      revCards.innerHTML = rows.map(inv=>{
+        const ref = String(inv.ref || '—');
+        const date = invoiceDateKey(inv) || '—';
+        const client = String(inv.customerName || '—');
+        const repair = String(inv.workorderLabel || '—');
+        const method = invPaymentLabel(inv.paymentMethod);
+        const t = getInvoiceTotals(inv);
+        const tot = money(t.sell);
+        const cst = money(t.cost);
+        const prf = money(t.profit);
+        return `
+          <div class="rev-card">
+            <div class="rev-card-top">
+              <div>
+                <div class="rev-ref"># ${safe(ref)}</div>
+                <div class="rev-date">${safe(date)}</div>
+              </div>
+              <span class="rev-pill">${safe(method)}</span>
+            </div>
+            <div class="rev-client">${safe(client)}</div>
+            <div class="rev-repair">${safe(repair)}</div>
+            <div class="rev-bottom">
+              <div class="rev-total">${tot}</div>
+              <div class="muted" style="font-size:12px">Pièces: ${cst} · Bénéf.: ${prf}</div>
+            </div>
+            <div style="margin-top:10px; display:flex; justify-content:flex-end">
+              <button class="btn btn-ghost" onclick="(function(){ try{ go('invoices'); const b=document.querySelector('[data-edit-inv=\\"${inv.id}\\"]'); if(b) b.click(); }catch(e){} })()">Voir</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
   }
 }
 
@@ -3427,6 +3496,7 @@ window.__openClientStats = openClientStats;
 
 /* Repairs view */
 const repairsTbody = $("repairsTbody");
+const repairsCards = $("repairsCards");
 const repairsCount = $("repairsCount");
 $("btnRepairsFilter").onclick = ()=>renderRepairs();
       if(currentRole === "admin") renderRevenue();
@@ -3449,29 +3519,61 @@ function renderRepairs(){
   }
   repairsCount.textContent = `${list.length} réparation(s)`;
   if(list.length===0){
-    repairsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucune réparation.</td></tr>';
+    if(repairsTbody) repairsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucune réparation.</td></tr>';
+    if(repairsCards) repairsCards.innerHTML = '<div class="muted">Aucune réparation.</div>';
     return;
   }
-  repairsTbody.innerHTML = list.map(w=>{
-    const v = getVehicle(w.vehicleId);
-    const c = v ? getCustomer(v.customerId) : null;
-    const client = c ? c.fullName : "—";
-    const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
-    const d = String(w.createdAt||"").slice(0,10);
-    const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
-    return `
-      <tr>
-        <td>${safe(d)}</td>
-        <td>${safe(client)}</td>
-        <td>${safe(veh)}</td>
-        <td><span class="pill ${pill}">${safe(w.status)}</span></td>
-        <td>${money(w.total)}</td>
-        <td class="nowrap">
-          <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  if(repairsTbody){
+    repairsTbody.innerHTML = list.map(w=>{
+      const v = getVehicle(w.vehicleId);
+      const c = v ? getCustomer(v.customerId) : null;
+      const client = c ? c.fullName : "—";
+      const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+      const d = String(w.createdAt||"").slice(0,10);
+      const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
+      return `
+        <tr>
+          <td>${safe(d)}</td>
+          <td>${safe(client)}</td>
+          <td>${safe(veh)}</td>
+          <td><span class="pill ${pill}">${safe(w.status)}</span></td>
+          <td>${money(w.total)}</td>
+          <td class="nowrap">
+            <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  if(repairsCards){
+    repairsCards.innerHTML = list.map(w=>{
+      const v = getVehicle(w.vehicleId);
+      const c = v ? getCustomer(v.customerId) : null;
+      const client = c ? c.fullName : "—";
+      const veh = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") + (v.plate?` (${v.plate})`:"") : "—";
+      const d = String(w.createdAt||"").slice(0,10);
+      const pill = w.status==="TERMINE" ? "pill-ok" : (w.status==="EN_COURS" ? "pill-blue" : "pill-warn");
+      return `
+        <div class="repair-card">
+          <div class="repair-top">
+            <div>
+              <div class="repair-title">${safe(client)}</div>
+              <div class="repair-sub">${safe(veh)}</div>
+              <div class="repair-sub">${safe(d)}</div>
+            </div>
+            <span class="pill ${pill}">${safe(w.status)}</span>
+          </div>
+          <div class="repair-meta">
+            <div class="repair-amount">${money(w.total)}</div>
+          </div>
+          <div class="repair-actions">
+            <button class="btn btn-small" onclick="window.__openWorkorderView('${w.id}')">Ouvrir</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
 }
 
 /* Promotions */
@@ -6450,3 +6552,269 @@ document.addEventListener('click', async (e)=>{
     btn.textContent = prev || 'Scanner';
   }
 });
+
+
+
+// ===== Estimation intelligente (IA light) =====
+let _aiInitDone = false;
+let _aiLastResult = null;
+function money(n){
+  const v = Number(n||0);
+  return v.toLocaleString("fr-CA",{minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function initAiEstimateUI(){
+  if(_aiInitDone) { refreshAiEstimateHeader(); loadAiEstimateHistory(); return; }
+  _aiInitDone = true;
+
+  const elService = $("aiService");
+  const elHours = $("aiHours");
+  const elParts = $("aiParts");
+  const elNotes = $("aiNotes");
+  const elClient = $("aiClientName");
+  const elVehicle = $("aiVehicle");
+  const elSuggest = $("aiSuggest");
+
+  const btnCalc = $("btnAiEstimate");
+  const btnCopy = $("btnAiCopy");
+  const btnPrint = $("btnAiPrint");
+  const btnSave = $("btnAiSave");
+
+  const templates = {
+    oil: { hours: 0.5, parts: 35, note:"Vidange + filtre (estimation)."},
+    brakes: { hours: 2.0, parts: 220, note:"Plaquettes/disques (1 essieu) (estimation)."},
+    tires: { hours: 1.0, parts: 0, note:"Montage + équilibrage (sans pneus) (estimation)."},
+    diagnostic: { hours: 1.0, parts: 0, note:"Diagnostic (scanner + inspection) (estimation)."},
+    battery: { hours: 0.5, parts: 180, note:"Batterie + installation (estimation)."},
+    suspension: { hours: 3.0, parts: 320, note:"Suspension (amortisseurs/bras) (estimation)."},
+    other: { hours: 1.0, parts: 0, note:"" },
+  };
+
+  function suggest(){
+    const t = templates[elService.value];
+    if(!t){ elSuggest.innerHTML=""; return; }
+    const partsMsg = t.parts>0 ? `Pièces typiques ~ ${money(t.parts)} $` : "Pièces typiques: 0 $ (selon cas)";
+    elSuggest.innerHTML = `
+      <div class="ai-suggest-title">Suggestion rapide</div>
+      <div class="ai-suggest-body">
+        <div>Heures typiques: <b>${t.hours}</b> h</div>
+        <div>${partsMsg}</div>
+        ${t.note?`<div class="muted" style="margin-top:6px">${safe(t.note)}</div>`:""}
+      </div>
+    `;
+  }
+
+  function calc(){
+    const hours = Number(elHours.value||0);
+    const parts = Number(elParts.value||0);
+    const laborRate = Number(settings.laborRate||0);
+    const labor = hours * laborRate;
+    const sub = labor + parts;
+    const tps = sub * Number(settings.tpsRate||0);
+    const tvq = sub * Number(settings.tvqRate||0);
+    const total = sub + tps + tvq;
+
+    _aiLastResult = { 
+      service: elService.value||"", 
+      hours, parts, laborRate, labor, sub, tps, tvq, total,
+      notes: String(elNotes.value||""),
+      clientName: String(elClient.value||""),
+      vehicle: String(elVehicle.value||""),
+      createdAt: new Date().toISOString(),
+    };
+
+    $("aiLaborLine").textContent = `$${money(labor)}`;
+    $("aiPartsLine").textContent = `$${money(parts)}`;
+    $("aiSubLine").textContent   = `$${money(sub)}`;
+    $("aiTpsLine").textContent   = `$${money(tps)}`;
+    $("aiTvqLine").textContent   = `$${money(tvq)}`;
+    $("aiTotalLine").textContent = `$${money(total)}`;
+
+    $("aiTaxesBadge").textContent = `TPS ${(Number(settings.tpsRate||0)*100).toFixed(2)}% + TVQ ${(Number(settings.tvqRate||0)*100).toFixed(3)}%`;
+    $("aiTotalBadge").textContent = `Total $${money(total)}`;
+
+    $("aiSavedMsg").style.display = "none";
+    return _aiLastResult;
+  }
+
+  function copy(){
+    if(!_aiLastResult) calc();
+    const r=_aiLastResult;
+    const lines = [
+      "ESTIMATION — Garage Pro One",
+      r.clientName?`Client: ${r.clientName}`:"",
+      r.vehicle?`Véhicule: ${r.vehicle}`:"",
+      r.service?`Service: ${r.service}`:"",
+      r.notes?`Notes: ${r.notes}`:"",
+      "",
+      `Main-d’œuvre: ${r.hours} h x ${money(r.laborRate)} $/h = ${money(r.labor)} $`,
+      `Pièces: ${money(r.parts)} $`,
+      `Sous-total: ${money(r.sub)} $`,
+      `TPS: ${money(r.tps)} $`,
+      `TVQ: ${money(r.tvq)} $`,
+      `TOTAL: ${money(r.total)} $`,
+    ].filter(Boolean).join("\n");
+    navigator.clipboard?.writeText(lines).then(()=>showToast("Copié ✅")).catch(()=>showToast("Copie impossible",2500,"error"));
+  }
+
+  function printEstimate(){
+    if(!_aiLastResult) calc();
+    const r=_aiLastResult;
+    const w = window.open("", "_blank");
+    if(!w){ showToast("Popup bloquée (Safari). Essaie encore.", 3000, "error"); return; }
+    const html = `
+      <html><head><meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width, initial-scale=1"/>
+      <title>Estimation</title>
+      <style>
+        body{font-family:Arial, sans-serif; padding:24px; color:#111;}
+        .h{display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #111; padding-bottom:12px; margin-bottom:16px;}
+        .brand{font-size:18px; font-weight:700;}
+        .muted{color:#555; font-size:12px}
+        table{width:100%; border-collapse:collapse; margin-top:12px;}
+        th,td{padding:10px; border-bottom:1px solid #ddd; text-align:left;}
+        th{background:#f4f4f4;}
+        .tot{width:320px; margin-left:auto; margin-top:12px;}
+        .row{display:flex; justify-content:space-between; padding:6px 0;}
+        .grand{font-weight:800; border-top:2px solid #111; padding-top:10px; margin-top:8px;}
+      </style>
+      </head><body>
+        <div class="h">
+          <div>
+            <div class="brand">${safe(settings.garageName||"Garage Pro One")}</div>
+            <div class="muted">${safe(settings.garageAddress||"")}</div>
+            <div class="muted">${safe(settings.garagePhone||"")}${settings.garageEmail?(" • "+safe(settings.garageEmail)):""}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:22px;font-weight:800;">ESTIMATION</div>
+            <div class="muted">${new Date().toLocaleDateString("fr-CA")}</div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:18px; flex-wrap:wrap;">
+          <div style="min-width:240px;">
+            <b>Client</b><br/>
+            ${safe(r.clientName||"—")}
+          </div>
+          <div style="min-width:240px;">
+            <b>Véhicule</b><br/>
+            ${safe(r.vehicle||"—")}
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <b>Notes</b>
+          <div class="muted" style="white-space:pre-wrap;margin-top:6px;">${safe(r.notes||"")}</div>
+        </div>
+
+        <table>
+          <thead><tr><th>Détail</th><th>Valeur</th></tr></thead>
+          <tbody>
+            <tr><td>Main-d’œuvre</td><td>${r.hours} h x ${money(r.laborRate)} $/h = ${money(r.labor)} $</td></tr>
+            <tr><td>Pièces</td><td>${money(r.parts)} $</td></tr>
+          </tbody>
+        </table>
+
+        <div class="tot">
+          <div class="row"><span>Sous-total</span><span>${money(r.sub)} $</span></div>
+          <div class="row"><span>TPS</span><span>${money(r.tps)} $</span></div>
+          <div class="row"><span>TVQ</span><span>${money(r.tvq)} $</span></div>
+          <div class="row grand"><span>Total</span><span>${money(r.total)} $</span></div>
+        </div>
+
+        <div class="muted" style="margin-top:18px;">* Estimation approximative. Le prix final peut varier selon l’inspection et les pièces choisies.</div>
+      </body></html>
+    `;
+    w.document.open(); w.document.write(html); w.document.close();
+    setTimeout(()=>{ try{ w.print(); }catch(e){} }, 300);
+  }
+
+  async function saveEstimate(){
+    if(!_aiLastResult) calc();
+    const r=_aiLastResult;
+    if(!currentUser){ showToast("Non connecté",2500,"error"); return; }
+    try{
+      await addDoc(collection(db,"aiEstimates"), {
+        uid: currentUser.uid,
+        role: currentRole || "",
+        createdAt: serverTimestamp(),
+        ...r,
+      });
+      const msg = $("aiSavedMsg");
+      msg.textContent = "Enregistré ✅";
+      msg.style.display = "block";
+      loadAiEstimateHistory();
+      showToast("Estimation enregistrée ✅");
+    }catch(e){
+      showToast("Erreur enregistrement",2500,"error");
+    }
+  }
+
+  function refreshAiEstimateHeader(){
+    $("aiLaborRate").textContent = money(settings.laborRate||0);
+    $("aiTaxesBadge").textContent = `TPS ${(Number(settings.tpsRate||0)*100).toFixed(2)}% + TVQ ${(Number(settings.tvqRate||0)*100).toFixed(3)}%`;
+  }
+
+  elService.addEventListener("change", ()=>{
+    const t = templates[elService.value];
+    if(t){
+      if(!elHours.value) elHours.value = t.hours;
+      if(!elParts.value) elParts.value = t.parts;
+    }
+    suggest();
+    calc();
+  });
+  [elHours, elParts, elNotes, elClient, elVehicle].forEach(el=> el.addEventListener("input", ()=>{ calc(); }));
+
+  btnCalc.addEventListener("click", ()=>{ calc(); showToast("Estimation calculée ✅"); });
+  btnCopy.addEventListener("click", copy);
+  btnPrint.addEventListener("click", printEstimate);
+  btnSave.addEventListener("click", saveEstimate);
+
+  refreshAiEstimateHeader();
+  suggest();
+  calc();
+  loadAiEstimateHistory();
+
+  // Expose for other modules if needed
+  window.aiEstimateCalc = calc;
+}
+
+function refreshAiEstimateHeader(){
+  try{
+    if($("aiLaborRate")) $("aiLaborRate").textContent = money(settings.laborRate||0);
+    if($("aiTaxesBadge")) $("aiTaxesBadge").textContent = `TPS ${(Number(settings.tpsRate||0)*100).toFixed(2)}% + TVQ ${(Number(settings.tvqRate||0)*100).toFixed(3)}%`;
+  }catch(e){}
+}
+
+async function loadAiEstimateHistory(){
+  try{
+    const wrap = $("aiHistory");
+    if(!wrap) return;
+    wrap.innerHTML = '<div class="muted">Chargement…</div>';
+    if(!currentUser){ wrap.innerHTML = '<div class="muted">Connecte-toi pour voir l’historique.</div>'; return; }
+    const qy = query(collection(db,"aiEstimates"), where("uid","==",currentUser.uid), orderBy("createdAt","desc"), limit(8));
+    const snap = await getDocs(qy);
+    if(snap.empty){ wrap.innerHTML = '<div class="muted">Aucune estimation enregistrée.</div>'; return; }
+    let out = "";
+    snap.forEach(d=>{
+      const r=d.data()||{};
+      const dt = r.createdAt?.toDate ? r.createdAt.toDate() : null;
+      const when = dt ? dt.toLocaleDateString("fr-CA") : "";
+      out += `
+        <div class="ai-h-item">
+          <div class="ai-h-main">
+            <div class="ai-h-title">${safe(r.vehicle || r.clientName || "Estimation")}</div>
+            <div class="muted small">${when}${r.service?(" • "+safe(r.service)):""}</div>
+          </div>
+          <div class="ai-h-right">
+            <div class="ai-h-total">$${money(r.total||0)}</div>
+          </div>
+        </div>
+      `;
+    });
+    wrap.innerHTML = out;
+  }catch(e){
+    try{ $("aiHistory").innerHTML = '<div class="muted">Historique indisponible.</div>'; }catch(_){}
+  }
+}
+// ===== End Estimation intelligente =====
