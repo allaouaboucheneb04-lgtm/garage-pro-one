@@ -469,3 +469,79 @@ tr:hover td{background:rgba(255,255,255,.03)}
 /* Make auth view look premium */
 #viewAuth{background:transparent !important}
 #viewAuth h1{color:var(--text)}
+
+
+/* Clients - Mobile cards (vendable) */
+.table-wrap{ overflow-x:auto; }
+.desktop-only{ display:block; }
+.mobile-only{ display:none; }
+
+.client-cards{ display:flex; flex-direction:column; gap:12px; }
+
+.client-card{
+  background: rgba(17,17,17,0.9);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.client-name{
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin-bottom: 6px;
+}
+
+.client-meta{
+  display:flex;
+  flex-direction:column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.client-side{
+  margin-top: 12px;
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+
+.status{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.status.paid{ background: rgba(34,197,94,0.20); border: 1px solid rgba(34,197,94,0.45); color: #c8f7d8; }
+.status.unpaid{ background: rgba(239,68,68,0.18); border: 1px solid rgba(239,68,68,0.45); color: #ffd1d1; }
+
+.promo-check{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  width: fit-content;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  font-size: 12px;
+  color: rgba(255,255,255,0.82);
+}
+.promo-check input{ transform: scale(1.05); }
+
+.client-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+/* Mobile: cards instead of table */
+@media (max-width: 860px){
+  .desktop-only{ display:none !important; }
+  .mobile-only{ display:block !important; }
+}

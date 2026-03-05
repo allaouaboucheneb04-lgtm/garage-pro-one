@@ -1190,6 +1190,7 @@ function runQuickSearch(){
 
 /* Clients view */
 const clientsTbody = $("clientsTbody");
+const clientsCards = $("clientsCards");
 const clientStatsModal = $("clientStatsModal");
 const btnCloseClientStats = $("btnCloseClientStats");
 const csTitle = $("csTitle");
@@ -3212,44 +3213,90 @@ function renderClients(){
   if(clientPayFilter==="unpaid"){
     list = list.filter(c=>!_isPaidCustomer(c));
   }
-  clientsCount.textContent = `${list.length} client(s)`;
+
+  if(clientsCount) clientsCount.textContent = `${list.length} client(s)`;
   if(promoSelCount){
     const sel = customers.filter(c=>c && c.promoSelected===true).length;
     promoSelCount.textContent = `${sel} sélectionné(s)`;
   }
+
+  // Empty state
   if(list.length===0){
-    clientsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucun client.</td></tr>';
+    if(clientsTbody) clientsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucun client.</td></tr>';
+    if(clientsCards) clientsCards.innerHTML = '<div class="muted" style="padding:10px 4px">Aucun client.</div>';
     return;
   }
-  clientsTbody.innerHTML = list.map(c=>{
-    const isPaid = _isPaidCustomer(c);
-    const payLabel = isPaid ? "Payé" : "Non payé";
-    const payClass = isPaid ? "pill good" : "pill bad";
-    const toggleBtn = isPaid
-      ? `<button class="btn btn-small btn-ghost" onclick="window.__setCustomerPaid('${c.id}', false)">Marquer non payé</button>`
-      : `<button class="btn btn-small btn-primary" onclick="window.__setCustomerPaid('${c.id}', true)">Marquer payé</button>`;
-    const emailBtn = `<button class="btn btn-small" onclick="window.__emailPaymentRequest('${c.id}')">Email paiement</button>`;
-    return `
-    <tr>
-      <td>${safe(c.fullName)}</td>
-      <td>${safe(c.phone||"")}</td>
-      <td>${safe(c.email||"")}</td>
-      <td class="nowrap"><span class="${payClass}">${payLabel}</span></td>
-      <td class="nowrap">
-        <label class="row" style="gap:6px; align-items:center">
-          <input type="checkbox" ${c.promoSelected ? "checked" : ""} onchange="window.__togglePromoSelected('${c.id}', this.checked)">
-          <span class="muted" style="font-size:12px">Oui</span>
-        </label>
-      </td>
-      <td class="nowrap">
-        ${(!isPaid ? emailBtn : "")}
-        ${toggleBtn}
-        <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
-        <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
-      </td>
-    </tr>
-  `;
-  }).join("");
+
+  // Desktop table rows
+  if(clientsTbody){
+    clientsTbody.innerHTML = list.map(c=>{
+      const isPaid = _isPaidCustomer(c);
+      const payLabel = isPaid ? "Payé" : "Non payé";
+      const payClass = isPaid ? "pill good" : "pill bad";
+      const toggleBtn = isPaid
+        ? `<button class="btn btn-small btn-ghost" onclick="window.__setCustomerPaid('${c.id}', false)">Marquer non payé</button>`
+        : `<button class="btn btn-small btn-primary" onclick="window.__setCustomerPaid('${c.id}', true)">Marquer payé</button>`;
+      const emailBtn = `<button class="btn btn-small" onclick="window.__emailPaymentRequest('${c.id}')">Email paiement</button>`;
+      return `
+      <tr>
+        <td>${safe(c.fullName)}</td>
+        <td>${safe(c.phone||"")}</td>
+        <td>${safe(c.email||"")}</td>
+        <td class="nowrap"><span class="${payClass}">${payLabel}</span></td>
+        <td class="nowrap">
+          <label class="row" style="gap:6px; align-items:center">
+            <input type="checkbox" ${c.promoSelected ? "checked" : ""} onchange="window.__togglePromoSelected('${c.id}', this.checked)">
+            <span class="muted" style="font-size:12px">Oui</span>
+          </label>
+        </td>
+        <td class="nowrap">
+          ${(!isPaid ? emailBtn : "")}
+          ${toggleBtn}
+          <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
+          <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  // Mobile cards
+  if(clientsCards){
+    clientsCards.innerHTML = list.map(c=>{
+      const isPaid = _isPaidCustomer(c);
+      const payLabel = isPaid ? "Payé" : "Non payé";
+      const payClass = isPaid ? "status paid" : "status unpaid";
+      const toggleBtn = isPaid
+        ? `<button class="btn btn-small btn-ghost" onclick="window.__setCustomerPaid('${c.id}', false)">Non payé</button>`
+        : `<button class="btn btn-small btn-primary" onclick="window.__setCustomerPaid('${c.id}', true)">Payé</button>`;
+      const emailBtn = !isPaid ? `<button class="btn btn-small" onclick="window.__emailPaymentRequest('${c.id}')">Email</button>` : "";
+      return `
+      <div class="client-card">
+        <div class="client-main">
+          <div class="client-name">${safe(c.fullName)}</div>
+          <div class="client-meta">
+            <span class="muted">📞 ${safe(c.phone||"")}</span>
+            ${c.email ? `<span class="muted">✉️ ${safe(c.email||"")}</span>` : `<span class="muted">✉️</span>`}
+          </div>
+        </div>
+
+        <div class="client-side">
+          <span class="${payClass}">${payLabel}</span>
+
+          <label class="promo-check">
+            <input type="checkbox" ${c.promoSelected ? "checked" : ""} onchange="window.__togglePromoSelected('${c.id}', this.checked)">
+            <span>Promo</span>
+          </label>
+
+          <div class="client-actions">
+            <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
+            <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
+            ${emailBtn}
+            ${toggleBtn}
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+  }
 }
 
 function openClientStats(customerId){
