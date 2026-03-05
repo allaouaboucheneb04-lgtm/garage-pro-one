@@ -545,3 +545,59 @@ tr:hover td{background:rgba(255,255,255,.03)}
   .desktop-only{ display:none !important; }
   .mobile-only{ display:block !important; }
 }
+
+/* =====================
+   Revenue (Revenus) redesign
+   ===================== */
+
+#viewRevenue .rev-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:14px;
+  flex-wrap:wrap;
+}
+
+#viewRevenue .rev-title h2{margin:0 0 6px 0}
+
+#viewRevenue .rev-filters{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:flex-end;
+}
+
+#viewRevenue .rev-field{min-width:170px}
+#viewRevenue .rev-label{font-size:12px; opacity:.75; margin:0 0 4px 0}
+
+#viewRevenue .rev-actions{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+
+#viewRevenue .rev-kpis{
+  margin-top:14px;
+  gap:12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+}
+
+#viewRevenue .rev-table-wrap{
+  margin-top:14px;
+  overflow:auto;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+}
+
+#viewRevenue .rev-table-wrap .table{margin:0}
+
+@media (max-width: 768px){
+  #viewRevenue .rev-field{min-width: calc(50% - 6px)}
+  #viewRevenue .rev-actions{width:100%}
+  #viewRevenue .rev-actions .btn{flex:1}
+  #viewRevenue .rev-table-wrap{border-radius:12px}
+}
+
+@media (max-width: 420px){
+  #viewRevenue .rev-field{min-width:100%}
+}
