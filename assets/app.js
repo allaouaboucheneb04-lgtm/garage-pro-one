@@ -495,7 +495,15 @@ function go(view){
   if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses" || view==="notifications")){
     view = "repairs";
   }
-  for(const k in views) views[k].style.display = (k===view) ? "" : "none";
+  // Hide all view sections (robust on mobile/iOS)
+document.querySelectorAll('#viewApp > section[id^="view"]').forEach(sec=>{
+  sec.style.display = 'none';
+});
+// Also hide any other view containers if present
+for(const k in views){ if(views[k]) views[k].style.display = 'none'; }
+
+// Show requested view
+if(views[view]){ views[view].style.display = ''; }
   const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
   // highlight active menu
