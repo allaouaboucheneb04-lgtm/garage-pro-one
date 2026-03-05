@@ -1,0 +1,149 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // staff doc of current user (no loops)
+    function myStaffDoc() {
+      return /databases/$(database)/documents/staff/$(request.auth.uid);
+    }
+
+    function role() {
+      return exists(myStaffDoc()) ? get(myStaffDoc()).data.role : null;
+    }
+
+    function isAdmin() { return signedIn() && role() == "admin"; }
+    function isMech()  { return signedIn() && role() == "mechanic"; }
+
+    function inviteDoc(code) {
+      return /databases/$(database)/documents/invites/$(code);
+    }
+
+    function validInviteForStaff(code, email, roleStr) {
+      return exists(inviteDoc(code))
+        && get(inviteDoc(code)).data.used == false
+        && get(inviteDoc(code)).data.email == email
+        && get(inviteDoc(code)).data.role == roleStr;
+    }
+
+    // USERS (optional profile; minimal)
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // STAFF (employees)
+    match /staff/{uid} {
+      // Admin can read all; staff can read self
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isAdmin();
+
+      // Create:
+      // - Admin can create staff
+      // - Invited user can create THEIR OWN staff profile (uid == auth.uid) using a valid invite code
+      allow create: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.inviteCode is string
+          && request.resource.data.email is string
+          && request.resource.data.role is string
+          && request.resource.data.disabled == false
+          && validInviteForStaff(request.resource.data.inviteCode, request.resource.data.email, request.resource.data.role)
+        );
+
+      // Admin can manage staff, but cannot delete/update THEIR OWN staff doc (anti-lockout)
+      allow update, delete: if isAdmin() && request.auth.uid != uid;
+    }
+
+    // INVITES
+    match /invites/{code} {
+      // allow GET without auth so invited users can validate code before creating account
+      // forbid LIST for non-admin to prevent enumeration
+      allow get: if true;
+      allow list: if isAdmin();
+
+      allow create, delete: if isAdmin();
+
+      // Update:
+      // - Admin can update any invite
+      // - Invited user can mark THEIR invite as used (one-way)
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.used == false
+          && request.resource.data.used == true
+          && request.resource.data.usedBy == request.auth.uid
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.createdAt == resource.data.createdAt
+        );
+    }
+
+    match /customers/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /vehicles/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /workorders/{id} {
+      allow read: if isAdmin()
+        || (isMech() && resource.data.assignedTo == request.auth.uid);
+
+      allow create: if isAdmin();
+
+      allow update: if isAdmin()
+        || (isMech()
+            && resource.data.assignedTo == request.auth.uid
+            && request.resource.data.assignedTo == resource.data.assignedTo);
+
+      allow delete: if isAdmin();
+    }
+
+    match /appointments/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /promotions/{id} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /invoices/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // DEPENSES PIECES (achats fournisseurs)
+    match /expenses_parts/{id} {
+      allow read: if signedIn() && isAdmin();
+      allow create, update, delete: if signedIn() && isAdmin();
+    }
+
+    // meta/settings/counters
+    match /meta/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Email queue (Trigger Email from Firestore extension)
+    match /mail/{id} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // LOGS (optional)
+    match /logs/{id} {
+      allow get: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+  }
+}
