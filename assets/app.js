@@ -3205,15 +3205,6 @@ function renderClients(){
     );
   }
 
-  // Compteur non-payés (sur tous les clients)
-  const unpaidTotal = customers.filter(c=>!_isPaidCustomer(c)).length;
-  if(unpaidCountEl) unpaidCountEl.textContent = `${unpaidTotal} non payé(s)`;
-
-  // Filtre: non payés
-  if(clientPayFilter==="unpaid"){
-    list = list.filter(c=>!_isPaidCustomer(c));
-  }
-
   if(clientsCount) clientsCount.textContent = `${list.length} client(s)`;
   if(promoSelCount){
     const sel = customers.filter(c=>c && c.promoSelected===true).length;
@@ -3222,27 +3213,19 @@ function renderClients(){
 
   // Empty state
   if(list.length===0){
-    if(clientsTbody) clientsTbody.innerHTML = '<tr><td colspan="6" class="muted">Aucun client.</td></tr>';
+    if(clientsTbody) clientsTbody.innerHTML = '<tr><td colspan="5" class="muted">Aucun client.</td></tr>';
     if(clientsCards) clientsCards.innerHTML = '<div class="muted" style="padding:10px 4px">Aucun client.</div>';
     return;
   }
 
-  // Desktop table rows
+  // Desktop table rows (sans "Payé" — le paiement est lié aux réparations/factures)
   if(clientsTbody){
     clientsTbody.innerHTML = list.map(c=>{
-      const isPaid = _isPaidCustomer(c);
-      const payLabel = isPaid ? "Payé" : "Non payé";
-      const payClass = isPaid ? "pill good" : "pill bad";
-      const toggleBtn = isPaid
-        ? `<button class="btn btn-small btn-ghost" onclick="window.__setCustomerPaid('${c.id}', false)">Marquer non payé</button>`
-        : `<button class="btn btn-small btn-primary" onclick="window.__setCustomerPaid('${c.id}', true)">Marquer payé</button>`;
-      const emailBtn = `<button class="btn btn-small" onclick="window.__emailPaymentRequest('${c.id}')">Email paiement</button>`;
       return `
       <tr>
         <td>${safe(c.fullName)}</td>
         <td>${safe(c.phone||"")}</td>
         <td>${safe(c.email||"")}</td>
-        <td class="nowrap"><span class="${payClass}">${payLabel}</span></td>
         <td class="nowrap">
           <label class="row" style="gap:6px; align-items:center">
             <input type="checkbox" ${c.promoSelected ? "checked" : ""} onchange="window.__togglePromoSelected('${c.id}', this.checked)">
@@ -3250,8 +3233,6 @@ function renderClients(){
           </label>
         </td>
         <td class="nowrap">
-          ${(!isPaid ? emailBtn : "")}
-          ${toggleBtn}
           <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
           <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
         </td>
@@ -3262,13 +3243,6 @@ function renderClients(){
   // Mobile cards
   if(clientsCards){
     clientsCards.innerHTML = list.map(c=>{
-      const isPaid = _isPaidCustomer(c);
-      const payLabel = isPaid ? "Payé" : "Non payé";
-      const payClass = isPaid ? "status paid" : "status unpaid";
-      const toggleBtn = isPaid
-        ? `<button class="btn btn-small btn-ghost" onclick="window.__setCustomerPaid('${c.id}', false)">Non payé</button>`
-        : `<button class="btn btn-small btn-primary" onclick="window.__setCustomerPaid('${c.id}', true)">Payé</button>`;
-      const emailBtn = !isPaid ? `<button class="btn btn-small" onclick="window.__emailPaymentRequest('${c.id}')">Email</button>` : "";
       return `
       <div class="client-card">
         <div class="client-main">
@@ -3280,8 +3254,6 @@ function renderClients(){
         </div>
 
         <div class="client-side">
-          <span class="${payClass}">${payLabel}</span>
-
           <label class="promo-check">
             <input type="checkbox" ${c.promoSelected ? "checked" : ""} onchange="window.__togglePromoSelected('${c.id}', this.checked)">
             <span>Promo</span>
@@ -3290,8 +3262,6 @@ function renderClients(){
           <div class="client-actions">
             <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
             <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
-            ${emailBtn}
-            ${toggleBtn}
           </div>
         </div>
       </div>`;
