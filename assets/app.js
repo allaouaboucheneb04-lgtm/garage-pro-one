@@ -3808,13 +3808,20 @@ $("btnSaveSettings").onclick = async ()=>{
   const garagePhone = String($("setGaragePhone")?.value||"").trim();
   const garageEmail = String($("setGarageEmail")?.value||"").trim();
   const signatureName = String($("setSignatureName")?.value||"").trim();
+  const selectedTheme = String($("themeSelect")?.value || "light");
   if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || !isFinite(laborRate) || tps<0 || tvq<0 || cardFee<0 || laborRate<0){
     alert("TPS/TVQ invalides.");
     return;
   }
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, signatureName, updatedAt: serverTimestamp() }, { merge:true });
+  applyTheme(selectedTheme);
+  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, signatureName, theme: selectedTheme, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
+const themeSelectEl = $("themeSelect");
+if(themeSelectEl){
+  themeSelectEl.onchange = (e)=> applyTheme(e.target.value);
+}
+
 function renderSettings(){
   $("setTps").value = (settings.tpsRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
   $("setTvq").value = (settings.tvqRate*100).toFixed(3).replace(/\.000$/,'').replace(/0+$/,'').replace(/\.$/,'');
@@ -3828,7 +3835,25 @@ function renderSettings(){
   const gp = $("setGaragePhone"); if(gp) gp.value = String(settings.garagePhone||"");
   const ge = $("setGarageEmail"); if(ge) ge.value = String(settings.garageEmail||"");
   const sn = $("setSignatureName"); if(sn) sn.value = String(settings.signatureName||"");
+  applyTheme(String(settings.theme || (function(){ try{return localStorage.getItem("gpo_theme")||"light";}catch(e){return "light";} })()));
 }
+
+
+/* Theme */
+function applyTheme(theme){
+  const value = theme === "dark" ? "dark" : "light";
+  document.body.classList.remove("light","dark");
+  document.body.classList.add(value);
+  try{ localStorage.setItem("gpo_theme", value); }catch(e){}
+  const sel = $("themeSelect");
+  if(sel) sel.value = value;
+}
+function initTheme(){
+  let saved = "light";
+  try{ saved = localStorage.getItem("gpo_theme") || "light"; }catch(e){}
+  applyTheme(saved);
+}
+initTheme();
 
 /* Export / Import */
 $("btnExport").onclick = ()=>{

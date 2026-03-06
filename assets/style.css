@@ -690,3 +690,154 @@ tr:hover td{background:rgba(255,255,255,.03)}
 @media (max-width: 420px){
   #viewRevenue .rev-field{min-width:100%}
 }
+
+
+/* ====== THEME SWITCH (default light) ====== */
+body.light,
+body:not(.dark){
+  --bg:#f5f7fb;
+  --panel:#ffffff;
+  --card:#ffffff;
+  --muted:#6b7280;
+  --text:#111827;
+  --border:#e5e7eb;
+  --primary:#2563eb;
+  --primary-2:#1d4ed8;
+  --danger:#dc2626;
+  --ok:#16a34a;
+  --warn:#d97706;
+  --shadow:0 10px 24px rgba(15,23,42,.08);
+}
+body.light,
+body:not(.dark){
+  background:var(--bg) !important;
+  color:var(--text) !important;
+}
+body.light .topbar,
+body:not(.dark) .topbar{
+  background:rgba(255,255,255,.96) !important;
+  border-bottom:1px solid var(--border) !important;
+  backdrop-filter: blur(10px);
+}
+body.light .page-title,
+body:not(.dark) .page-title,
+body.light .icon-btn,
+body:not(.dark) .icon-btn{
+  color:var(--text) !important;
+  background:#ffffff !important;
+  border-color:var(--border) !important;
+}
+body.light .app-shell,
+body:not(.dark) .app-shell{ background:transparent !important; }
+body.light .sidebar,
+body:not(.dark) .sidebar{
+  background:#ffffff !important;
+  border-right:1px solid var(--border) !important;
+}
+body.light .sidebar-name,
+body:not(.dark) .sidebar-name,
+body.light .brand .name,
+body:not(.dark) .brand .name,
+body.light .sidebar-sub,
+body:not(.dark) .sidebar-sub,
+body.light .page-title,
+body:not(.dark) .page-title{ color:var(--text) !important; }
+body.light .nav .btn,
+body:not(.dark) .nav .btn{
+  background:#ffffff !important;
+  color:var(--text) !important;
+  border-color:var(--border) !important;
+}
+body.light .nav .btn.active,
+body:not(.dark) .nav .btn.active{
+  border-color:#bfdbfe !important;
+  background:#eff6ff !important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.08) !important;
+}
+body.light .btn,
+body:not(.dark) .btn{
+  background:#ffffff !important;
+  color:var(--text) !important;
+  border-color:var(--border) !important;
+}
+body.light .btn-primary,
+body:not(.dark) .btn-primary{
+  background:linear-gradient(180deg,#3b82f6,#2563eb) !important;
+  border-color:#2563eb !important;
+  color:#fff !important;
+}
+body.light .btn-danger,
+body:not(.dark) .btn-danger{
+  background:#fef2f2 !important;
+  border-color:#fecaca !important;
+  color:#991b1b !important;
+}
+body.light .card,
+body:not(.dark) .card,
+body.light .modal,
+body:not(.dark) .modal,
+body.light .box,
+body:not(.dark) .box,
+body.light .table-card,
+body:not(.dark) .table-card{
+  background:#ffffff !important;
+  color:var(--text) !important;
+  border:1px solid var(--border) !important;
+  box-shadow:var(--shadow) !important;
+}
+body.light .note,
+body:not(.dark) .note{ background:#f0fdf4 !important; border-color:#bbf7d0 !important; color:#166534 !important; }
+body.light .alert,
+body:not(.dark) .alert{ background:#fef2f2 !important; border-color:#fecaca !important; color:#991b1b !important; }
+body.light .muted,
+body:not(.dark) .muted,
+body.light small,
+body:not(.dark) small{ color:var(--muted) !important; }
+body.light input,
+body.light select,
+body.light textarea,
+body:not(.dark) input,
+body:not(.dark) select,
+body:not(.dark) textarea{
+  background:#ffffff !important;
+  color:var(--text) !important;
+  border:1px solid #d1d5db !important;
+}
+body.light input::placeholder,
+body.light textarea::placeholder,
+body:not(.dark) input::placeholder,
+body:not(.dark) textarea::placeholder{ color:#9ca3af !important; }
+body.light input:focus,
+body.light select:focus,
+body.light textarea:focus,
+body:not(.dark) input:focus,
+body:not(.dark) select:focus,
+body:not(.dark) textarea:focus{
+  border-color:#93c5fd !important;
+  box-shadow:0 0 0 3px rgba(59,130,246,.15) !important;
+}
+body.light table,
+body:not(.dark) table,
+body.light .table-wrap,
+body:not(.dark) .table-wrap{ border-color:var(--border) !important; }
+body.light th,
+body:not(.dark) th{
+  background:#f8fafc !important;
+  color:#374151 !important;
+  border-bottom:1px solid var(--border) !important;
+}
+body.light td,
+body:not(.dark) td{ color:#111827 !important; border-bottom:1px solid var(--border) !important; }
+body.light tr:hover td,
+body:not(.dark) tr:hover td{ background:#f9fafb !important; }
+body.light .mcard,
+body:not(.dark) .mcard{
+  background:#ffffff !important;
+  border:1px solid var(--border) !important;
+}
+body.light .mcard .sub,
+body.light .mcard .meta,
+body:not(.dark) .mcard .sub,
+body:not(.dark) .mcard .meta{ color:#6b7280 !important; }
+body.light .footer,
+body:not(.dark) .footer{ color:#6b7280 !important; }
