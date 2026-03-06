@@ -690,3 +690,213 @@ tr:hover td{background:rgba(255,255,255,.03)}
 @media (max-width: 420px){
   #viewRevenue .rev-field{min-width:100%}
 }
+
+/* =========================
+   Light theme refresh
+   ========================= */
+:root{
+  --bg:#f6f8fc;
+  --panel:#ffffff;
+  --card:#ffffff;
+  --muted:#6b7280;
+  --text:#0f172a;
+  --border:#dbe3ef;
+  --primary:#2563eb;
+  --primary-2:#1d4ed8;
+  --danger:#dc2626;
+  --ok:#16a34a;
+  --warn:#d97706;
+  --shadow:0 14px 32px rgba(15,23,42,.08);
+}
+
+html,body{
+  background:linear-gradient(180deg,#f8fbff 0%, #f4f7fb 100%) !important;
+  color:var(--text) !important;
+}
+body{
+  color-scheme:light;
+}
+.topbar,
+.sidebar,
+.header-card,
+.card,
+.modal,
+.modal-header,
+.table-wrap,
+.note,
+.mcard,
+.repair-card,
+.rev-card,
+.stat-card,
+.client-card,
+.print-box{
+  background:#fff !important;
+  color:var(--text) !important;
+  border-color:var(--border) !important;
+  box-shadow:var(--shadow) !important;
+}
+
+.sidebar{
+  background:linear-gradient(180deg,#ffffff,#f8fbff) !important;
+  border-right:1px solid var(--border) !important;
+}
+
+.header-card{
+  background:linear-gradient(180deg,#ffffff,#f8fbff) !important;
+}
+
+.brand .logo,
+.sidebar-logo{
+  background:#eef4ff !important;
+  border-color:#d9e5ff !important;
+}
+
+h1,h2,h3,h4,h5,h6,
+.modal-title,
+.repair-title,
+.rev-title,
+.client-name,
+.title,
+.amount,
+.kpi-value,
+.stat-value,
+.print-area,
+.print-area *{
+  color:var(--text) !important;
+}
+
+.muted,
+.sub,
+.meta,
+.repair-sub,
+.rev-date,
+.rev-repair,
+.footer,
+.note,
+label,
+small,
+p{
+  color:var(--muted) !important;
+}
+
+input,textarea,select{
+  background:#fff !important;
+  color:var(--text) !important;
+  border:1px solid var(--border) !important;
+}
+input::placeholder,
+textarea::placeholder{
+  color:#94a3b8 !important;
+}
+
+.btn{
+  background:#fff !important;
+  color:var(--text) !important;
+  border:1px solid var(--border) !important;
+}
+.btn:hover{
+  background:#f8fafc !important;
+}
+.btn-primary{
+  background:linear-gradient(180deg,#3b82f6,#2563eb) !important;
+  border-color:#2563eb !important;
+  color:#fff !important;
+}
+.btn-primary:hover{
+  background:linear-gradient(180deg,#2563eb,#1d4ed8) !important;
+}
+.btn-danger{
+  background:#fff1f2 !important;
+  border-color:#fecdd3 !important;
+  color:#be123c !important;
+}
+
+.nav .btn,
+.topbar .btn,
+.rev-pill,
+.pill,
+.status,
+.badge{
+  background:#fff !important;
+  color:var(--text) !important;
+  border-color:var(--border) !important;
+}
+.nav .btn:hover,
+.nav .btn.active,
+.topbar .btn.active{
+  background:#eff6ff !important;
+  border-color:#bfdbfe !important;
+  color:#1d4ed8 !important;
+}
+
+.divider{
+  border-color:var(--border) !important;
+}
+
+.table,
+table{
+  background:#fff !important;
+  color:var(--text) !important;
+  border-color:var(--border) !important;
+}
+.table th,
+.table td,
+th,td{
+  border-bottom:1px solid var(--border) !important;
+  color:var(--text) !important;
+}
+.table th,
+th{
+  background:#f8fafc !important;
+  color:#475569 !important;
+}
+tr:hover td{
+  background:#f8fbff !important;
+}
+.row-selected td{
+  background:#eff6ff !important;
+}
+
+.toast{
+  background:rgba(15,23,42,.92) !important;
+  color:#fff !important;
+}
+
+.modal-backdrop,
+.sheet-backdrop{
+  background:rgba(15,23,42,.25) !important;
+}
+
+.print-area{
+  background:#fff !important;
+}
+.print-logo{
+  background:#eef2ff !important;
+  color:#1d4ed8 !important;
+}
+
+.repair-card,
+.rev-card,
+.mcard,
+.stat-card{
+  background:#fff !important;
+}
+.repair-card .meta,
+.rev-card .meta,
+.mcard .meta{
+  color:#64748b !important;
+}
+
+.kpi-grid .card,
+.stats-grid .card,
+.dashboard-kpi .card{
+  background:linear-gradient(180deg,#ffffff,#f8fbff) !important;
+}
+
+section[id^="view"]{
+  background:transparent !important;
+}
+
+.footer{
+  background:transparent !important;
+}
