@@ -101,7 +101,7 @@ service cloud.firestore {
       allow create: if isAdmin()
         || (
           request.auth == null
-          && request.resource.data.keys().hasOnly(["customerId","make","model","year","plate","vin","mileage","color","source","createdAt"])
+          && request.resource.data.keys().hasOnly(["customerId","make","model","year","plate","vin","mileage","engineType","cylinders","bodyType","color","notes","source","createdAt"])
           && request.resource.data.source == "client_self_register"
           && request.resource.data.customerId is string
           && request.resource.data.make is string

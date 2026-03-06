@@ -62,7 +62,7 @@
 
     <div class="card panel">
       <h2>Première visite</h2>
-      <p class="sub">Remplissez vos informations et celles de votre voiture. Le numéro VIN peut remplir automatiquement la marque, le modèle et l’année.</p>
+      <p class="sub">Remplissez vos informations et celles de votre voiture. Le numéro VIN peut remplir automatiquement la marque, le modèle, l’année, le type de moteur, le nombre de cylindres et le type de véhicule.</p>
 
       <div class="grid">
         <div class="card section">
@@ -81,14 +81,57 @@
               <input id="vin" maxlength="17" placeholder="17 caractères" autocapitalize="characters" />
               <button type="button" class="btn btn-soft" id="btnDecodeVin">Remplir avec VIN</button>
             </div>
-            <div class="hint">Le décodage utilise l’API officielle vPIC de la NHTSA. Il est recommandé d’envoyer le modèle/année quand disponible, et les valeurs manquantes signifient que NHTSA n’a pas de donnée pour ce VIN. citeturn1search0turn1search3</div>
+            <div class="hint">Le décodage VIN peut remplir automatiquement la marque, le modèle, l’année, le moteur, les cylindres et le type de véhicule quand ces données sont disponibles.</div>
           </div>
           <div class="field"><label for="make">Marque</label><input id="make" placeholder="Ex: Toyota" /></div>
           <div class="field"><label for="model">Modèle</label><input id="model" placeholder="Ex: Sienna" /></div>
           <div class="field"><label for="year">Année</label><input id="year" inputmode="numeric" placeholder="Ex: 2023" /></div>
           <div class="field"><label for="plate">Plaque</label><input id="plate" placeholder="Ex: ABC123" autocapitalize="characters" /></div>
-          <div class="field"><label for="mileage">Kilométrage</label><input id="mileage" inputmode="numeric" placeholder="Ex: 151000" /></div>
+          <div class="field"><label for="mileage">Kilométrage actuel</label><input id="mileage" inputmode="numeric" placeholder="Ex: 151000" /></div>
+          <div class="field"><label for="engineType">Type de moteur</label>
+            <select id="engineType">
+              <option value="">—</option>
+              <option>Essence</option>
+              <option>Diesel</option>
+              <option>Hybride</option>
+              <option>Hybride rechargeable</option>
+              <option>Électrique</option>
+              <option>V6</option>
+              <option>V8</option>
+              <option>4 cylindres</option>
+              <option>6 cylindres</option>
+              <option>Autre</option>
+            </select>
+          </div>
+          <div class="field"><label for="cylinders">Nombre de cylindres</label>
+            <select id="cylinders">
+              <option value="">—</option>
+              <option>3</option>
+              <option>4</option>
+              <option>5</option>
+              <option>6</option>
+              <option>8</option>
+              <option>10</option>
+              <option>12</option>
+            </select>
+          </div>
+          <div class="field"><label for="bodyType">Type de véhicule</label>
+            <select id="bodyType">
+              <option value="">—</option>
+              <option>Berline</option>
+              <option>Coupé</option>
+              <option>Hatchback</option>
+              <option>SUV</option>
+              <option>Crossover</option>
+              <option>Pickup</option>
+              <option>Van</option>
+              <option>Fourgonnette</option>
+              <option>Wagon</option>
+              <option>Autre</option>
+            </select>
+          </div>
           <div class="field"><label for="color">Couleur</label><input id="color" placeholder="Ex: Blanc" /></div>
+          <div class="field"><label for="notes">Notes</label><textarea id="notes" rows="4" placeholder="Ex: Bruit au freinage, voyant moteur, etc."></textarea></div>
         </div>
       </div>
 
@@ -124,6 +167,31 @@
     function normalizeVin(v){ return (v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
     function normalizePhone(v){ return (v || '').replace(/\D/g,''); }
 
+    function mapBodyType(v){
+      const s=(v||'').toLowerCase();
+      if(!s) return '';
+      if(s.includes('sport utility') || s.includes('suv')) return 'SUV';
+      if(s.includes('van') || s.includes('minivan')) return 'Van';
+      if(s.includes('pickup') || s.includes('truck')) return 'Pickup';
+      if(s.includes('wagon')) return 'Wagon';
+      if(s.includes('hatchback') || s.includes('liftback')) return 'Hatchback';
+      if(s.includes('coupe')) return 'Coupé';
+      if(s.includes('sedan') || s.includes('saloon')) return 'Berline';
+      if(s.includes('crossover') || s.includes('cuv')) return 'Crossover';
+      return 'Autre';
+    }
+
+    function mapEngineType(v){
+      const s=(v||'').toLowerCase();
+      if(!s) return '';
+      if(s.includes('electric')) return 'Électrique';
+      if(s.includes('plug-in') || s.includes('phev')) return 'Hybride rechargeable';
+      if(s.includes('hybrid')) return 'Hybride';
+      if(s.includes('diesel')) return 'Diesel';
+      if(s.includes('gasoline') || s.includes('petrol') || s.includes('flexible fuel') || s.includes('cng')) return 'Essence';
+      return 'Autre';
+    }
+
     function fillPreview(data){
       const preview = $('vinPreview');
       const grid = $('vinPreviewGrid');
@@ -131,8 +199,9 @@
         ['Marque', data.make || '—'],
         ['Modèle', data.model || '—'],
         ['Année', data.year || '—'],
-        ['Type', data.vehicleType || '—'],
-        ['Moteur', data.engine || '—'],
+        ['Type', data.vehicleType || data.bodyType || '—'],
+        ['Moteur', data.engine || data.fuelType || '—'],
+        ['Cylindres', data.cylinders || '—'],
         ['Transmission', data.transmission || '—'],
       ];
       grid.innerHTML = items.map(([k,v]) => `<div class="pill"><b>${k}</b>${String(v)}</div>`).join('');
@@ -159,13 +228,18 @@
           model: row.Model || '',
           year: row.ModelYear || '',
           vehicleType: row.VehicleType || '',
-          engine: row.EngineModel || row.DisplacementL || row.EngineCylinders || '',
-          transmission: row.TransmissionStyle || '',
-          bodyClass: row.BodyClass || ''
+          bodyType: row.BodyClass || '',
+          fuelType: row.FuelTypePrimary || '',
+          engine: row.EngineModel || row.DisplacementL || row.FuelTypePrimary || '',
+          cylinders: row.EngineCylinders || '',
+          transmission: row.TransmissionStyle || ''
         };
         if(decoded.make && !$('make').value.trim()) $('make').value = decoded.make;
         if(decoded.model && !$('model').value.trim()) $('model').value = decoded.model;
         if(decoded.year && !$('year').value.trim()) $('year').value = decoded.year;
+        if(decoded.cylinders && !$('cylinders').value.trim()) $('cylinders').value = String(decoded.cylinders);
+        if(decoded.bodyType && !$('bodyType').value.trim()) $('bodyType').value = mapBodyType(decoded.bodyType);
+        if(decoded.fuelType && !$('engineType').value.trim()) $('engineType').value = mapEngineType(decoded.fuelType);
         fillPreview(decoded);
         showStatus('ok', decoded.make || decoded.model || decoded.year ? 'VIN lu avec succès.' : 'VIN lu, mais certaines données ne sont pas disponibles.');
       } catch (err) {
@@ -186,7 +260,11 @@
         plate: $('plate').value.trim().toUpperCase(),
         vin: normalizeVin($('vin').value),
         mileage: $('mileage').value.trim(),
+        engineType: $('engineType').value.trim(),
+        cylinders: $('cylinders').value.trim(),
+        bodyType: $('bodyType').value.trim(),
         color: $('color').value.trim(),
+        notes: $('notes').value.trim(),
       };
       if(!payload.fullName || !payload.phone || !payload.make || !payload.model){
         showStatus('err', 'Veuillez remplir au minimum le nom, téléphone, marque et modèle.');
@@ -210,13 +288,17 @@
           plate: payload.plate,
           vin: payload.vin,
           mileage: payload.mileage ? Number(payload.mileage) : null,
+          engineType: payload.engineType,
+          cylinders: payload.cylinders,
+          bodyType: payload.bodyType,
           color: payload.color,
+          notes: payload.notes,
           source: 'client_self_register',
           createdAt: serverTimestamp(),
         });
 
         showStatus('ok', 'Inscription enregistrée avec succès.');
-        ['fullName','phone','email','address','make','model','year','plate','vin','mileage','color'].forEach(id => $(id).value='');
+        ['fullName','phone','email','address','make','model','year','plate','vin','mileage','engineType','cylinders','bodyType','color','notes'].forEach(id => $(id).value='');
         $('vinPreview').style.display = 'none';
         $('vinPreviewGrid').innerHTML = '';
       } catch (err) {
