@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inscription client | Garage Pro One</title>
+  <script src="./assets/firebase-config.js"></script>
+  <style>
+    :root{
+      --bg:#f4f7fb;--card:#ffffff;--text:#0f172a;--muted:#64748b;--line:#dbe3ee;
+      --primary:#2563eb;--primary-2:#1d4ed8;--ok:#15803d;--warn:#b45309;--danger:#b91c1c;
+      --shadow:0 18px 45px rgba(15,23,42,.08);
+      --radius:18px;
+    }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#edf4ff 0%,#f8fafc 30%,#f4f7fb 100%);color:var(--text)}
+    .wrap{max-width:980px;margin:0 auto;padding:20px}
+    .hero{display:flex;gap:16px;align-items:center;justify-content:center;padding:18px 0 8px}
+    .hero img{width:64px;height:64px;object-fit:contain;background:#fff;border-radius:16px;padding:8px;box-shadow:var(--shadow)}
+    .hero h1{margin:0;font-size:28px}
+    .hero p{margin:4px 0 0;color:var(--muted)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .panel{padding:20px}
+    .panel h2{margin:0 0 8px;font-size:24px}
+    .panel .sub{margin:0;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+    .section{padding:18px}
+    .section h3{margin:0 0 14px;font-size:18px}
+    .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .field label{font-size:14px;font-weight:600}
+    .field input,.field select,.field textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font-size:16px;outline:none}
+    .field input:focus,.field select:focus,.field textarea:focus{border-color:#93c5fd;box-shadow:0 0 0 4px rgba(37,99,235,.12)}
+    .hint{font-size:12px;color:var(--muted)}
+    .vin-row{display:flex;gap:10px}
+    .vin-row input{flex:1}
+    .btn{border:none;border-radius:12px;padding:13px 16px;font-size:15px;font-weight:700;cursor:pointer}
+    .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-2)}
+    .btn-soft{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+    .btn-soft:hover{background:#dbeafe}
+    .btn-block{width:100%}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+    .status{margin-top:14px;padding:14px;border-radius:14px;display:none;font-size:14px;font-weight:600}
+    .status.ok{display:block;background:#ecfdf5;color:var(--ok);border:1px solid #bbf7d0}
+    .status.err{display:block;background:#fef2f2;color:var(--danger);border:1px solid #fecaca}
+    .status.info{display:block;background:#fff7ed;color:var(--warn);border:1px solid #fed7aa}
+    .preview{margin-top:16px;padding:16px;border:1px dashed #cbd5e1;border-radius:14px;background:#f8fafc}
+    .preview h4{margin:0 0 10px}.preview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .pill{background:#fff;border:1px solid var(--line);padding:10px;border-radius:12px}
+    .pill b{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+    .foot{padding:16px 2px 28px;text-align:center;color:var(--muted);font-size:13px}
+    @media (max-width:760px){.grid,.preview-grid{grid-template-columns:1fr}.hero{align-items:flex-start;justify-content:flex-start}.hero h1{font-size:24px}.wrap{padding:14px}.panel{padding:16px}.section{padding:16px}.vin-row{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <img src="./assets/logo.png" alt="Garage Pro One" />
+      <div>
+        <h1>Garage Pro One</h1>
+        <p>Inscription client et véhicule depuis votre téléphone</p>
+      </div>
+    </div>
+
+    <div class="card panel">
+      <h2>Première visite</h2>
+      <p class="sub">Remplissez vos informations et celles de votre voiture. Le numéro VIN peut remplir automatiquement la marque, le modèle et l’année.</p>
+
+      <div class="grid">
+        <div class="card section">
+          <h3>Informations client</h3>
+          <div class="field"><label for="fullName">Nom complet</label><input id="fullName" placeholder="Ex: Allaoua Boucheneb" /></div>
+          <div class="field"><label for="phone">Téléphone</label><input id="phone" inputmode="tel" placeholder="Ex: 514-555-1234" /></div>
+          <div class="field"><label for="email">Email</label><input id="email" inputmode="email" placeholder="Ex: client@email.com" /></div>
+          <div class="field"><label for="address">Adresse</label><input id="address" placeholder="Ex: Montréal" /></div>
+        </div>
+
+        <div class="card section">
+          <h3>Informations véhicule</h3>
+          <div class="field">
+            <label for="vin">VIN</label>
+            <div class="vin-row">
+              <input id="vin" maxlength="17" placeholder="17 caractères" autocapitalize="characters" />
+              <button type="button" class="btn btn-soft" id="btnDecodeVin">Remplir avec VIN</button>
+            </div>
+            <div class="hint">Le décodage utilise l’API officielle vPIC de la NHTSA. Il est recommandé d’envoyer le modèle/année quand disponible, et les valeurs manquantes signifient que NHTSA n’a pas de donnée pour ce VIN. citeturn1search0turn1search3</div>
+          </div>
+          <div class="field"><label for="make">Marque</label><input id="make" placeholder="Ex: Toyota" /></div>
+          <div class="field"><label for="model">Modèle</label><input id="model" placeholder="Ex: Sienna" /></div>
+          <div class="field"><label for="year">Année</label><input id="year" inputmode="numeric" placeholder="Ex: 2023" /></div>
+          <div class="field"><label for="plate">Plaque</label><input id="plate" placeholder="Ex: ABC123" autocapitalize="characters" /></div>
+          <div class="field"><label for="mileage">Kilométrage</label><input id="mileage" inputmode="numeric" placeholder="Ex: 151000" /></div>
+          <div class="field"><label for="color">Couleur</label><input id="color" placeholder="Ex: Blanc" /></div>
+        </div>
+      </div>
+
+      <div class="preview" id="vinPreview" style="display:none">
+        <h4>Informations trouvées par VIN</h4>
+        <div class="preview-grid" id="vinPreviewGrid"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary btn-block" id="btnRegister">S’inscrire</button>
+      </div>
+      <div class="status" id="formStatus"></div>
+    </div>
+
+    <div class="foot">Page publique d’inscription client · Garage Pro One</div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import { getFirestore, collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+    const app = initializeApp(window.FIREBASE_CONFIG);
+    const db = getFirestore(app);
+
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $('formStatus');
+
+    function showStatus(type, text){
+      statusEl.className = 'status ' + type;
+      statusEl.textContent = text;
+    }
+
+    function normalizeVin(v){ return (v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
+    function normalizePhone(v){ return (v || '').replace(/\D/g,''); }
+
+    function fillPreview(data){
+      const preview = $('vinPreview');
+      const grid = $('vinPreviewGrid');
+      const items = [
+        ['Marque', data.make || '—'],
+        ['Modèle', data.model || '—'],
+        ['Année', data.year || '—'],
+        ['Type', data.vehicleType || '—'],
+        ['Moteur', data.engine || '—'],
+        ['Transmission', data.transmission || '—'],
+      ];
+      grid.innerHTML = items.map(([k,v]) => `<div class="pill"><b>${k}</b>${String(v)}</div>`).join('');
+      preview.style.display = 'block';
+    }
+
+    async function decodeVin(){
+      const vin = normalizeVin($('vin').value);
+      $('vin').value = vin;
+      if(vin.length < 11){
+        showStatus('info', 'Entrez un VIN valide d’au moins 11 caractères.');
+        return;
+      }
+      showStatus('info', 'Lecture du VIN en cours...');
+      try {
+        const yearGuess = $('year').value.trim();
+        const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json${yearGuess ? `&modelyear=${encodeURIComponent(yearGuess)}` : ''}`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if(!res.ok) throw new Error('VIN API HTTP ' + res.status);
+        const json = await res.json();
+        const row = (json.Results && json.Results[0]) || {};
+        const decoded = {
+          make: row.Make || '',
+          model: row.Model || '',
+          year: row.ModelYear || '',
+          vehicleType: row.VehicleType || '',
+          engine: row.EngineModel || row.DisplacementL || row.EngineCylinders || '',
+          transmission: row.TransmissionStyle || '',
+          bodyClass: row.BodyClass || ''
+        };
+        if(decoded.make && !$('make').value.trim()) $('make').value = decoded.make;
+        if(decoded.model && !$('model').value.trim()) $('model').value = decoded.model;
+        if(decoded.year && !$('year').value.trim()) $('year').value = decoded.year;
+        fillPreview(decoded);
+        showStatus('ok', decoded.make || decoded.model || decoded.year ? 'VIN lu avec succès.' : 'VIN lu, mais certaines données ne sont pas disponibles.');
+      } catch (err) {
+        console.error(err);
+        showStatus('err', 'Impossible de lire le VIN pour le moment. Vérifiez la connexion et le VIN.');
+      }
+    }
+
+    async function register(){
+      const payload = {
+        fullName: $('fullName').value.trim(),
+        phone: normalizePhone($('phone').value),
+        email: $('email').value.trim().toLowerCase(),
+        address: $('address').value.trim(),
+        make: $('make').value.trim(),
+        model: $('model').value.trim(),
+        year: $('year').value.trim(),
+        plate: $('plate').value.trim().toUpperCase(),
+        vin: normalizeVin($('vin').value),
+        mileage: $('mileage').value.trim(),
+        color: $('color').value.trim(),
+      };
+      if(!payload.fullName || !payload.phone || !payload.make || !payload.model){
+        showStatus('err', 'Veuillez remplir au minimum le nom, téléphone, marque et modèle.');
+        return;
+      }
+      try {
+        showStatus('info', 'Enregistrement en cours...');
+        const customerRef = await addDoc(collection(db, 'customers'), {
+          name: payload.fullName,
+          phone: payload.phone,
+          email: payload.email,
+          address: payload.address,
+          source: 'client_self_register',
+          createdAt: serverTimestamp(),
+        });
+        await addDoc(collection(db, 'vehicles'), {
+          customerId: customerRef.id,
+          make: payload.make,
+          model: payload.model,
+          year: payload.year ? Number(payload.year) : null,
+          plate: payload.plate,
+          vin: payload.vin,
+          mileage: payload.mileage ? Number(payload.mileage) : null,
+          color: payload.color,
+          source: 'client_self_register',
+          createdAt: serverTimestamp(),
+        });
+
+        showStatus('ok', 'Inscription enregistrée avec succès.');
+        ['fullName','phone','email','address','make','model','year','plate','vin','mileage','color'].forEach(id => $(id).value='');
+        $('vinPreview').style.display = 'none';
+        $('vinPreviewGrid').innerHTML = '';
+      } catch (err) {
+        console.error(err);
+        showStatus('err', 'Enregistrement impossible. Vérifiez les règles Firestore et réessayez.');
+      }
+    }
+
+    $('btnDecodeVin').addEventListener('click', decodeVin);
+    $('vin').addEventListener('blur', () => { if(normalizeVin($('vin').value).length >= 11) decodeVin(); });
+    $('btnRegister').addEventListener('click', register);
+  </script>
+</body>
+</html>

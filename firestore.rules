@@ -85,12 +85,29 @@ service cloud.firestore {
 
     match /customers/{id} {
       allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin()
+        || (
+          request.auth == null
+          && request.resource.data.keys().hasOnly(["name","phone","email","address","source","createdAt"])
+          && request.resource.data.source == "client_self_register"
+          && request.resource.data.name is string
+          && request.resource.data.phone is string
+        );
+      allow update, delete: if isAdmin();
     }
 
     match /vehicles/{id} {
       allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin()
+        || (
+          request.auth == null
+          && request.resource.data.keys().hasOnly(["customerId","make","model","year","plate","vin","mileage","color","source","createdAt"])
+          && request.resource.data.source == "client_self_register"
+          && request.resource.data.customerId is string
+          && request.resource.data.make is string
+          && request.resource.data.model is string
+        );
+      allow update, delete: if isAdmin();
     }
 
     match /workorders/{id} {
