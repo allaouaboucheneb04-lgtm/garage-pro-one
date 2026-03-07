@@ -759,7 +759,7 @@ function subscribeAll(){
 
   }
 
-  unsubCustomers = onSnapshot(colCustomers(), (snap)=>{
+  unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
     // Normalisation: certains clients ont l'email sous Email/courriel/mail...
     // On force un champ `email` unique utilisé partout (Clients, Promotions, etc.).
     customers = snap.docs.map(d=>{
@@ -4864,6 +4864,98 @@ window.__requestAdminValidationFromWorkorder = async (id)=>{
     updatedBy: uid,
   });
   try{ toast("Demande envoyée à l'admin ✅"); }catch(e){}
+};
+
+
+
+// Ouvrir l'éditeur de facture depuis une réparation (admin)
+window.__editInvoiceFromWorkorder = async (workorderId)=>{
+  const wo = (workorders||[]).find(w=>w.id===workorderId);
+  if(!wo){
+    alert("Réparation introuvable.");
+    return;
+  }
+
+  const v = getVehicle(wo.vehicleId);
+  const customerId = v?.customerId || "";
+  const customer = customerId ? customers.find(c=>c.id===customerId) : null;
+
+  const linked = (invoices||[]).find(inv =>
+    String(inv.workorderId||"") === String(wo.id||"")
+    || (wo.invoiceNo && String(inv.ref||"").trim() === String(wo.invoiceNo||"").trim())
+  );
+
+  try{ closeModal(); }catch(e){}
+  try{ go('invoices'); }catch(e){}
+
+  const openEditor = ()=>{
+    if(!invoiceFormBox) return false;
+    editingInvoiceId = null;
+    openInvoiceForm(true);
+
+    if(invItemsTbody) invItemsTbody.innerHTML = "";
+
+    // Si une vraie facture existe déjà -> mode édition
+    if(linked){
+      editingInvoiceId = linked.id;
+      if(invCustomerEl) invCustomerEl.value = linked.customerId || customerId || "";
+      const dt = linked.date instanceof Date ? linked.date : (linked.date?.toDate ? linked.date.toDate() : new Date(linked.date || Date.now()));
+      if(invDateEl) invDateEl.value = isoDate(dt);
+      if(invPurchaseDateEl) invPurchaseDateEl.value = linked.purchaseDate || "";
+      if(invInstallDateEl) invInstallDateEl.value = linked.installDate || "";
+      if(invRefEl) invRefEl.value = linked.ref || wo.invoiceNo || "";
+      if(invEmailEl) invEmailEl.value = linked.customerEmail || customer?.email || "";
+      if(invPayMethodEl) invPayMethodEl.value = linked.paymentMethod || wo.paymentMethod || "cash";
+      if(invWorkorderEl) invWorkorderEl.value = linked.workorderId || wo.id || "";
+      if(invHoursEl) invHoursEl.value = String(linked.hours ?? 0);
+      if(invLaborEl) invLaborEl.value = String(linked.labor ?? 0);
+      (linked.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
+      recalcInvoiceTotals();
+      return true;
+    }
+
+    // Sinon -> préremplir à partir de la réparation
+    if(invCustomerEl) invCustomerEl.value = customerId || "";
+    if(invDateEl) invDateEl.value = todayISO();
+    if(invPurchaseDateEl) invPurchaseDateEl.value = "";
+    if(invInstallDateEl) invInstallDateEl.value = "";
+    if(invRefEl) invRefEl.value = wo.invoiceNo || "";
+    if(invEmailEl) invEmailEl.value = customer?.email || "";
+    if(invPayMethodEl) invPayMethodEl.value = wo.paymentMethod || "cash";
+    if(invWorkorderEl) invWorkorderEl.value = wo.id || "";
+
+    let laborHours = 0;
+    let laborAmount = 0;
+    const srcItems = Array.isArray(wo.items) ? wo.items : [];
+    if(srcItems.length){
+      srcItems.forEach(it=>{
+        if(String(it.type||"") === 'MO'){
+          laborAmount += Number(it.line ?? it.unit ?? 0);
+          const q = Number(it.qty ?? 0);
+          if(q > 0) laborHours += q;
+          else if(typeof it.desc === 'string'){
+            const m = it.desc.match(/([0-9]+(?:[\.,][0-9]+)?)\s*h/i);
+            if(m) laborHours += Number(String(m[1]).replace(',','.'));
+          }
+        }else{
+          ensureInvoiceLine(it.desc||"", Number(it.qty||1), Number(it.cost||0), Number(it.unit ?? it.line ?? 0));
+        }
+      });
+    }else{
+      ensureInvoiceLine();
+    }
+
+    if(invHoursEl) invHoursEl.value = laborHours > 0 ? String(laborHours) : "0";
+    if(invLaborEl) invLaborEl.value = laborAmount > 0 ? String(laborAmount) : "0";
+    recalcInvoiceTotals();
+    return true;
+  };
+
+  if(openEditor()) return;
+  requestAnimationFrame(()=>{
+    if(openEditor()) return;
+    setTimeout(()=>{ openEditor(); }, 120);
+  });
 };
 
 /* Print */
