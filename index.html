@@ -1114,6 +1114,15 @@
 </select>
 <small class="muted">Par défaut, le thème est clair.</small>
 
+<div class="divider"></div>
+<h3 style="margin-top:0">Développeur</h3>
+<label>Mode développeur</label>
+<select id="devModeSelect" class="input">
+  <option value="off">OFF</option>
+  <option value="on">ON</option>
+</select>
+<small class="muted">Quand il est ON, une console de debug s'affiche en bas pour voir les erreurs.</small>
+
 <div class="row">
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
 </div>
@@ -1402,6 +1411,15 @@
 
 
 
+
+
+<div id="devConsole" class="dev-console" style="display:none">
+  <div class="dev-console-head">
+    <strong>Console debug</strong>
+    <button type="button" class="btn btn-small btn-ghost" id="btnClearDevConsole">Effacer</button>
+  </div>
+  <div id="devConsoleBody" class="dev-console-body"></div>
+</div>
 
 </body>
 </html>

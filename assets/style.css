@@ -935,3 +935,12 @@ body.dark .client-card-pro .btn.btn-ghost{
   color:#e5e7eb;
   border-color:#374151;
 }
+
+
+/* Dev console */
+.dev-console{position:fixed;left:10px;right:10px;bottom:10px;z-index:99999;background:rgba(15,23,42,.97);color:#e5f9e7;border:1px solid rgba(255,255,255,.15);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.28);max-height:32vh;overflow:hidden;font-size:12px}
+.dev-console-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.12)}
+.dev-console-body{padding:8px 12px;overflow:auto;max-height:24vh;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.dev-console-line{padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.08)}
+body.dark .dev-console{background:rgba(2,8,23,.97)}
+@media (min-width: 900px){.dev-console{left:auto;right:16px;width:460px}}

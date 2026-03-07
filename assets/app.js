@@ -597,7 +597,7 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"", garagePhone:"", garageEmail:"", signatureName:"" };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"", garagePhone:"", garageEmail:"", signatureName:"", theme:"light", devMode:"off" };
 
 let promotions = [];
 let selectedPromotionId = null;
@@ -3822,17 +3822,23 @@ $("btnSaveSettings").onclick = async ()=>{
   const garageEmail = String($("setGarageEmail")?.value||"").trim();
   const signatureName = String($("setSignatureName")?.value||"").trim();
   const selectedTheme = String($("themeSelect")?.value || "light");
+  const selectedDevMode = String($("devModeSelect")?.value || "off");
   if(!isFinite(tps) || !isFinite(tvq) || !isFinite(cardFee) || !isFinite(laborRate) || tps<0 || tvq<0 || cardFee<0 || laborRate<0){
     alert("TPS/TVQ invalides.");
     return;
   }
   applyTheme(selectedTheme);
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, signatureName, theme: selectedTheme, updatedAt: serverTimestamp() }, { merge:true });
+  applyDevMode(selectedDevMode);
+  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, signatureName, theme: selectedTheme, devMode: selectedDevMode, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
 const themeSelectEl = $("themeSelect");
 if(themeSelectEl){
   themeSelectEl.onchange = (e)=> applyTheme(e.target.value);
+}
+const devModeSelectEl = $("devModeSelect");
+if(devModeSelectEl){
+  devModeSelectEl.onchange = (e)=> applyDevMode(e.target.value);
 }
 
 function renderSettings(){
@@ -3849,6 +3855,7 @@ function renderSettings(){
   const ge = $("setGarageEmail"); if(ge) ge.value = String(settings.garageEmail||"");
   const sn = $("setSignatureName"); if(sn) sn.value = String(settings.signatureName||"");
   applyTheme(String(settings.theme || (function(){ try{return localStorage.getItem("gpo_theme")||"light";}catch(e){return "light";} })()));
+  applyDevMode(String(settings.devMode || (function(){ try{return localStorage.getItem("gpo_dev_mode")||"off";}catch(e){return "off";} })()));
 }
 
 
@@ -3867,6 +3874,44 @@ function initTheme(){
   applyTheme(saved);
 }
 initTheme();
+
+/* Dev mode / console */
+function isDevMode(){
+  return String(settings?.devMode || (function(){ try{return localStorage.getItem("gpo_dev_mode")||"off";}catch(e){return "off";} })()) === "on";
+}
+function applyDevMode(mode){
+  const value = mode === "on" ? "on" : "off";
+  try{ localStorage.setItem("gpo_dev_mode", value); }catch(e){}
+  const sel = $("devModeSelect");
+  if(sel) sel.value = value;
+  const box = $("devConsole");
+  if(box) box.style.display = value === "on" ? "block" : "none";
+}
+function devLog(){
+  try{ console.log.apply(console, arguments); }catch(e){}
+  if(!isDevMode()) return;
+  const body = $("devConsoleBody");
+  if(!body) return;
+  const line = document.createElement("div");
+  line.className = "dev-console-line";
+  line.textContent = Array.from(arguments).map(v=>{
+    if(v instanceof Error) return `${v.name}: ${v.message}`;
+    if(typeof v === "object"){ try{return JSON.stringify(v, null, 2);}catch(e){ return String(v); } }
+    return String(v);
+  }).join(" ");
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+window.__devLog = devLog;
+window.onerror = function(message, source, lineno, colno, error){
+  devLog("JS", message, source || "", `L${lineno}:${colno}`, error && error.stack ? error.stack : (error || ""));
+};
+window.addEventListener("unhandledrejection", (ev)=>{
+  const r = ev.reason;
+  devLog("PROMISE", r && r.code ? r.code : "", r && r.message ? r.message : String(r), r && r.stack ? r.stack : "");
+});
+if($("btnClearDevConsole")) $("btnClearDevConsole").onclick = ()=>{ if($("devConsoleBody")) $("devConsoleBody").innerHTML = ""; };
+applyDevMode((function(){ try{return localStorage.getItem("gpo_dev_mode")||"off";}catch(e){return "off";} })());
 
 /* Export / Import */
 $("btnExport").onclick = ()=>{
@@ -4428,7 +4473,7 @@ function openVehicleView(vehicleId){
       <div>
         <h2 style="margin:0">${safe(vehTxt)}</h2>
         <div class="muted" style="margin-top:6px">
-          Client: <a href="#" onclick="window.__openClientView('${v.customerId}'); return false;">${safe(c?.fullName||"—")}</a><br/>
+          Client: <a href="#" onclick="window.__openClientView('${v.customerId}'); return false;">${safe(c?.fullName||c?.name||"—")}</a><br/>
           Plaque: <strong>${safe(v.plate||"")}</strong> &nbsp; • &nbsp; VIN: ${safe(v.vin||"")}<br/>
           KM: ${safe(v.currentKm||"")}
           ${extraLines.length ? `<br/>${extraLines.join(" &nbsp;•&nbsp; ")}` : ""}
@@ -4549,7 +4594,7 @@ function openWorkorderForm(vehicleId){
 
   openModal("Nouvelle réparation", `
     <div class="muted">
-      Client: <strong>${safe(c?.fullName||"—")}</strong><br/>
+      Client: <strong>${safe(c?.fullName||c?.name||"—")}</strong><br/>
       Véhicule: <strong>${safe(vehTxt)}</strong> ${v.plate?`— Plaque: <strong>${safe(v.plate)}</strong>`:""}
     </div>
     <div class="divider"></div>
@@ -4775,6 +4820,9 @@ function openWorkorderView(workorderId){
   const v = getVehicle(wo.vehicleId);
   const c = v ? getCustomer(v.customerId) : null;
   const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "—";
+  const printPlate = String(v?.plate || v?.plateNumber || "");
+  const printVin = String(v?.vin || v?.vinNumber || "");
+  const printKm = String(wo.km || v?.currentKm || v?.mileage || v?.km || "");
   const pill = wo.status==="TERMINE" ? "pill-ok" : (wo.status==="EN_COURS" ? "pill-blue" : "pill-warn");
 
   const itemsRows = (wo.items && wo.items.length) ? wo.items.map(it=>`
@@ -4813,7 +4861,7 @@ function openWorkorderView(workorderId){
     <div class="grid" style="grid-template-columns:1fr; gap:12px">
       <div class="note">
         <strong>Client</strong><br/>
-        ${safe(c?.fullName||"—")}<br/>
+        ${safe(c?.fullName||c?.name||"—")}<br/>
         ${safe(c?.phone||"")}<br/>
         ${safe(c?.email||"")}
       </div>
@@ -4858,6 +4906,9 @@ window.__editInvoiceFromWorkorder = async (workorderId)=>{
   const v = getVehicle(wo.vehicleId);
   if(!v){ alert("Véhicule introuvable."); return; }
   const c = getCustomer(v.customerId);
+  const vehPlate = String(v.plate || v.plateNumber || "");
+  const vehVin = String(v.vin || v.vinNumber || "");
+  const vehKm = String(wo.km || v.currentKm || v.mileage || v.km || "");
   const vehTxt = [v.year,v.make,v.model].filter(Boolean).join(" ");
 
   openModal("Modifier facture", `
@@ -5022,7 +5073,7 @@ window.__editInvoiceFromWorkorder = async (workorderId)=>{
       return;
     }
     try{
-      await updateDoc(doc(colWorkorders(), wo.id), {
+      const payload = {
         status: (status==="TERMINE"?"TERMINE":(status==="EN_COURS"?"EN_COURS":"OUVERT")),
         km,
         reportedIssue,
@@ -5044,11 +5095,14 @@ window.__editInvoiceFromWorkorder = async (workorderId)=>{
         updatedAtTs: serverTimestamp(),
         updatedBy: currentUid,
         updatedByName: (profile && profile.fullName) ? profile.fullName : (auth?.currentUser?.email||"")
-      });
+      };
+      devLog("SAVE_REPAIR_INVOICE payload", {workorderId: wo.id, payload});
+      await updateDoc(doc(colWorkorders(), wo.id), payload);
       try{ toast("Facture de la réparation mise à jour ✅"); }catch(e){}
       closeModal();
     }catch(ex){
-      alert("Erreur modification facture.");
+      devLog("SAVE_REPAIR_INVOICE error", ex && ex.code ? ex.code : "", ex && ex.message ? ex.message : ex, ex && ex.stack ? ex.stack : "");
+      alert("Erreur modification facture : " + (ex?.message || ex || "inconnue"));
     }
   };
 };
@@ -5075,6 +5129,9 @@ window.__printWorkorder = async (workorderId)=>{
   const v = getVehicle(wo.vehicleId);
   const c = v ? getCustomer(v.customerId) : null;
   const vehTxt = v ? [v.year,v.make,v.model].filter(Boolean).join(" ") : "—";
+  const printPlate = String(v?.plate || v?.plateNumber || "");
+  const printVin = String(v?.vin || v?.vinNumber || "");
+  const printKm = String(wo.km || v?.currentKm || v?.mileage || v?.km || "");
   const baseHref = String(new URL('.', window.location.href));
   const gName = (settings?.garageName || GARAGE.name || "Garage");
   const gAddr = (settings?.garageAddress || [GARAGE.address1, GARAGE.address2, GARAGE.country].filter(Boolean).join(" — "));
@@ -5185,7 +5242,7 @@ window.__printWorkorder = async (workorderId)=>{
         <div class="card">
           <h3>Client</h3>
           <div class="txt">
-            <strong>${safe(c?.fullName||"—")}</strong><br>
+            <strong>${safe(c?.fullName||c?.name||"—")}</strong><br>
             ${safe(c?.phone||"")}<br>
             ${safe(c?.email||"")}
           </div>
@@ -5194,9 +5251,9 @@ window.__printWorkorder = async (workorderId)=>{
           <h3>Véhicule</h3>
           <div class="txt">
             <strong>${safe(vehTxt)}</strong><br>
-            Plaque: ${safe(v?.plate||"")}<br>
-            VIN: ${safe(v?.vin||"")}<br>
-            KM (visite): ${safe(wo.km||"")}
+            Plaque: ${safe(printPlate)}<br>
+            VIN: ${safe(printVin)}<br>
+            KM (visite): ${safe(printKm)}
           </div>
         </div>
       </div>
