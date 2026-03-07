@@ -3428,24 +3428,37 @@ function renderClients(){
   // Mobile cards
   if(clientsCards){
     clientsCards.innerHTML = list.map(c=>{
+      const vehiclesCount = (vehicles||[]).filter(v=> v.customerId===c.id).length;
+      const openRepairsCount = (workorders||[]).filter(w=> w.customerId===c.id && String(w.status||"").toUpperCase()!=="TERMINE").length;
+      const lastRepair = (workorders||[])
+        .filter(w=> w.customerId===c.id)
+        .sort((a,b)=> new Date(b.updatedAtTs || b.createdAtTs || b.updatedAt || b.createdAt || 0) - new Date(a.updatedAtTs || a.createdAtTs || a.updatedAt || a.createdAt || 0))[0];
+      const lastVisit = lastRepair ? safe(String(lastRepair.updatedAt || lastRepair.createdAt || "").slice(0,10) || "—") : "—";
       return `
-      <div class="client-card">
-        <div class="client-main">
-          <div class="client-name">${safe(c.fullName)}</div>
-          <div class="client-meta">
-            <span class="muted">📞 ${safe(c.phone||"")}</span>
-            ${c.email ? `<span class="muted">✉️ ${safe(c.email||"")}</span>` : `<span class="muted">✉️</span>`}
+      <div class="client-card client-card-pro">
+        <div class="client-top">
+          <div class="client-main">
+            <div class="client-name">${safe(c.fullName)}</div>
+            <div class="client-meta-row">📞 ${safe(c.phone||"—")}</div>
+            <div class="client-meta-row">✉️ ${c.email ? safe(c.email||"") : "—"}</div>
           </div>
+          <span class="client-badge">Client actif</span>
         </div>
 
-        <div class="client-side">
-          <label class="promo-check">
+        <div class="client-stats">
+          <span>${vehiclesCount} véhicule${vehiclesCount>1?"s":""}</span>
+          <span>${openRepairsCount} réparation${openRepairsCount>1?"s":""} en cours</span>
+          <span>Dernière visite : ${lastVisit}</span>
+        </div>
+
+        <div class="client-bottom-row">
+          <label class="promo-check promo-check-pro">
             <input type="checkbox" ${c.promoSelected ? "checked" : ""} onchange="window.__togglePromoSelected('${c.id}', this.checked)">
-            <span>Promo</span>
+            <span>Inclure dans promo</span>
           </label>
 
           <div class="client-actions">
-            <button class="btn btn-small" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
+            <button class="btn btn-small btn-primary" onclick="window.__openClientView('${c.id}')">Ouvrir</button>
             <button class="btn btn-small btn-ghost" onclick="window.__openClientForm('${c.id}')">Modifier</button>
           </div>
         </div>

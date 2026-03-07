@@ -520,40 +520,89 @@ tr:hover td{background:rgba(255,255,255,.03)}
 #viewAuth h1{color:var(--text)}
 
 
-/* Clients - Mobile cards (vendable) */
+/* Clients - Mobile cards (pro) */
 .table-wrap{ overflow-x:auto; }
 .desktop-only{ display:block; }
 .mobile-only{ display:none; }
 
-.client-cards{ display:flex; flex-direction:column; gap:12px; }
+.client-cards{ display:flex; flex-direction:column; gap:14px; }
 
-.client-card{
-  background: rgba(17,17,17,0.9);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+.client-card,
+.client-card-pro{
+  background:#ffffff;
+  color:#0f172a;
+  border:1px solid #e5e7eb;
+  border-radius:18px;
+  padding:16px;
+  box-shadow:0 6px 18px rgba(15,23,42,.08);
+}
+
+.client-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
 }
 
 .client-name{
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  margin-bottom: 6px;
+  font-size:18px;
+  font-weight:800;
+  letter-spacing:.1px;
+  margin-bottom:8px;
+  color:#0f172a;
 }
 
-.client-meta{
+.client-meta,
+.client-main{
   display:flex;
   flex-direction:column;
-  gap: 6px;
-  font-size: 13px;
+  gap:6px;
 }
 
-.client-side{
-  margin-top: 12px;
+.client-meta-row{
+  color:#475569;
+  font-size:14px;
+  line-height:1.35;
+  word-break:break-word;
+}
+
+.client-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+  background:#eef4ff;
+  color:#1d4ed8;
+  border:1px solid #c7d2fe;
+  border-radius:999px;
+  padding:7px 12px;
+  font-size:12px;
+  font-weight:700;
+}
+
+.client-stats{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:14px 0;
+}
+
+.client-stats span{
+  display:inline-flex;
+  align-items:center;
+  padding:8px 12px;
+  background:#f8fafc;
+  color:#334155;
+  border:1px solid #e2e8f0;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:600;
+}
+
+.client-bottom-row{
   display:flex;
   flex-direction:column;
-  gap: 10px;
+  gap:12px;
 }
 
 .status{
@@ -566,27 +615,55 @@ tr:hover td{background:rgba(255,255,255,.03)}
   font-size: 12px;
   font-weight: 700;
 }
-.status.paid{ background: rgba(34,197,94,0.20); border: 1px solid rgba(34,197,94,0.45); color: #c8f7d8; }
-.status.unpaid{ background: rgba(239,68,68,0.18); border: 1px solid rgba(239,68,68,0.45); color: #ffd1d1; }
+.status.paid{ background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.32); color: #166534; }
+.status.unpaid{ background: rgba(239,68,68,0.10); border: 1px solid rgba(239,68,68,0.28); color: #991b1b; }
 
-.promo-check{
+.promo-check,
+.promo-check-pro{
   display:flex;
-  gap:8px;
+  gap:10px;
   align-items:center;
   width: fit-content;
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.04);
-  font-size: 12px;
-  color: rgba(255,255,255,0.82);
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid #dbe3ef;
+  background:#f8fafc;
+  font-size:13px;
+  color:#334155;
+  font-weight:600;
 }
-.promo-check input{ transform: scale(1.05); }
+.promo-check input{ transform: scale(1.08); accent-color:#2563eb; }
 
 .client-actions{
   display:flex;
   flex-wrap:wrap;
   gap:8px;
+}
+
+body.dark .client-card,
+body.dark .client-card-pro{
+  background:#111827;
+  color:#e5e7eb;
+  border:1px solid #1f2937;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);
+}
+body.dark .client-name{ color:#f8fafc; }
+body.dark .client-meta-row{ color:#cbd5e1; }
+body.dark .client-badge{
+  background:rgba(37,99,235,.16);
+  color:#dbeafe;
+  border-color:rgba(147,197,253,.35);
+}
+body.dark .client-stats span{
+  background:#0f172a;
+  color:#cbd5e1;
+  border-color:#334155;
+}
+body.dark .promo-check,
+body.dark .promo-check-pro{
+  background:#0f172a;
+  color:#dbe4f0;
+  border-color:#334155;
 }
 
 /* Repairs - Mobile cards */
@@ -841,3 +918,20 @@ body:not(.dark) .mcard .sub,
 body:not(.dark) .mcard .meta{ color:#6b7280 !important; }
 body.light .footer,
 body:not(.dark) .footer{ color:#6b7280 !important; }
+
+.client-card .btn,
+.client-card-pro .btn{
+  min-height:42px;
+}
+.client-card .btn.btn-ghost,
+.client-card-pro .btn.btn-ghost{
+  background:#ffffff;
+  color:#111827;
+  border:1px solid #d1d5db;
+}
+body.dark .client-card .btn.btn-ghost,
+body.dark .client-card-pro .btn.btn-ghost{
+  background:#1f2937;
+  color:#e5e7eb;
+  border-color:#374151;
+}
