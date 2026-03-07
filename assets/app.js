@@ -3886,6 +3886,8 @@ function applyDevMode(mode){
   if(sel) sel.value = value;
   const box = $("devConsole");
   if(box) box.style.display = value === "on" ? "block" : "none";
+  if(value === "on") document.body.classList.add("dev-console-open");
+  else document.body.classList.remove("dev-console-open");
 }
 function devLog(){
   try{ console.log.apply(console, arguments); }catch(e){}
@@ -3911,6 +3913,13 @@ window.addEventListener("unhandledrejection", (ev)=>{
   devLog("PROMISE", r && r.code ? r.code : "", r && r.message ? r.message : String(r), r && r.stack ? r.stack : "");
 });
 if($("btnClearDevConsole")) $("btnClearDevConsole").onclick = ()=>{ if($("devConsoleBody")) $("devConsoleBody").innerHTML = ""; };
+if($("btnToggleDevConsole")) $("btnToggleDevConsole").onclick = ()=>{
+  const box = $("devConsole");
+  const btn = $("btnToggleDevConsole");
+  if(!box || !btn) return;
+  const minimized = box.classList.toggle("minimized");
+  btn.textContent = minimized ? "Agrandir" : "Réduire";
+};
 applyDevMode((function(){ try{return localStorage.getItem("gpo_dev_mode")||"off";}catch(e){return "off";} })());
 
 /* Export / Import */
