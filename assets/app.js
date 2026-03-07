@@ -4850,6 +4850,208 @@ window.__setWoStatus = async (id, next)=>{ await setWorkorderStatus(id, next); c
 window.__deleteWo = async (id)=>{ if(!confirm("Supprimer cette réparation ?")) return; await deleteWorkorder(id); closeModal(); };
 
 // Mécanicien: demande à l'admin de valider / finaliser la facture
+
+
+window.__editInvoiceFromWorkorder = async (workorderId)=>{
+  const wo = workorders.find(w=>w.id===workorderId);
+  if(!wo){ alert("Réparation introuvable."); return; }
+  const v = getVehicle(wo.vehicleId);
+  if(!v){ alert("Véhicule introuvable."); return; }
+  const c = getCustomer(v.customerId);
+  const vehTxt = [v.year,v.make,v.model].filter(Boolean).join(" ");
+
+  openModal("Modifier facture", `
+    <div class="muted">
+      Client: <strong>${safe(c?.fullName||c?.name||"—")}</strong><br/>
+      Véhicule: <strong>${safe(vehTxt||"—")}</strong> ${v.plate?`— Plaque: <strong>${safe(v.plate)}</strong>`:""}<br/>
+      Facture: <strong>${safe(wo.invoiceNo || ("WO-" + String(wo.id||"").slice(0,6).toUpperCase()))}</strong>
+    </div>
+    <div class="divider"></div>
+    <form class="form" id="woEditInvoiceForm">
+      <div id="woEditError" class="alert" style="display:none"></div>
+      <div class="row" style="gap:12px">
+        <div style="flex:1; min-width:220px">
+          <label>Statut</label>
+          <select name="status">
+            <option value="OUVERT" ${wo.status==="OUVERT"?"selected":""}>Ouvert</option>
+            <option value="EN_COURS" ${wo.status==="EN_COURS"?"selected":""}>En cours</option>
+            <option value="TERMINE" ${wo.status==="TERMINE"?"selected":""}>Terminé</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:220px">
+          <label>KM (visite)</label>
+          <input name="km" inputmode="numeric" placeholder="ex: 123456" value="${safe(wo.km||v.currentKm||v.mileage||"")}" />
+        </div>
+      </div>
+
+      ${currentRole==="admin" ? `
+      <div class="row" style="gap:12px">
+        <div style="flex:1; min-width:220px">
+          <label>Assigné à (mécanicien)</label>
+          <select name="assignedTo">
+            <option value="">— Non assigné —</option>
+            ${mechanics.map(m=>`<option value="${m.uid}" ${String(wo.assignedTo||"")===String(m.uid)?"selected":""}>${safe(m.name)}</option>`).join("")}
+          </select>
+        </div>
+      </div>` : ``}
+
+      <div class="row" style="gap:12px">
+        <div style="flex:1; min-width:220px">
+          <label>Paiement</label>
+          <select name="paymentMethod">
+            <option value="" ${!wo.paymentMethod?"selected":""}>Non défini</option>
+            <option value="CASH" ${String(wo.paymentMethod||"").toUpperCase()==="CASH"?"selected":""}>Cash</option>
+            <option value="CARTE" ${String(wo.paymentMethod||"").toUpperCase()==="CARTE"?"selected":""}>Carte</option>
+            <option value="VIREMENT" ${String(wo.paymentMethod||"").toUpperCase()==="VIREMENT"?"selected":""}>Virement</option>
+            <option value="AUTRE" ${String(wo.paymentMethod||"").toUpperCase()==="AUTRE"?"selected":""}>Autre</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:220px">
+          <label>Statut paiement</label>
+          <select name="paymentStatus">
+            <option value="NON_PAYE" ${String(wo.paymentStatus||"").toUpperCase()!=="PAYE"?"selected":""}>Non payé</option>
+            <option value="PAYE" ${String(wo.paymentStatus||"").toUpperCase()==="PAYE"?"selected":""}>Payé</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Problème rapporté (client)</label>
+      <textarea name="reportedIssue" rows="3" placeholder="ex: bruit avant gauche...">${safe(wo.reportedIssue||"")}</textarea>
+      <label>Diagnostic</label>
+      <textarea name="diagnostic" rows="3">${safe(wo.diagnostic||"")}</textarea>
+      <label>Travaux effectués</label>
+      <textarea name="workDone" rows="3">${safe(wo.workDone||"")}</textarea>
+
+      <h3>Lignes (pièces / main d’œuvre)</h3>
+      <div class="table-wrap">
+        <table id="woEditItemsTable">
+          <thead><tr><th>Type</th><th>Description</th><th>Qté</th><th>Prix</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="row">
+        <button class="btn btn-ghost" type="button" id="btnWoEditAddLine">+ Ajouter une ligne</button>
+        <span class="muted">Total TTC calculé automatiquement.</span>
+      </div>
+      <div class="note" id="woEditTotalsBox"></div>
+
+      <label>Notes</label>
+      <textarea name="notes" rows="3">${safe(wo.notes||"")}</textarea>
+
+      <div class="row-between">
+        <button class="btn btn-primary" type="submit">Enregistrer les modifications</button>
+        <button class="btn btn-ghost" type="button" onclick="window.__closeModal()">Annuler</button>
+      </div>
+    </form>
+  `);
+
+  const tbody = modalBody.querySelector("#woEditItemsTable tbody");
+  const totalsBox = modalBody.querySelector("#woEditTotalsBox");
+
+  function addLine(def={}){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <select class="itType">
+          <option value="PIECE">Pièce</option>
+          <option value="MO">Main d’œuvre</option>
+        </select>
+      </td>
+      <td><input class="itDesc" placeholder="ex: Plaquettes de frein" value="${safe(def.desc||"")}" /></td>
+      <td><input class="itQty" inputmode="decimal" value="${safe(def.qty ?? 1)}" /></td>
+      <td><input class="itUnit" inputmode="decimal" placeholder="0.00" value="${safe(def.unit ?? "")}" /></td>
+      <td class="nowrap"><button class="btn btn-small btn-ghost" type="button">-</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector(".itType").value = def.type || "PIECE";
+    tr.querySelector("button").onclick = ()=>{ tr.remove(); recalc(); };
+    ["input","change"].forEach(evt=>{
+      tr.querySelector(".itType").addEventListener(evt, recalc);
+      tr.querySelector(".itDesc").addEventListener(evt, recalc);
+      tr.querySelector(".itQty").addEventListener(evt, recalc);
+      tr.querySelector(".itUnit").addEventListener(evt, recalc);
+    });
+    recalc();
+  }
+
+  function collectItems(){
+    const rows = [...tbody.querySelectorAll("tr")];
+    return rows.map(r=>({
+      type: r.querySelector(".itType").value,
+      desc: r.querySelector(".itDesc").value,
+      qty:  r.querySelector(".itQty").value,
+      unit: r.querySelector(".itUnit").value
+    }));
+  }
+
+  function recalc(){
+    const items = collectItems();
+    const t = calcTotals(items, settings.tpsRate, settings.tvqRate);
+    totalsBox.innerHTML = `
+      <div class="row-between"><span>Sous-total</span><strong>${money(t.subtotal)}</strong></div>
+      <div class="row-between"><span>TPS (${pct(settings.tpsRate)})</span><strong>${money(t.tpsAmount)}</strong></div>
+      <div class="row-between"><span>TVQ (${pct(settings.tvqRate)})</span><strong>${money(t.tvqAmount)}</strong></div>
+      <div class="divider"></div>
+      <div class="row-between" style="font-size:16px"><span><strong>Total TTC</strong></span><strong>${money(t.total)}</strong></div>
+    `;
+  }
+
+  modalBody.querySelector("#btnWoEditAddLine").onclick = ()=>addLine({});
+  if(Array.isArray(wo.items) && wo.items.length){ wo.items.forEach(it=>addLine(it)); }
+  else { addLine({type:"PIECE", qty:1}); }
+
+  modalBody.querySelector("#woEditInvoiceForm").onsubmit = async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const status = String(fd.get("status")||wo.status||"OUVERT");
+    const km = String(fd.get("km")||"").trim();
+    const reportedIssue = String(fd.get("reportedIssue")||"").trim();
+    const diagnostic = String(fd.get("diagnostic")||"").trim();
+    const workDone = String(fd.get("workDone")||"").trim();
+    const notes = String(fd.get("notes")||"").trim();
+    const paymentMethod = String(fd.get("paymentMethod")||"").trim();
+    const paymentStatus = String(fd.get("paymentStatus")||"NON_PAYE").trim();
+    const assignedTo = currentRole==="admin" ? String(fd.get("assignedTo")||"").trim() : String(wo.assignedTo || currentUid || "");
+    const assignedName = mechanics.find(m=>m.uid===assignedTo)?.name || (currentRole==="admin" ? "" : (currentUserName || wo.assignedName || ""));
+    const items = collectItems();
+    const t = calcTotals(items, settings.tpsRate, settings.tvqRate);
+    const err = modalBody.querySelector("#woEditError");
+    if(!reportedIssue && !workDone && t.items.length===0){
+      err.style.display="";
+      err.textContent = "Ajoute au moins un problème, un travail, ou une ligne de facture.";
+      return;
+    }
+    try{
+      await updateDoc(doc(colWorkorders(), wo.id), {
+        status: (status==="TERMINE"?"TERMINE":(status==="EN_COURS"?"EN_COURS":"OUVERT")),
+        km,
+        reportedIssue,
+        diagnostic,
+        workDone,
+        notes,
+        paymentMethod,
+        paymentStatus,
+        assignedTo,
+        assignedName,
+        items: t.items,
+        subtotal: t.subtotal,
+        tpsRate: settings.tpsRate,
+        tvqRate: settings.tvqRate,
+        tpsAmount: t.tpsAmount,
+        tvqAmount: t.tvqAmount,
+        total: t.total,
+        updatedAt: isoNow(),
+        updatedAtTs: serverTimestamp(),
+        updatedBy: currentUid,
+        updatedByName: (profile && profile.fullName) ? profile.fullName : (auth?.currentUser?.email||"")
+      });
+      try{ toast("Facture de la réparation mise à jour ✅"); }catch(e){}
+      closeModal();
+    }catch(ex){
+      alert("Erreur modification facture.");
+    }
+  };
+};
 window.__requestAdminValidationFromWorkorder = async (id)=>{
   // Ici on ne modifie PAS la facture (Option A: admin only)
   // On marque juste la réparation comme nécessitant l'intervention admin.
@@ -4864,98 +5066,6 @@ window.__requestAdminValidationFromWorkorder = async (id)=>{
     updatedBy: uid,
   });
   try{ toast("Demande envoyée à l'admin ✅"); }catch(e){}
-};
-
-
-
-// Ouvrir l'éditeur de facture depuis une réparation (admin)
-window.__editInvoiceFromWorkorder = async (workorderId)=>{
-  const wo = (workorders||[]).find(w=>w.id===workorderId);
-  if(!wo){
-    alert("Réparation introuvable.");
-    return;
-  }
-
-  const v = getVehicle(wo.vehicleId);
-  const customerId = v?.customerId || "";
-  const customer = customerId ? customers.find(c=>c.id===customerId) : null;
-
-  const linked = (invoices||[]).find(inv =>
-    String(inv.workorderId||"") === String(wo.id||"")
-    || (wo.invoiceNo && String(inv.ref||"").trim() === String(wo.invoiceNo||"").trim())
-  );
-
-  try{ closeModal(); }catch(e){}
-  try{ go('invoices'); }catch(e){}
-
-  const openEditor = ()=>{
-    if(!invoiceFormBox) return false;
-    editingInvoiceId = null;
-    openInvoiceForm(true);
-
-    if(invItemsTbody) invItemsTbody.innerHTML = "";
-
-    // Si une vraie facture existe déjà -> mode édition
-    if(linked){
-      editingInvoiceId = linked.id;
-      if(invCustomerEl) invCustomerEl.value = linked.customerId || customerId || "";
-      const dt = linked.date instanceof Date ? linked.date : (linked.date?.toDate ? linked.date.toDate() : new Date(linked.date || Date.now()));
-      if(invDateEl) invDateEl.value = isoDate(dt);
-      if(invPurchaseDateEl) invPurchaseDateEl.value = linked.purchaseDate || "";
-      if(invInstallDateEl) invInstallDateEl.value = linked.installDate || "";
-      if(invRefEl) invRefEl.value = linked.ref || wo.invoiceNo || "";
-      if(invEmailEl) invEmailEl.value = linked.customerEmail || customer?.email || "";
-      if(invPayMethodEl) invPayMethodEl.value = linked.paymentMethod || wo.paymentMethod || "cash";
-      if(invWorkorderEl) invWorkorderEl.value = linked.workorderId || wo.id || "";
-      if(invHoursEl) invHoursEl.value = String(linked.hours ?? 0);
-      if(invLaborEl) invLaborEl.value = String(linked.labor ?? 0);
-      (linked.items||[]).forEach(it=>ensureInvoiceLine(it.desc,it.qty,it.cost,it.price));
-      recalcInvoiceTotals();
-      return true;
-    }
-
-    // Sinon -> préremplir à partir de la réparation
-    if(invCustomerEl) invCustomerEl.value = customerId || "";
-    if(invDateEl) invDateEl.value = todayISO();
-    if(invPurchaseDateEl) invPurchaseDateEl.value = "";
-    if(invInstallDateEl) invInstallDateEl.value = "";
-    if(invRefEl) invRefEl.value = wo.invoiceNo || "";
-    if(invEmailEl) invEmailEl.value = customer?.email || "";
-    if(invPayMethodEl) invPayMethodEl.value = wo.paymentMethod || "cash";
-    if(invWorkorderEl) invWorkorderEl.value = wo.id || "";
-
-    let laborHours = 0;
-    let laborAmount = 0;
-    const srcItems = Array.isArray(wo.items) ? wo.items : [];
-    if(srcItems.length){
-      srcItems.forEach(it=>{
-        if(String(it.type||"") === 'MO'){
-          laborAmount += Number(it.line ?? it.unit ?? 0);
-          const q = Number(it.qty ?? 0);
-          if(q > 0) laborHours += q;
-          else if(typeof it.desc === 'string'){
-            const m = it.desc.match(/([0-9]+(?:[\.,][0-9]+)?)\s*h/i);
-            if(m) laborHours += Number(String(m[1]).replace(',','.'));
-          }
-        }else{
-          ensureInvoiceLine(it.desc||"", Number(it.qty||1), Number(it.cost||0), Number(it.unit ?? it.line ?? 0));
-        }
-      });
-    }else{
-      ensureInvoiceLine();
-    }
-
-    if(invHoursEl) invHoursEl.value = laborHours > 0 ? String(laborHours) : "0";
-    if(invLaborEl) invLaborEl.value = laborAmount > 0 ? String(laborAmount) : "0";
-    recalcInvoiceTotals();
-    return true;
-  };
-
-  if(openEditor()) return;
-  requestAnimationFrame(()=>{
-    if(openEditor()) return;
-    setTimeout(()=>{ openEditor(); }, 120);
-  });
 };
 
 /* Print */
