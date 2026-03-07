@@ -273,6 +273,7 @@
       try {
         showStatus('info', 'Enregistrement en cours...');
         const customerRef = await addDoc(collection(db, 'customers'), {
+          fullName: payload.fullName,
           name: payload.fullName,
           phone: payload.phone,
           email: payload.email,

@@ -759,7 +759,7 @@ function subscribeAll(){
 
   }
 
-  unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
+  unsubCustomers = onSnapshot(colCustomers(), (snap)=>{
     // Normalisation: certains clients ont l'email sous Email/courriel/mail...
     // On force un champ `email` unique utilisé partout (Clients, Promotions, etc.).
     customers = snap.docs.map(d=>{
