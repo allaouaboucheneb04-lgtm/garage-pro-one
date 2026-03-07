@@ -4696,7 +4696,7 @@ function openWorkorderForm(vehicleId){
 
 async function setWorkorderStatus(id, status){
   const ref = doc(colWorkorders(), id);
-  const payload = { status, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid, updatedByName: (profile && profile.fullName) ? profile.fullName : (auth?.currentUser?.email||"") };
+  const payload = { status, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid, updatedByName: (currentUserName || auth?.currentUser?.email || "") };
   if(currentRole==="mechanic"){
     payload.needsAdminReview = true;
     payload.lastEditedBy = currentUid;
