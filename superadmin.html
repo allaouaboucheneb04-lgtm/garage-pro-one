@@ -143,12 +143,17 @@
               <label>Lien d'inscription</label>
               <div id="qrRegisterUrl" class="code-link">-</div>
             </div>
+            <div style="margin-top:12px">
+              <label for="qrClientMessage">Message client pour la fiche PDF</label>
+              <textarea id="qrClientMessage" rows="8" placeholder="Message affiché dans le PDF client"></textarea>
+            </div>
             <div class="actions">
               <button class="primary" id="btnDownloadQr" type="button">Télécharger QR</button>
+              <button class="ghost" id="btnDownloadQrPdf" type="button">Télécharger PDF client</button>
               <button class="ghost" id="btnCopyQrLink" type="button">Copier le lien</button>
               <button class="ghost" id="btnCopyQrImage" type="button">Copier image</button>
             </div>
-            <div class="hint">Astuce: utilise un QR différent pour chaque garage. Les employés scanneront puis arriveront automatiquement sur leur page register avec le bon <b>garageId</b>.</div>
+            <div class="hint">Astuce: utilise un QR différent pour chaque garage. Le PDF client peut inclure le logo du garage, le message d'inscription et le QR code qui ouvre automatiquement la page register avec le bon <b>garageId</b>.</div>
           </div>
         </div>
       </section>
@@ -171,6 +176,7 @@
     import { getFirestore, doc, getDoc, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
     import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
     import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
+    import { jsPDF } from 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm';
 
     const app = initializeApp(window.FIREBASE_CONFIG);
     const auth = getAuth(app);
@@ -262,6 +268,139 @@
       return url.toString();
     }
     function setQrGarageLabel(text){ const el = $('qrGarageLabel'); if(el) el.textContent = text || ''; }
+    function getSelectedGarage(){
+      return garagesCache.find(g => g.id === selectedGarageIdForQr) || null;
+    }
+    function buildClientQrMessage(garage){
+      const garageName = garage?.name || garage?.garageName || garage?.id || 'ce garage';
+      return [
+        `Bienvenue chez ${garageName}`,
+        '',
+        'Nouveau client ?',
+        'Scannez ce code QR pour créer votre dossier client et enregistrer votre véhicule.',
+        '',
+        'Vous pourrez ajouter :',
+        '- vos informations personnelles',
+        '- les informations de votre véhicule',
+        '',
+        'Rapide, simple et sécurisé.'
+      ].join('\n');
+    }
+    function setClientQrMessage(garage){
+      const el = $('qrClientMessage');
+      if(!el) return;
+      el.value = buildClientQrMessage(garage);
+    }
+    function splitTextToSize(doc, text, maxWidth){
+      return doc.splitTextToSize(String(text || '').replace(//g, ''), maxWidth);
+    }
+    function loadImageAsDataUrl(url){
+      return new Promise((resolve, reject) => {
+        if(!url){ reject(new Error('missing-image-url')); return; }
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          } catch(err){ reject(err); }
+        };
+        img.onerror = () => reject(new Error('image-load-failed'));
+        img.src = url;
+      });
+    }
+    async function downloadGarageQrPdf(){
+      if(!selectedGarageIdForQr){ setMsg('error', 'Sélectionne un garage pour télécharger sa fiche PDF.'); return; }
+      const canvas = $('garageQrCanvas');
+      if(!canvas){ setMsg('error', 'QR code introuvable.'); return; }
+      const garage = getSelectedGarage();
+      const garageName = garage?.name || garage?.garageName || selectedGarageIdForQr;
+      const registerUrl = getGarageRegisterUrl(selectedGarageIdForQr);
+      const message = ($('qrClientMessage')?.value || buildClientQrMessage(garage)).trim();
+      try {
+        setMsg('hint', 'Préparation du PDF client...');
+        const docPdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+        const pageW = docPdf.internal.pageSize.getWidth();
+        const pageH = docPdf.internal.pageSize.getHeight();
+        const margin = 18;
+        const contentW = pageW - (margin * 2);
+
+        docPdf.setFillColor(245, 247, 251);
+        docPdf.roundedRect(10, 10, pageW - 20, pageH - 20, 8, 8, 'F');
+
+        let y = 22;
+        let logoAdded = false;
+        const logoUrl = garage?.logoUrl || garage?.garageLogoUrl || '';
+        if(logoUrl){
+          try {
+            const logoData = await loadImageAsDataUrl(logoUrl);
+            docPdf.addImage(logoData, 'PNG', margin, y, 26, 26);
+            logoAdded = true;
+          } catch(err) {
+            console.warn('Logo non chargé pour le PDF', err);
+          }
+        }
+
+        docPdf.setTextColor(16, 32, 51);
+        docPdf.setFont('helvetica','bold');
+        docPdf.setFontSize(22);
+        docPdf.text(garageName, logoAdded ? margin + 32 : margin, y + 8);
+        docPdf.setFont('helvetica','normal');
+        docPdf.setFontSize(11);
+        docPdf.setTextColor(93, 107, 122);
+        docPdf.text('Inscription nouveau client et véhicule', logoAdded ? margin + 32 : margin, y + 16);
+        y += logoAdded ? 34 : 24;
+
+        docPdf.setDrawColor(221, 227, 234);
+        docPdf.setFillColor(255,255,255);
+        docPdf.roundedRect(margin, y, contentW, 70, 5, 5, 'FD');
+        docPdf.setTextColor(16, 32, 51);
+        docPdf.setFont('helvetica','bold');
+        docPdf.setFontSize(13);
+        docPdf.text('Message pour les clients', margin + 6, y + 9);
+        docPdf.setFont('helvetica','normal');
+        docPdf.setFontSize(11);
+        const messageLines = splitTextToSize(docPdf, message, contentW - 12);
+        docPdf.text(messageLines, margin + 6, y + 17, { baseline: 'top' });
+        y += 80;
+
+        const qrSize = 78;
+        const qrX = (pageW - qrSize) / 2;
+        docPdf.setDrawColor(221, 227, 234);
+        docPdf.setFillColor(255,255,255);
+        docPdf.roundedRect(qrX - 6, y - 6, qrSize + 12, qrSize + 12, 5, 5, 'FD');
+        docPdf.addImage(canvas.toDataURL('image/png'), 'PNG', qrX, y, qrSize, qrSize);
+        y += qrSize + 18;
+
+        docPdf.setFont('helvetica','bold');
+        docPdf.setFontSize(12);
+        docPdf.setTextColor(16, 32, 51);
+        docPdf.text('Scannez pour ouvrir le formulaire du garage', pageW / 2, y, { align:'center' });
+        y += 8;
+        docPdf.setFont('helvetica','normal');
+        docPdf.setFontSize(9);
+        docPdf.setTextColor(93, 107, 122);
+        const urlLines = splitTextToSize(docPdf, registerUrl, contentW - 10);
+        docPdf.text(urlLines, pageW / 2, y, { align:'center' });
+
+        docPdf.setDrawColor(221, 227, 234);
+        docPdf.line(margin, pageH - 22, pageW - margin, pageH - 22);
+        docPdf.setFontSize(9);
+        docPdf.setTextColor(93, 107, 122);
+        docPdf.text('Fiche client générée depuis le Super Admin', margin, pageH - 14);
+        docPdf.text(new Date().toLocaleDateString('fr-CA'), pageW - margin, pageH - 14, { align:'right' });
+
+        docPdf.save(`${selectedGarageIdForQr}-fiche-client-qr.pdf`);
+        setMsg('ok', 'PDF client téléchargé.');
+      } catch(e) {
+        console.error(e);
+        setMsg('error', e?.message || 'Erreur génération PDF client.');
+      }
+    }
     async function renderGarageQr(garageId){
       selectedGarageIdForQr = garageId || '';
       const preview = $('qrPreview');
@@ -271,10 +410,12 @@
         if(preview) preview.innerHTML = '<div class="muted">Aucun QR code</div>';
         if(urlBox) urlBox.textContent = '-';
         if(nameBox) nameBox.textContent = 'QR code garage';
+        setClientQrMessage(null);
         setQrGarageLabel('Sélectionne un garage dans la liste.');
         return;
       }
       const garage = garagesCache.find(g => g.id === selectedGarageIdForQr);
+      setClientQrMessage(garage);
       const url = getGarageRegisterUrl(selectedGarageIdForQr);
       if(urlBox) urlBox.textContent = url;
       if(nameBox) nameBox.textContent = `QR code — ${garage?.name || garage?.garageName || selectedGarageIdForQr}`;
@@ -604,6 +745,7 @@ Attention: cela supprime seulement le document principal du garage. Les sous-col
     $('btnPagesBasic').addEventListener('click', () => applyPagePreset('basic'));
     $('btnPagesPro').addEventListener('click', () => applyPagePreset('pro'));
     $('btnDownloadQr').addEventListener('click', downloadGarageQr);
+    $('btnDownloadQrPdf').addEventListener('click', downloadGarageQrPdf);
     $('btnCopyQrLink').addEventListener('click', async () => { try { await copyGarageQrLink(); } catch(e){ console.error(e); setMsg('error', e?.message || 'Erreur copie lien QR.'); } });
     $('btnCopyQrImage').addEventListener('click', async () => { try { await copyGarageQrImage(); } catch(e){ console.error(e); setMsg('error', e?.message || 'Erreur copie image QR.'); } });
     $('btnLogout').addEventListener('click', async () => {      try { await signOut(auth); window.location.replace('./index.html'); }
