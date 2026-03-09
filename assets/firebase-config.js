@@ -1,9 +1,9 @@
 window.FIREBASE_CONFIG = {
-  apiKey: "AIzaSyB0dGjtVj1_A35RPuRWYAZRpRbVwEE_Q5k",
-  authDomain: "garage-pro-one.firebaseapp.com",
-  projectId: "garage-pro-one",
-  storageBucket: "garage-pro-one.firebasestorage.app",
-  messagingSenderId: "873293567977",
-  appId: "1:873293567977:web:04fdbb9deb08e2bc3f9d78",
-  measurementId: "G-4J4XB4PS8E"
+  apiKey: "AIzaSyBoEH2o0tQLV0yDSXwVQVWg8IU1Po7Zn8I",
+  authDomain: "gestion-de-garage.firebaseapp.com",
+  projectId: "gestion-de-garage",
+  storageBucket: "gestion-de-garage.firebasestorage.app",
+  messagingSenderId: "1051235557868",
+  appId: "1:1051235557868:web:8a8a822cbd8e53ceac60c9",
+  measurementId: "G-7VZQGQXDYK"
 };

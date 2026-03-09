@@ -1,8 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, collectionGroup, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
 
 
 function debugLogWrapper(){
@@ -82,6 +83,7 @@ if (!window.FIREBASE_CONFIG) {
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 const functions = getFunctions(app);
 
 /* ============
@@ -91,6 +93,7 @@ const functions = getFunctions(app);
 // possible values: "admin" | "mechanic"
 let currentRole = "unknown";
 let currentUserName = "";
+let currentGarageId = "";
 let unsubProfile = null;
 let mechanics = [];
 let unsubStaffLive = null;
@@ -106,6 +109,7 @@ function normalizeRole(raw) {
   // tolérance aux fautes fréquentes
   if (r === "mecanic" || r === "mecanicien" || r === "mechanicien") return "mechanic";
   if (r === "administrateur" || r === "administrator") return "admin";
+  if (r === "superadmin") return "superadmin";
   if (r === "admin" || r === "mechanic") return r;
   return "";
 }
@@ -139,8 +143,8 @@ async function loadRole(){
       currentUserName = "";
       applyRoleUI();
       alert(
-        "Compte non autorisé (staff manquant).\\n\\n"+
-        "Demande à l’admin de t’envoyer une invitation, puis crée ton compte via le code.\\n\\n"+
+        "Compte non autorisé (staff manquant).\n\n"+
+        "Demande à l’admin de t’envoyer une invitation, puis crée ton compte via le code.\n\n"+
         "UID: "+currentUid
       );
       await signOut(auth);
@@ -160,18 +164,40 @@ async function loadRole(){
       roleNeedsSetup = false;
       currentRole = normalized;
     }
-    currentUserName = d.fullName || d.name || d.email || auth.currentUser.email || "";
+    currentGarageId = String(d.garageId || localStorage.getItem("garageId") || "").trim();
+    if(currentGarageId) localStorage.setItem("garageId", currentGarageId);
+    window.currentGarageId = currentGarageId;
+    currentUserName = d.fullName || d.displayName || d.name || d.email || auth.currentUser.email || "";
     window.currentRole = currentRole;
   }catch(e){
 
     currentRole = "unknown";
+    currentGarageId = String(localStorage.getItem("garageId") || "").trim();
     currentUserName = "";
   }
   applyRoleUI();
 }
 
+async function ensureCurrentGarageId(){
+  if(currentGarageId) return currentGarageId;
+  try{
+    if(currentUid){
+      const snap = await getDoc(docStaffProfile());
+      const d = snap.exists() ? (snap.data() || {}) : {};
+      const gid = String(d.garageId || localStorage.getItem("garageId") || "").trim();
+      if(gid){
+        currentGarageId = gid;
+        window.currentGarageId = gid;
+        localStorage.setItem("garageId", gid);
+        return gid;
+      }
+    }
+  }catch(e){}
+  return String(localStorage.getItem("garageId") || "").trim();
+}
+
 function applyRoleUI(){
-  const isAdmin = (currentRole === "admin");
+  const isAdmin = (currentRole === "admin" || currentRole === "superadmin");
 
   // 1) tout ce qui est marqué data-role="admin" (HTML)
   document.querySelectorAll('[data-role="admin"]').forEach(el=>{
@@ -199,9 +225,9 @@ function applyRoleUI(){
 
 async function loadMechanics(){
   mechanics = [];
-  if(currentRole !== "admin") return;
+  if(currentRole !== "admin" && currentRole !== "superadmin") return;
   try{
-    const snap = await getDocs(query(collection(db, "staff"), where("role","==","mechanic")));
+    const snap = await getDocs(currentGarageId ? query(collection(db, "staff"), where("role","==","mechanic"), where("garageId","==", currentGarageId)) : query(collection(db, "staff"), where("role","==","mechanic")));
     mechanics = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}))
       .map(u=>({uid:u.uid, name:u.fullName || u.name || u.email || u.uid, email:u.email||""}));
   }catch(e){
@@ -213,17 +239,75 @@ async function loadMechanics(){
    UI helpers
 =========== */
 const $ = (id)=>document.getElementById(id);
+function setGarageLogoPreview(url){
+  const img = $("garageLogoPreview");
+  if(img) img.src = String(url || "").trim() || "assets/logo.png";
+}
+
+async function uploadGarageLogoFile(){
+  const fileInput = $("setGarageLogoFile");
+  const file = fileInput?.files?.[0];
+  if(!file) throw new Error("Choisis une image d'abord.");
+  const gid = await ensureCurrentGarageId();
+  if(!gid) throw new Error("Garage introuvable.");
+  const safeName = String(file.name || "logo").replace(/[^a-zA-Z0-9._-]+/g,"-");
+  const fileRef = storageRef(storage, `garage-logos/${gid}/${Date.now()}-${safeName}`);
+  await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
+  const url = await getDownloadURL(fileRef);
+  const urlInput = $("setGarageLogoUrl");
+  if(urlInput) urlInput.value = url;
+  settings.garageLogoUrl = url;
+  updateGarageBrand();
+  setGarageLogoPreview(url);
+  return url;
+}
+
+function updateGarageBrand(){
+  const garageName = String(settings?.garageName || "Garage Pro One").trim() || "Garage Pro One";
+  const garageLogo = String(settings?.garageLogoUrl || "").trim() || "assets/logo.png";
+  const topName = $("garageBrandName");
+  if(topName) topName.textContent = garageName;
+  const sideName = $("sidebarGarageName");
+  if(sideName) sideName.textContent = garageName;
+  const applyLogo = (el)=>{
+    if(!el) return;
+    el.alt = garageName;
+    el.src = garageLogo;
+    el.onerror = ()=>{ el.onerror = null; el.src = "assets/logo.png"; };
+  };
+  applyLogo($("garageBrandLogo"));
+  applyLogo($("sidebarGarageLogo"));
+  applyLogo($("print-logo-img"));
+  document.querySelectorAll('img[data-garage-logo="true"]').forEach(applyLogo);
+}
 const views = {
   dashboard: $("viewDashboard"),
   clients: $("viewClients"),
   repairs: $("viewRepairs"),
+  notifications: $("viewNotifications"),
   promotions: $("viewPromotions"),
   settings: $("viewSettings"),
   revenue: $("viewRevenue"),
   partsExpenses: $("viewPartsExpenses"),
+  suppliers: $("viewSuppliers"),
   invoices: $("viewInvoices"),
   fiscal: $("viewFiscal"),
 };
+const defaultEnabledPages = { dashboard:true, clients:true, repairs:true, notifications:true, promotions:true, settings:true, revenue:true, partsExpenses:true, suppliers:true, invoices:true, fiscal:true };
+function isPageEnabled(view){
+  const pages = settings?.enabledPages || defaultEnabledPages;
+  return pages?.[view] !== false;
+}
+function applyEnabledPages(){
+  document.querySelectorAll('[data-go]').forEach((btn)=>{
+    const view = btn.getAttribute('data-go');
+    if(!view) return;
+    const allowedByPlan = isPageEnabled(view);
+    const roleBlocked = (currentRole === 'mechanic' && (view==='dashboard' || view==='settings' || view==='revenue' || view==='promotions' || view==='invoices' || view==='fiscal' || view==='partsExpenses' || view==='notifications'));
+    btn.style.display = (allowedByPlan && !roleBlocked) ? '' : 'none';
+  });
+}
+
 const pageTitle = $("pageTitle");
 
 function safe(s){ return String(s??"").replace(/[&<>"]/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
@@ -496,8 +580,12 @@ function resetScrollToTop(){
 }
 
 function go(view){
-  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses" || view==="notifications")){
+  if(currentRole === "mechanic" && (view==="dashboard" || view==="settings" || view==="revenue" || view==="promotions" || view==="invoices" || view==="fiscal" || view==="partsExpenses" || view==="suppliers" || view==="notifications")){
     view = "repairs";
+  }
+  if(!isPageEnabled(view)) {
+    showToast("Cette page n'est pas activée pour votre garage.");
+    view = isPageEnabled('dashboard') ? 'dashboard' : (isPageEnabled('clients') ? 'clients' : 'repairs');
   }
   // Hide all view sections (robust on mobile/iOS)
 document.querySelectorAll('#viewApp > section[id^="view"]').forEach(sec=>{
@@ -508,7 +596,7 @@ for(const k in views){ if(views[k]) views[k].style.display = 'none'; }
 
 // Show requested view
 if(views[view]){ views[view].style.display = ''; }
-  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
+  const titles = {dashboard:"Dashboard", clients:"Clients", repairs:"Réparations", promotions:"Promotions", revenue:"Revenus", fiscal:"Info fiscaux", partsExpenses:"Dépenses pièces", suppliers:"Fournisseurs", invoices:"Factures pièces", notifications:"Notifications", settings:"Paramètres"};
   pageTitle.textContent = titles[view] || "Garage Pro One";
   // highlight active menu
   document.querySelectorAll("[data-go]").forEach(b=>{
@@ -529,57 +617,37 @@ document.querySelectorAll("[data-go]").forEach(btn=>{
 });
 
 /* ============
-   Firestore paths (per user)
+   Firestore paths (garage-scoped)
 =========== */
 let currentUid = null;
-// DB structure (current):
-//   /customers, /vehicles, /workorders, /appointments, /meta, /users/{uid}
-// We force ROOT mode to match your Firestore rules.
-let DATA_MODE = "root";
+let DATA_MODE = "garage";
 
-function colCustomers(){
-  if(DATA_MODE==="root") return collection(db, "customers");
-  if(DATA_MODE==="nested") return collection(db, "customers", "customers", "customers");
-  return collection(db, "users", currentUid, "customers");
+function garageBaseRef(garageId=currentGarageId){
+  const gid = String(garageId || "").trim();
+  if(!gid) throw new Error("missing-garageId");
+  return doc(db, "garages", gid);
 }
-function colVehicles(){
-  if(DATA_MODE==="root") return collection(db, "vehicles");
-  if(DATA_MODE==="nested") return collection(db, "vehicles", "vehicles", "vehicles");
-  return collection(db, "users", currentUid, "vehicles");
+function garageCol(name, garageId=currentGarageId){
+  return collection(garageBaseRef(garageId), name);
+}
+function garageDoc(name, id, garageId=currentGarageId){
+  return doc(garageCol(name, garageId), id);
 }
 
-function colInvoices(){
-  if(DATA_MODE==="root") return collection(db, "invoices");
-  if(DATA_MODE==="nested") return collection(db, "users", currentUid, "invoices");
-  return collection(db, "invoices");
-}
+function colCustomers(){ return garageCol("customers"); }
+function colVehicles(){ return garageCol("vehicles"); }
+function colInvoices(){ return garageCol("invoices"); }
+function colWorkorders(){ return garageCol("workorders"); }
+function colAppointments(){ return garageCol("appointments"); }
+function colPromotions(){ return garageCol("promotions"); }
+function colPartsExpenses(){ return garageCol("expenses_parts"); }
+function colSuppliers(){ return garageCol("suppliers"); }
+function colLogs(){ return garageCol("logs"); }
+function colInvites(){ return garageCol("invites"); }
 
-function colWorkorders(){
-  if(DATA_MODE==="root") return collection(db, "workorders");
-  if(DATA_MODE==="nested") return collection(db, "workorders", "workorders", "workorders");
-  return collection(db, "users", currentUid, "workorders");
-}
-function colAppointments(){
-  if(DATA_MODE==="root") return collection(db, "appointments");
-  if(DATA_MODE==="nested") return collection(db, "appointments", "appointments", "appointments");
-  return collection(db, "users", currentUid, "appointments");
-}
+function docSettings(){ return garageDoc("settings", "main"); }
+function docCounters(){ return garageDoc("settings", "counters"); }
 
-function colPromotions(){
-  if(DATA_MODE==="root") return collection(db, "promotions");
-  if(DATA_MODE==="nested") return collection(db, "promotions", "promotions", "promotions");
-  return collection(db, "users", currentUid, "promotions");
-}
-function docSettings(){
-  if(DATA_MODE==="root") return doc(db, "meta", "settings");
-  if(DATA_MODE==="nested") return doc(db, "meta", "settings"); // shared
-  return doc(db, "users", currentUid, "meta", "settings");
-}
-function docCounters(){
-  if(DATA_MODE==="root") return doc(db, "meta", "counters");
-  if(DATA_MODE==="nested") return doc(db, "meta", "counters");
-  return doc(db, "users", currentUid, "meta", "counters");
-}
 async function _hasAnyDocs(colRef){
   try{
     const snap = await getDocs(query(colRef, limit(1)));
@@ -597,13 +665,14 @@ let customers = [];
 let vehicles = [];
 let workorders = [];
 let invoices = [];
-let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"", garagePhone:"", garageEmail:"", signatureName:"", theme:"light", devMode:"off" };
+let settings = { tpsRate: 0.05, tvqRate: 0.09975 , cardFeeRate: 0.025, laborRate: 80, garageName:"Garage Pro One", garageAddress:"", garagePhone:"", garageEmail:"", garageLogoUrl:"", garageTpsNo:"", garageTvqNo:"", signatureName:"", theme:"light", devMode:"off", enabledPages: { ...defaultEnabledPages } };
 
 let promotions = [];
 let selectedPromotionId = null;
 
 // Dépenses pièces (achats)
 let partsExpenses = [];
+let suppliers = [];
 
 let unsubSettings = null;
 let unsubCustomers = null;
@@ -612,6 +681,7 @@ let unsubWorkorders = null;
 let unsubPromotions = null;
 let unsubInvoices = null;
 let unsubPartsExpenses = null;
+let unsubSuppliers = null;
 
 /* ============
    Auth UI
@@ -691,12 +761,14 @@ async function ensureSettingsDoc(){
   const ref = docSettings();
   const snap = await getDoc(ref);
   if(!snap.exists()){
-    await setDoc(ref, { tpsRate: 0.05, tvqRate: 0.09975, updatedAt: serverTimestamp() });
+    const gid = await ensureCurrentGarageId();
+    await setDoc(ref, { garageId: gid || "", tpsRate: 0.05, tvqRate: 0.09975, garageName: settings.garageName || "Garage Pro One", garageLogoUrl: settings.garageLogoUrl || "", logoUrl: settings.garageLogoUrl || "", updatedAt: serverTimestamp() }, { merge:true });
   }
   const cRef = docCounters();
   const cSnap = await getDoc(cRef);
   if(!cSnap.exists()){
-    await setDoc(cRef, { invoiceNext: 1, updatedAt: serverTimestamp() });
+    const gid2 = await ensureCurrentGarageId();
+    await setDoc(cRef, { garageId: gid2 || "", invoiceNext: 1, updatedAt: serverTimestamp() }, { merge:true });
   }
 }
 
@@ -711,9 +783,16 @@ async function nextInvoiceNo(){
   return "GP-" + String(n).padStart(4,"0");
 }
 
+function scopeByGarage(ref, extraConstraints=[]) {
+  const constraints = [];
+  if (currentGarageId) constraints.push(where("garageId", "==", currentGarageId));
+  if (Array.isArray(extraConstraints)) constraints.push(...extraConstraints.filter(Boolean));
+  return constraints.length ? query(ref, ...constraints) : query(ref);
+}
+
 function subscribeAll(){
-  // settings/meta are admin-only (rules)
-  if(currentRole === "admin"){
+  // settings branding/info for all signed-in garage members
+  if(currentGarageId){
     unsubSettings = onSnapshot(docSettings(), (snap)=>{
       if(snap.exists()){
         const d = snap.data();
@@ -727,39 +806,50 @@ function subscribeAll(){
           garageAddress: String(d.garageAddress ?? settings.garageAddress ?? ""),
           garagePhone: String(d.garagePhone ?? settings.garagePhone ?? ""),
           garageEmail: String(d.garageEmail ?? settings.garageEmail ?? ""),
+          garageLogoUrl: String(d.garageLogoUrl ?? d.logoUrl ?? settings.garageLogoUrl ?? ""),
+          garageTpsNo: String(d.garageTpsNo ?? d.tpsNumber ?? settings.garageTpsNo ?? ""),
+          garageTvqNo: String(d.garageTvqNo ?? d.tvqNumber ?? settings.garageTvqNo ?? ""),
           signatureName: String(d.signatureName ?? settings.signatureName ?? ""),
+          enabledPages: { ...defaultEnabledPages, ...(d.enabledPages || settings.enabledPages || {}) },
         };
         renderSettings();
+        updateGarageBrand();
+        applyEnabledPages();
         renderDashboard();
       } else {
         // doc not created yet -> show defaults
+        settings.enabledPages = { ...defaultEnabledPages, ...(settings.enabledPages || {}) };
         renderSettings();
+        updateGarageBrand();
+        applyEnabledPages();
         renderDashboard();
       }
     });
+  }
 
-    // Promotions (admin only)
-    unsubPromotions = onSnapshot(query(colPromotions(), orderBy("createdAt", "desc"), limit(200)), (snap)=>{
-      promotions = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  // Promotions (admin only)
+  if(currentRole === "admin" || currentRole === "superadmin"){
+    unsubPromotions = onSnapshot(scopeByGarage(colPromotions()), (snap)=>{
+      promotions = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=> String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
       renderPromotions();
     });
     // Staff list (admin only) - realtime
     if(unsubStaffLive) try{unsubStaffLive();}catch(e){}
-    unsubStaffLive = onSnapshot(query(collection(db,"staff"), orderBy("createdAt","desc"), limit(200)), (snap)=>{
-      staffLiveRows = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
+    unsubStaffLive = onSnapshot((currentGarageId ? query(collection(db,"staff"), where("garageId","==", currentGarageId)) : query(collection(db,"staff"))), (snap)=>{
+      staffLiveRows = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})})).sort((a,b)=> String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
       renderStaffRows(staffLiveRows);
     });
 
     // Invites list (admin only) - realtime
     if(unsubInvitesLive) try{unsubInvitesLive();}catch(e){}
-    unsubInvitesLive = onSnapshot(query(collection(db,"invites"), orderBy("createdAt","desc"), limit(200)), (snap)=>{
-      invitesLiveRows = snap.docs.map(d=>({code:d.id, ...(d.data()||{})}));
+    unsubInvitesLive = onSnapshot(query(colInvites()), (snap)=>{
+      invitesLiveRows = snap.docs.map(d=>({code:d.id, ...(d.data()||{})})).sort((a,b)=> String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
       renderInviteRows(invitesLiveRows);
     });
 
   }
 
-  unsubCustomers = onSnapshot(query(colCustomers(), orderBy("fullName", "asc")), (snap)=>{
+  unsubCustomers = onSnapshot(scopeByGarage(colCustomers()), (snap)=>{
     // Normalisation: certains clients ont l'email sous Email/courriel/mail...
     // On force un champ `email` unique utilisé partout (Clients, Promotions, etc.).
     customers = snap.docs.map(d=>{
@@ -772,38 +862,38 @@ function subscribeAll(){
         email: normalizeEmail(data),
         promoSelected: data.promoSelected === true,
       };
-    });
-    if(currentRole === "admin") renderDashboard();
+    }).sort((a,b)=> String(a.fullName||"").localeCompare(String(b.fullName||"")));
+    if(currentRole === "admin" || currentRole === "superadmin") renderDashboard();
     renderClients();
     fillInvoiceCustomers();
     fillInvoiceWorkorders();
-    if(currentRole === "admin") renderRevenue();
-    if(currentRole === "admin") renderFiscal();
-    if(currentRole === "admin") renderPromotions();
+    if(currentRole === "admin" || currentRole === "superadmin") renderRevenue();
+    if(currentRole === "admin" || currentRole === "superadmin") renderFiscal();
+    if(currentRole === "admin" || currentRole === "superadmin") renderPromotions();
   });
 
-  unsubVehicles = onSnapshot(query(colVehicles(), orderBy("createdAt", "desc")), (snap)=>{
-    vehicles = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    if(currentRole === "admin") renderDashboard();
+  unsubVehicles = onSnapshot(scopeByGarage(colVehicles()), (snap)=>{
+    vehicles = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=> String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+    if(currentRole === "admin" || currentRole === "superadmin") renderDashboard();
     renderClients();
     fillInvoiceCustomers();
     fillInvoiceWorkorders();
-    if(currentRole === "admin") renderRevenue();
-    if(currentRole === "admin") renderFiscal();
+    if(currentRole === "admin" || currentRole === "superadmin") renderRevenue();
+    if(currentRole === "admin" || currentRole === "superadmin") renderFiscal();
   });
 
   const woQ = (currentRole === "mechanic")
-    ? query(colWorkorders(), where("assignedTo","==", currentUid), limit(400))
-    : query(colWorkorders(), orderBy("createdAt", "desc"), limit(400));
+    ? scopeByGarage(colWorkorders(), [where("assignedTo","==", currentUid)])
+    : scopeByGarage(colWorkorders());
 
   unsubWorkorders = onSnapshot(
     woQ,
     (snap)=>{
-      workorders = snap.docs.map(d=>({id:d.id, ...d.data()}));
-      if(currentRole === "admin") renderDashboard();
+      workorders = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=> String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+      if(currentRole === "admin" || currentRole === "superadmin") renderDashboard();
       renderRepairs();
       fillInvoiceWorkorders();
-      if(currentRole === "admin") renderRevenue();
+      if(currentRole === "admin" || currentRole === "superadmin") renderRevenue();
     },
     (err)=>{
 
@@ -813,10 +903,10 @@ function subscribeAll(){
 
   // Invoices (admin)
   if(currentRole === "admin"){
-    const invQ = query(colInvoices(), orderBy("date", "desc"), limit(500));
+    const invQ = scopeByGarage(colInvoices());
     unsubInvoices = onSnapshot(invQ,
       (snap)=>{
-        invoices = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        invoices = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=> String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||"")));
         renderInvoices();
         renderRevenue();
         renderFiscal();
@@ -828,8 +918,22 @@ function subscribeAll(){
       }
     );
 
+    const supQ = query(colSuppliers(), orderBy("name", "asc"), limit(1000));
+    unsubSuppliers = onSnapshot(
+      supQ,
+      (snap)=>{
+        suppliers = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderSuppliers();
+        fillInvoiceSuppliers(invSupplierEl?.value||"");
+      },
+      (err)=>{
+        console.error(err);
+        showToast("Accès refusé: fournisseurs. Vérifie les règles du garage.", 7000);
+      }
+    );
+
     // Parts expenses (admin)
-    const pexQ = query(collection(db, "expenses_parts"), orderBy("date", "desc"), limit(2000));
+    const pexQ = query(colPartsExpenses(), orderBy("date", "desc"), limit(2000));
     unsubPartsExpenses = onSnapshot(
       pexQ,
       (snap)=>{
@@ -839,7 +943,7 @@ function subscribeAll(){
       },
       (err)=>{
         console.error(err);
-        showToast("Accès refusé: dépenses pièces. Vérifie les rules /expenses_parts.", 7000);
+        showToast("Accès refusé: dépenses pièces. Vérifie les règles du garage.", 7000);
       }
     );
   }
@@ -854,9 +958,10 @@ function unsubscribeAll(){
   if(unsubPromotions) try{unsubPromotions();}catch(e){}
   if(unsubInvoices) try{unsubInvoices();}catch(e){}
   if(unsubPartsExpenses) try{unsubPartsExpenses();}catch(e){}
+  if(unsubSuppliers) try{unsubSuppliers();}catch(e){}
   if(unsubStaffLive) try{unsubStaffLive();}catch(e){}
   if(unsubInvitesLive) try{unsubInvitesLive();}catch(e){}
-  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = unsubInvoices = unsubPartsExpenses = null;
+  unsubSettings = unsubCustomers = unsubVehicles = unsubWorkorders = unsubPromotions = unsubInvoices = unsubPartsExpenses = unsubSuppliers = null;
   unsubStaffLive = unsubInvitesLive = null;
 }
 
@@ -884,7 +989,7 @@ function getVehicle(id){ return vehicles.find(v=>v.id===id); }
 
 function renderDashboard(){
   if(currentRole === "mechanic"){
-    $("dashboardCards").innerHTML = `<div class="note">Accès réservé à l'administrateur.</div>`;
+    if ($("dashboardCards")) $("dashboardCards").innerHTML = `<div class="note">Accès réservé à l'administrateur.</div>`;
     $("openRepairsTbody").innerHTML = `<tr><td colspan="4" class="muted">—</td></tr>`;
     return;
   }
@@ -1020,7 +1125,7 @@ window.__emailWorkorderPayment = __emailWorkorderPayment;
 
 function renderUnpaidRepairsDashboard(){
   try{
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
     if(!unpaidRepairsTbody || !unpaidRepairsCountEl) return;
 
     const list = [...workorders]
@@ -1099,7 +1204,7 @@ function renderUnpaidRepairsDashboard(){
 
 function renderFinanceDashboard(){
   try{
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
     if(!finSalesEl) return;
 
     const now = new Date();
@@ -1378,6 +1483,148 @@ const pexCountEl = $("pexCount");
 const pexTbody = $("pexTbody");
 
 /* ============
+   Suppliers view
+=========== */
+const btnNewSupplier = $("btnNewSupplier");
+const suppliersCountEl = $("suppliersCount");
+const suppliersActiveCountEl = $("suppliersActiveCount");
+const suppliersPhoneCountEl = $("suppliersPhoneCount");
+const suppliersEmailCountEl = $("suppliersEmailCount");
+const suppliersTbody = $("suppliersTbody");
+
+function renderSuppliers(){
+  if(!$('viewSuppliers')) return;
+  const rows = Array.isArray(suppliers) ? [...suppliers] : [];
+  rows.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''), 'fr', {sensitivity:'base'}));
+  if(suppliersCountEl) suppliersCountEl.textContent = String(rows.length);
+  if(suppliersActiveCountEl) suppliersActiveCountEl.textContent = String(rows.filter(x=>x.active !== false).length);
+  if(suppliersPhoneCountEl) suppliersPhoneCountEl.textContent = String(rows.filter(x=>String(x.phone||'').trim()).length);
+  if(suppliersEmailCountEl) suppliersEmailCountEl.textContent = String(rows.filter(x=>String(x.email||'').trim()).length);
+  if(!suppliersTbody) return;
+  if(rows.length===0){
+    suppliersTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucun fournisseur.</td></tr>';
+    return;
+  }
+  suppliersTbody.innerHTML = rows.map(x=>`<tr>
+    <td><b>${safe(x.name||'')}</b></td>
+    <td>${safe(x.contact||'')}</td>
+    <td>${safe(x.phone||'')}</td>
+    <td>${safe(x.email||'')}</td>
+    <td>${safe(x.city||'')}</td>
+    <td>${safe(x.note||'')}</td>
+    <td class="no-print" style="white-space:nowrap">
+      <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
+      <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
+    </td>
+  </tr>`).join('');
+}
+
+function supplierOptionsHtml(selected=''){
+  return (Array.isArray(suppliers)?suppliers:[]).map(s=>{
+    const name = String(s.name||'').trim();
+    if(!name) return '';
+    const sel = name===selected ? 'selected' : '';
+    return `<option value="${safe(name)}" ${sel}>${safe(name)}</option>`;
+  }).join('');
+}
+
+function openSupplierModal(existing){
+  if(currentRole !== 'admin' && currentRole !== 'superadmin') return;
+  const x = existing || {};
+  const html = `
+    <form class="form" id="formSupplier">
+      <label>Nom du fournisseur</label>
+      <input class="input" name="name" required placeholder="Ex: NAPA" value="${safe(x.name||'')}" />
+
+      <div class="row" style="gap:10px; flex-wrap:wrap">
+        <div style="flex:1; min-width:160px">
+          <label>Contact</label>
+          <input class="input" name="contact" placeholder="Nom du contact" value="${safe(x.contact||'')}" />
+        </div>
+        <div style="flex:1; min-width:160px">
+          <label>Téléphone</label>
+          <input class="input" name="phone" placeholder="514..." value="${safe(x.phone||'')}" />
+        </div>
+      </div>
+
+      <div class="row" style="gap:10px; flex-wrap:wrap">
+        <div style="flex:1; min-width:160px">
+          <label>Email</label>
+          <input class="input" name="email" type="email" placeholder="email@exemple.com" value="${safe(x.email||'')}" />
+        </div>
+        <div style="flex:1; min-width:160px">
+          <label>Ville</label>
+          <input class="input" name="city" placeholder="Montréal" value="${safe(x.city||'')}" />
+        </div>
+      </div>
+
+      <label>Adresse</label>
+      <input class="input" name="address" placeholder="Adresse" value="${safe(x.address||'')}" />
+
+      <label>Note</label>
+      <textarea class="input" name="note" rows="3" placeholder="Notes">${safe(x.note||'')}</textarea>
+
+      <label style="display:flex; align-items:center; gap:8px; margin-top:8px">
+        <input type="checkbox" name="active" ${x.active === false ? '' : 'checked'} /> Actif
+      </label>
+
+      <div class="row" style="margin-top:12px; gap:10px">
+        <button class="btn btn-primary" type="submit">Enregistrer</button>
+        <button class="btn btn-ghost" type="button" data-modal-close>Annuler</button>
+      </div>
+    </form>
+  `;
+  showModal(existing ? 'Modifier fournisseur' : 'Nouveau fournisseur', html);
+  const form = modalBody.querySelector('#formSupplier');
+  if(!form) return;
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(form);
+    const data = {
+      name: String(fd.get('name')||'').trim(),
+      contact: String(fd.get('contact')||'').trim(),
+      phone: String(fd.get('phone')||'').trim(),
+      email: String(fd.get('email')||'').trim().toLowerCase(),
+      city: String(fd.get('city')||'').trim(),
+      address: String(fd.get('address')||'').trim(),
+      note: String(fd.get('note')||'').trim(),
+      active: fd.get('active') === 'on',
+      updatedAt: serverTimestamp(),
+    };
+    if(!data.name){ showToast('Nom fournisseur obligatoire', true); return; }
+    try{
+      if(existing && existing.id){
+        await updateDoc(garageDoc('suppliers', existing.id), data);
+      }else{
+        data.createdAt = serverTimestamp();
+        await addDoc(colSuppliers(), data);
+      }
+      closeModal();
+      showToast('Fournisseur enregistré ✅');
+    }catch(err){
+      console.error(err);
+      showToast('Erreur fournisseur: '+(err.message||err), true);
+    }
+  });
+}
+
+window.__editSupplier = (id)=>{
+  const x = (Array.isArray(suppliers)?suppliers:[]).find(r=>r.id===id);
+  if(x) openSupplierModal(x);
+};
+
+window.__deleteSupplier = async (id)=>{
+  if(!confirm('Supprimer ce fournisseur ?')) return;
+  try{
+    await deleteDoc(garageDoc('suppliers', id));
+    showToast('Fournisseur supprimé');
+  }catch(err){
+    console.error(err);
+    showToast('Erreur suppression: '+(err.message||err), true);
+  }
+}
+
+/* ============
    Fiscal view
 =========== */
 const fiscPresetEl = $("fiscPreset");
@@ -1410,6 +1657,7 @@ const invoiceFormBox = $("invoiceFormBox");
 const formInvoice = $("formInvoice");
 const invCustomerEl = $("invCustomer");
 const invEmailEl = $("invEmail");
+const invSupplierEl = $("invSupplier");
 const invDateEl = $("invDate");
 const invPurchaseDateEl = $("invPurchaseDate");
 const invInstallDateEl = $("invInstallDate");
@@ -1567,6 +1815,17 @@ function fillInvoiceCustomers(){
   invCustomerEl.innerHTML = list.map(c=>`<option value="${c.id}">${safe(c.fullName||'(Sans nom)')}</option>`).join('');
 }
 
+function fillInvoiceSuppliers(selected=""){
+  if(!invSupplierEl) return;
+  const list = [...(Array.isArray(suppliers)?suppliers:[])].sort((a,b)=> String(a.name||"").localeCompare(String(b.name||""), 'fr'));
+  const opts = ['<option value="">— Aucun —</option>'];
+  for(const s of list){
+    const val = String(s.name||"");
+    opts.push(`<option value="${safe(val)}" ${String(selected)===val?'selected':''}>${safe(val)}</option>`);
+  }
+  invSupplierEl.innerHTML = opts.join('');
+}
+
 function workorderDisplay(wo){
   if(!wo) return "";
   const v = getVehicle(wo.vehicleId) || {};
@@ -1612,7 +1871,7 @@ async function createInvoiceFromForm(e){
   let refVal = String(invRefEl?.value || "").trim();
   if(!refVal){
     try{
-      const cRef = doc(db, "meta", "counters");
+      const cRef = docCounters();
       // runTransaction peut ne pas être importé selon version; on teste
       if(typeof runTransaction === "function"){
         const seq = await runTransaction(db, async (tx)=>{
@@ -1663,6 +1922,7 @@ async function createInvoiceFromForm(e){
         if(invPurchaseDateEl) invPurchaseDateEl.value = existing.purchaseDate || "";
         if(invInstallDateEl) invInstallDateEl.value = existing.installDate || "";
         invRefEl.value = existing.ref || ref;
+        if(invSupplierEl) fillInvoiceSuppliers(existing.supplier || "");
         if(invPayMethodEl) invPayMethodEl.value = existing.paymentMethod || "cash";
         if(invWorkorderEl) invWorkorderEl.value = existing.workorderId || "";
         invItemsTbody.innerHTML = "";
@@ -1692,6 +1952,7 @@ async function createInvoiceFromForm(e){
             customerEmail: existing.customerEmail || String(invEmailEl?.value||"").trim(),
             workorderId: existing.workorderId || workorderId || "",
             workorderLabel: existing.workorderLabel || (workorderId ? workorderDisplay(workorders.find(w=>w.id===workorderId)) : ""),
+            supplier: existing.supplier || String(invSupplierEl?.value||"").trim(),
             paymentMethod: (invPayMethodEl?.value || existing.paymentMethod || "cash"),
             date: existing.date || d,
             purchaseDate: existing.purchaseDate || (invPurchaseDateEl?.value||""),
@@ -1722,6 +1983,7 @@ async function createInvoiceFromForm(e){
           ensureInvoiceLine();
           invDateEl.value = todayISO();
           if(invWorkorderEl) invWorkorderEl.value = "";
+          if(invSupplierEl) fillInvoiceSuppliers("");
           if(invPayMethodEl) invPayMethodEl.value = "cash";
     if(invHoursEl) invHoursEl.value = "0";
     if(invLaborEl) invLaborEl.value = "0";
@@ -1762,6 +2024,7 @@ async function createInvoiceFromForm(e){
     customerId,
     customerName: customer?.fullName || "",
     customerEmail: String(invEmailEl?.value||"").trim(),
+    supplier: String(invSupplierEl?.value||"").trim(),
     workorderId: workorderId || "",
     workorderLabel: workorderId ? workorderDisplay(workorders.find(w=>w.id===workorderId)) : "",
     date: d,
@@ -1798,6 +2061,7 @@ async function createInvoiceFromForm(e){
     ensureInvoiceLine();
     invDateEl.value = todayISO();
     if(invWorkorderEl) invWorkorderEl.value = "";
+    if(invSupplierEl) fillInvoiceSuppliers("");
     if(invPayMethodEl) invPayMethodEl.value = "cash";
     if(invHoursEl) invHoursEl.value = "0";
     if(invLaborEl) invLaborEl.value = "0";
@@ -1855,11 +2119,12 @@ function exportInvoicesCSV(){
     const db = b.date instanceof Date ? b.date : (b.date?.toDate ? b.date.toDate() : new Date(b.date));
     return db - da;
   });
-  const header = ["date","ref","client","payment_method","labor","sub_total","tax","grand_total","card_fee","parts_cost","net_profit","item_desc","item_qty","item_cost","item_price"];
+  const header = ["date","ref","supplier","client","payment_method","labor","sub_total","tax","grand_total","card_fee","parts_cost","net_profit","item_desc","item_qty","item_cost","item_price"];
   const rows = [header.join(",")];
   for(const inv of list){
     const dt = isoDate(inv.date instanceof Date ? inv.date : (inv.date?.toDate ? inv.date.toDate() : new Date(inv.date)));
     const ref = (inv.ref||"").replaceAll('"','""');
+    const supplier = String(inv.supplier||"").replaceAll('"','""');
     const client = (inv.customerName||"").replaceAll('"','""');
     const pm = (inv.paymentMethod||"").replaceAll('"','""');
     const labor = Number(inv.labor||0);
@@ -1873,14 +2138,14 @@ function exportInvoicesCSV(){
     const profitT = netP;
     const items = Array.isArray(inv.items) ? inv.items : [];
     if(items.length===0){
-      rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, labor, subT, taxT, grandT, cardF, costT, netP, "", "", "", ""].join(","));
+      rows.push([dt, `"${ref}"`, `"${supplier}"`, `"${client}"`, `"${pm}"`, labor, subT, taxT, grandT, cardF, costT, netP, "", "", "", ""].join(","));
     }else{
       for(const it of items){
         const desc = String(it.desc||"").replaceAll('"','""');
         const qty = Number(it.qty||0);
         const cost = Number(it.cost||0);
         const price = Number(it.price||0);
-        rows.push([dt, `"${ref}"`, `"${client}"`, `"${pm}"`, labor, subT, taxT, grandT, cardF, costT, netP, `"${desc}"`, qty, cost, price].join(","));
+        rows.push([dt, `"${ref}"`, `"${supplier}"`, `"${client}"`, `"${pm}"`, labor, subT, taxT, grandT, cardF, costT, netP, `"${desc}"`, qty, cost, price].join(","));
       }
     }
   }
@@ -1936,6 +2201,7 @@ function renderInvoices(){
       <tr>
         <td>${ds}</td>
         <td>${ref}</td>
+        <td>${safe(inv.supplier||"—")}</td>
         <td>${cust}</td>
         <td>${safe(invPaymentLabel(inv.paymentMethod))}</td>
         <td style="text-align:right">${sub}</td>
@@ -1963,6 +2229,7 @@ function renderInvoices(){
       if(invPurchaseDateEl) invPurchaseDateEl.value = inv.purchaseDate || "";
       if(invInstallDateEl) invInstallDateEl.value = inv.installDate || "";
       invRefEl.value = inv.ref || "";
+      if(invSupplierEl) fillInvoiceSuppliers(inv.supplier || "");
   if(invEmailEl) invEmailEl.value = inv.customerEmail || "";
       if(invPayMethodEl) invPayMethodEl.value = inv.paymentMethod || "cash";
       if(invHoursEl) invHoursEl.value = String(inv.hours ?? 0);
@@ -2409,7 +2676,7 @@ function renderRevenue(){
 
 function exportRevenueCSV(){
   try{
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
     const rows = filterRevenueInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
     const lines = [];
     lines.push(["ref","date","client","repair","payment","total","partsCost","profit"].join(","));
@@ -2566,7 +2833,7 @@ function renderPartsExpenses(){
 }
 
 function openPartsExpenseModal(existing){
-  if(currentRole !== "admin") return;
+  if(currentRole !== "admin" && currentRole !== "superadmin") return;
   const x = existing || {};
   const today = isoDate(new Date());
   const html = `
@@ -2575,7 +2842,8 @@ function openPartsExpenseModal(existing){
       <input class="input" name="date" type="date" required value="${safe(x.date || today)}" />
 
       <label>Fournisseur</label>
-      <input class="input" name="supplier" placeholder="Ex: NAPA" value="${safe(x.supplier||"")}" />
+      <input class="input" name="supplier" list="supplierOptionsList" placeholder="Ex: NAPA" value="${safe(x.supplier||"")}" />
+      <datalist id="supplierOptionsList">${(Array.isArray(suppliers)?suppliers:[]).map(s=>`<option value="${safe(s.name||"")}"></option>`).join("")}</datalist>
 
       <label>Description</label>
       <input class="input" name="description" placeholder="Ex: Plaquettes + disques" value="${safe(x.description||"")}" />
@@ -2637,10 +2905,10 @@ function openPartsExpenseModal(existing){
     if(!data.total) data.total = data.subtotal + data.taxTotal;
     try{
       if(existing && existing.id){
-        await updateDoc(doc(db, "expenses_parts", existing.id), data);
+        await updateDoc(garageDoc("expenses_parts", existing.id), data);
       }else{
         data.createdAt = serverTimestamp();
-        await addDoc(collection(db, "expenses_parts"), data);
+        await addDoc(colPartsExpenses(), data);
       }
       closeModal();
       showToast("Dépense enregistrée ✅");
@@ -2657,10 +2925,10 @@ window.__editPartsExpense = (id)=>{
 };
 
 window.__deletePartsExpense = async (id)=>{
-  if(currentRole !== "admin") return;
+  if(currentRole !== "admin" && currentRole !== "superadmin") return;
   if(!confirm("Supprimer cette dépense ?")) return;
   try{
-    await deleteDoc(doc(db, "expenses_parts", id));
+    await deleteDoc(garageDoc("expenses_parts", id));
     showToast("Supprimé ✅");
   }catch(err){
     console.error(err);
@@ -2670,7 +2938,7 @@ window.__deletePartsExpense = async (id)=>{
 
 function exportPartsExpensesCSV(){
   try{
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
     const rows = filterPartsExpenses().sort((a,b)=> _partsExpDateAsDate(a) - _partsExpDateAsDate(b));
     const lines = [];
     lines.push(["Date","Fournisseur","Description","Paiement","HT","Taxes","TTC"].join(","));
@@ -2877,7 +3145,7 @@ function renderFiscal(){
 
 function exportFiscalCSV(){
   try{
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
     const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
     const lines = [];
     lines.push(["Date","Ref","Client","Paiement","SousTotal_HT","TPS","TVQ","Taxes_Total","Total_TTC","Cout_Pieces","Benefice_Net"].join(","));
@@ -2902,7 +3170,7 @@ function exportFiscalCSV(){
 
 function exportComptableCSVs(){
   try{
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
 
     // période / filtres venant de la page fiscaux
     const rows = filterFiscalInvoices().sort((a,b)=> invoiceDateAsDate(a) - invoiceDateAsDate(b));
@@ -3002,7 +3270,7 @@ function exportComptableCSVs(){
 
 function exportComptablePDF(){
   try{
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
 
     // Vérifier que jsPDF est chargé
     const jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null;
@@ -3251,14 +3519,15 @@ if(revPresetEl && revFromEl && revToEl){
   if(pexFromEl) pexFromEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
   if(pexToEl) pexToEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
   if(btnNewPartsExpense) btnNewPartsExpense.addEventListener("click", ()=>openPartsExpenseModal(null));
+  if(btnNewSupplier) btnNewSupplier.addEventListener("click", ()=>openSupplierModal(null));
   if(btnPartsExpExport) btnPartsExpExport.addEventListener("click", ()=>exportPartsExpensesCSV());
 }
 
 // ===== Promo selection (clients) =====
 window.__togglePromoSelected = async (customerId, checked)=>{
-  if(currentRole !== "admin") return;
+  if(currentRole !== "admin" && currentRole !== "superadmin") return;
   try{
-    await updateDoc(doc(db, "customers", customerId), {
+    await updateDoc(garageDoc("customers", customerId), {
       promoSelected: !!checked,
       promoSelectedAtTs: serverTimestamp()
     });
@@ -3269,7 +3538,7 @@ window.__togglePromoSelected = async (customerId, checked)=>{
 };
 
 window.__promoSelectAll = async (checked)=>{
-  if(currentRole !== "admin") return;
+  if(currentRole !== "admin" && currentRole !== "superadmin") return;
   const list = customers.filter(c=>c && c.id);
   if(list.length===0) return;
   const label = checked ? "Tout sélectionner" : "Tout désélectionner";
@@ -3281,7 +3550,7 @@ window.__promoSelectAll = async (checked)=>{
       const chunk = list.slice(i, i+450);
       const batch = writeBatch(db);
       chunk.forEach(c=>{
-        batch.update(doc(db, "customers", c.id), {
+        batch.update(garageDoc("customers", c.id), {
           promoSelected: !!checked,
           promoSelectedAtTs: serverTimestamp()
         });
@@ -3296,7 +3565,7 @@ window.__promoSelectAll = async (checked)=>{
 
 // Sélectionner uniquement les clients qui ont un email
 window.__promoSelectHasEmail = async ()=>{
-  if(currentRole !== "admin") return;
+  if(currentRole !== "admin" && currentRole !== "superadmin") return;
   const list = customers.filter(c=>c && c.id);
   if(list.length===0) return;
   if(!confirm(`Sélectionner uniquement les clients avec email (et désélectionner les autres) ?`)) return;
@@ -3320,7 +3589,7 @@ window.__promoSelectHasEmail = async ()=>{
       chunk.forEach(c=>{
         const email = String(c?.email||"").trim();
         const hasEmail = email.includes("@") && email.includes(".");
-        batch.update(doc(db, "customers", c.id), {
+        batch.update(garageDoc("customers", c.id), {
           promoSelected: !!hasEmail,
           promoSelectedAtTs: serverTimestamp()
         });
@@ -3514,9 +3783,9 @@ const repairsTbody = $("repairsTbody");
 const repairsCards = $("repairsCards");
 const repairsCount = $("repairsCount");
 $("btnRepairsFilter").onclick = ()=>renderRepairs();
-      if(currentRole === "admin") renderRevenue();
+      if(currentRole === "admin" || currentRole === "superadmin") renderRevenue();
 $("btnRepairsClear").onclick = ()=>{ $("repairsSearch").value=""; $("repairsStatus").value=""; renderRepairs();
-      if(currentRole === "admin") renderRevenue(); };
+      if(currentRole === "admin" || currentRole === "superadmin") renderRevenue(); };
 
 function renderRepairs(){
   const q = ($("repairsSearch").value||"").trim().toLowerCase();
@@ -3613,7 +3882,7 @@ function _countPromoSelectedWithEmail(){
 
 function renderPromotions(){
   if(!promosTbody) return;
-  if(currentRole !== "admin"){
+  if(currentRole !== "admin" && currentRole !== "superadmin"){
     promosTbody.innerHTML = `<tr><td class="muted" colspan="5">Accès réservé à l'administrateur.</td></tr>`;
     return;
   }
@@ -3658,7 +3927,7 @@ function renderPromotions(){
 if(formPromo){
   formPromo.onsubmit = async (e)=>{
     e.preventDefault();
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
     promoSaved.style.display = "none";
     const fd = new FormData(formPromo);
     const subject = String(fd.get("subject")||"").trim();
@@ -3670,6 +3939,7 @@ if(formPromo){
       return;
     }
     const docRef = await addDoc(colPromotions(), {
+      garageId: currentGarageId || "garage-demo",
       subject,
       message,
       code: code || "",
@@ -3696,29 +3966,69 @@ function escHtml(s){
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
 }
-function applyTemplate(str, vars){
-  return String(str||"")
-    .replace(/\{name\}/g, vars.name || "")
-    .replace(/\{phone\}/g, vars.phone || "");
+function applyTemplate(str, vars, promo){
+  const data = {
+    name: vars?.name || "",
+    fullName: vars?.fullName || vars?.name || "",
+    phone: vars?.phone || "",
+    garageName: vars?.garageName || "",
+    garagePhone: vars?.garagePhone || "",
+    garageEmail: vars?.garageEmail || "",
+    garageAddress: vars?.garageAddress || "",
+    promoTitle: promo?.subject || promo?.title || "",
+    promoCode: promo?.code || "",
+    promoValidUntil: promo?.validUntil || ""
+  };
+
+  let out = String(str || "");
+  Object.entries(data).forEach(([key, value]) => {
+    const safeValue = String(value || "");
+    out = out.split(`{${key}}`).join(safeValue);
+    out = out.split(`\${${key}}`).join(safeValue);
+  });
+
+  out = out
+    .split('{promo.title}').join(data.promoTitle)
+    .split('${promo.title}').join(data.promoTitle)
+    .split('{promo.code}').join(data.promoCode)
+    .split('${promo.code}').join(data.promoCode)
+    .split('{promo.validUntil}').join(data.promoValidUntil)
+    .split('${promo.validUntil}').join(data.promoValidUntil)
+    .split('`').join('');
+
+  return out;
 }
 function buildPromoHtml(promo, vars){
-  const subject = escHtml(applyTemplate(promo.subject, vars));
-  const msg = applyTemplate(promo.message, vars);
+  const finalSubject = applyTemplate(`${vars.garageName || "Garage Pro One"} | ${promo.subject || promo.title || "Promotion"}`, vars, promo)
+    .replace(/\s+\|\s+\|/g, " | ")
+    .replace(/^\s*\|\s*/, "")
+    .trim();
+  const subject = escHtml(finalSubject);
+  const msg = applyTemplate(promo.message, vars, promo);
+
+  const garageName = escHtml(vars.garageName || settings?.garageName || "Garage Pro One");
+  const garagePhone = escHtml(vars.garagePhone || settings?.garagePhone || "");
+  const garageEmail = escHtml(vars.garageEmail || settings?.garageEmail || "");
+  const garageAddress = escHtml(vars.garageAddress || settings?.garageAddress || "");
+  const garageLogoUrl = String(vars.garageLogoUrl || settings?.garageLogoUrl || settings?.logoUrl || "").trim();
 
   const msgHtml = escHtml(msg).replace(/\n/g,"<br>");
   const codeHtml = promo.code ? `<p><b>Code promo :</b> ${escHtml(promo.code)}</p>` : "";
   const validHtml = promo.validUntil ? `<p><b>Valable jusqu’au :</b> ${escHtml(String(promo.validUntil).slice(0,10))}</p>` : "";
+  const logoHtml = garageLogoUrl ? `<div style="margin:0 0 16px 0"><img src="${escHtml(garageLogoUrl)}" alt="logo" style="max-height:72px;max-width:180px"></div>` : "";
 
   return `
-    <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5">
-      <h2>${subject}</h2>
+    <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#111">
+      ${logoHtml}
+      <h2 style="margin:0 0 12px 0">${subject}</h2>
       <p>${msgHtml}</p>
       ${codeHtml}
       ${validHtml}
-      <hr>
-      <p style="color:#666;font-size:12px">
-        Garage Pro One
-      </p>
+      <hr style="margin:20px 0">
+      <p style="color:#666;font-size:12px;margin:0 0 6px 0"><b>${garageName}</b></p>
+      ${garagePhone ? `<p style="color:#666;font-size:12px;margin:0 0 6px 0">${garagePhone}</p>` : ""}
+      ${garageEmail ? `<p style="color:#666;font-size:12px;margin:0 0 6px 0">${garageEmail}</p>` : ""}
+      ${garageAddress ? `<p style="color:#666;font-size:12px;margin:0">${garageAddress}</p>` : ""}
     </div>
   `;
 }
@@ -3727,7 +4037,7 @@ if(btnPromoSend){
   btnPromoSend.addEventListener("click", async ()=>{
     promoSendError.style.display = "none";
     promoSendOk.style.display = "none";
-    if(currentRole !== "admin") return;
+    if(currentRole !== "admin" && currentRole !== "superadmin") return;
 
     if(!selectedPromotionId){
       alert("Sélectionne une promotion.");
@@ -3742,6 +4052,12 @@ if(btnPromoSend){
 
     const testEmail = String(promoTestEmail?.value||"").trim();
     const isTest = testEmail.includes("@");
+    const replyTo = String(settings?.garageEmail || "").trim();
+    const garageName = String(settings?.garageName || "Garage Pro One").trim();
+    const garagePhone = String(settings?.garagePhone || "").trim();
+    const garageAddress = String(settings?.garageAddress || "").trim();
+    const garageEmail = String(settings?.garageEmail || "").trim();
+    const garageLogoUrl = String(settings?.garageLogoUrl || settings?.logoUrl || "").trim();
 
     // liste destinataires
     const recipients = isTest
@@ -3770,14 +4086,32 @@ if(btnPromoSend){
         const batch = writeBatch(db);
 
         chunk.forEach(r=>{
-          const vars = { name: r.name, phone: r.phone };
+          const vars = {
+            name: r.name,
+            fullName: r.name,
+            phone: r.phone,
+            garageName,
+            garagePhone,
+            garageEmail,
+            garageAddress,
+            garageLogoUrl
+          };
+          const finalSubject = applyTemplate(`${garageName || "Garage Pro One"} | ${promo.subject || promo.title || "Promotion"}`, vars, promo)
+            .replace(/\s+\|\s+\|/g, " | ")
+            .replace(/^\s*\|\s*/, "")
+            .trim();
+          const text = applyTemplate(promo.message, vars, promo);
           const html = buildPromoHtml(promo, vars);
 
           const mailRef = doc(collection(db, "mail")); // ROOT "mail"
           batch.set(mailRef, {
             to: [r.email],
+            replyTo: replyTo || null,
+            garageId: currentGarageId || "garage-demo",
+            garageName: garageName || "Garage Pro One",
             message: {
-              subject: applyTemplate(promo.subject, vars),
+              subject: finalSubject,
+              text,
               html
             },
             createdAt: isoNow(),
@@ -3820,6 +4154,9 @@ $("btnSaveSettings").onclick = async ()=>{
   const garageAddress = String($("setGarageAddress")?.value||"").trim();
   const garagePhone = String($("setGaragePhone")?.value||"").trim();
   const garageEmail = String($("setGarageEmail")?.value||"").trim();
+  const garageLogoUrl = String($("setGarageLogoUrl")?.value||"").trim();
+  const garageTpsNo = String($("setGarageTpsNo")?.value||"").trim();
+  const garageTvqNo = String($("setGarageTvqNo")?.value||"").trim();
   const signatureName = String($("setSignatureName")?.value||"").trim();
   const selectedTheme = String($("themeSelect")?.value || "light");
   const selectedDevMode = String($("devModeSelect")?.value || "off");
@@ -3829,7 +4166,9 @@ $("btnSaveSettings").onclick = async ()=>{
   }
   applyTheme(selectedTheme);
   applyDevMode(selectedDevMode);
-  await setDoc(docSettings(), { tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, signatureName, theme: selectedTheme, devMode: selectedDevMode, updatedAt: serverTimestamp() }, { merge:true });
+  const gid = await ensureCurrentGarageId();
+  if(!gid) throw new Error("missing-garageId");
+  await setDoc(docSettings(), { garageId: gid, tpsRate: tps, tvqRate: tvq, cardFeeRate: cardFee, laborRate: laborRate, garageName, garageAddress, garagePhone, garageEmail, garageLogoUrl, logoUrl: garageLogoUrl, garageTpsNo, garageTvqNo, tpsNumber: garageTpsNo, tvqNumber: garageTvqNo, signatureName, theme: selectedTheme, devMode: selectedDevMode, updatedAt: serverTimestamp() }, { merge:true });
   alert("Paramètres enregistrés.");
 };
 const themeSelectEl = $("themeSelect");
@@ -3839,6 +4178,85 @@ if(themeSelectEl){
 const devModeSelectEl = $("devModeSelect");
 if(devModeSelectEl){
   devModeSelectEl.onchange = (e)=> applyDevMode(e.target.value);
+}
+const garageLogoUrlInput = $("setGarageLogoUrl");
+if(garageLogoUrlInput){
+  garageLogoUrlInput.addEventListener("input", (e)=>{
+    const value = String(e.target?.value || "").trim();
+    settings.garageLogoUrl = value;
+    setGarageLogoPreview(value);
+    updateGarageBrand();
+  });
+}
+const garageLogoFileInput = $("setGarageLogoFile");
+if(garageLogoFileInput){
+  garageLogoFileInput.addEventListener("change", ()=>{
+    const file = garageLogoFileInput.files?.[0];
+    if(!file){
+      setGarageLogoPreview($("setGarageLogoUrl")?.value || settings.garageLogoUrl || "");
+      return;
+    }
+    const tmp = URL.createObjectURL(file);
+    setGarageLogoPreview(tmp);
+  });
+}
+const btnUploadGarageLogo = $("btnUploadGarageLogo");
+if(btnUploadGarageLogo){
+  btnUploadGarageLogo.onclick = async ()=>{
+    try{
+      btnUploadGarageLogo.disabled = true;
+      btnUploadGarageLogo.textContent = "Upload...";
+      const url = await uploadGarageLogoFile();
+      alert("Logo envoyé avec succès.");
+      setGarageLogoPreview(url);
+    }catch(err){
+      alert(err?.message || "Erreur upload logo.");
+    }finally{
+      btnUploadGarageLogo.disabled = false;
+      btnUploadGarageLogo.textContent = "📤 Uploader le logo";
+    }
+  };
+}
+
+
+function buildRegisterLink(){
+  try{
+    const gid = String(currentGarageId || garageId || localStorage.getItem("garageId") || "").trim();
+    if(!gid) return "";
+    const baseUrl = new URL(window.location.href);
+    let pathname = baseUrl.pathname || "/";
+    pathname = pathname.replace(/index\.html?$/i, "register.html");
+    if(pathname === "/") pathname = "/register.html";
+    baseUrl.pathname = pathname;
+    baseUrl.search = `?garageId=${encodeURIComponent(gid)}`;
+    baseUrl.hash = "";
+    return baseUrl.toString();
+  }catch(e){
+    try{
+      const gid = String(currentGarageId || garageId || "").trim();
+      return gid ? `register.html?garageId=${encodeURIComponent(gid)}` : "";
+    }catch(_){ return ""; }
+  }
+}
+
+async function copyRegisterLink(){
+  const link = buildRegisterLink();
+  if(!link){ toast("Lien register indisponible"); return; }
+  try{
+    if(navigator.clipboard?.writeText){
+      await navigator.clipboard.writeText(link);
+    }else{
+      const el = $("registerLinkFull");
+      if(el){ el.focus(); el.select(); document.execCommand("copy"); }
+    }
+    toast("Lien register copié");
+  }catch(e){
+    try{
+      const el = $("registerLinkFull");
+      if(el){ el.focus(); el.select(); document.execCommand("copy"); toast("Lien register copié"); return; }
+    }catch(_){}
+    toast("Impossible de copier le lien");
+  }
 }
 
 function renderSettings(){
@@ -3853,7 +4271,14 @@ function renderSettings(){
   const ga = $("setGarageAddress"); if(ga) ga.value = String(settings.garageAddress||"");
   const gp = $("setGaragePhone"); if(gp) gp.value = String(settings.garagePhone||"");
   const ge = $("setGarageEmail"); if(ge) ge.value = String(settings.garageEmail||"");
+  const gl = $("setGarageLogoUrl"); if(gl) gl.value = String(settings.garageLogoUrl||"");
+  const gt = $("setGarageTpsNo"); if(gt) gt.value = String(settings.garageTpsNo||"");
+  const gv = $("setGarageTvqNo"); if(gv) gv.value = String(settings.garageTvqNo||"");
+  setGarageLogoPreview(String(settings.garageLogoUrl||""));
   const sn = $("setSignatureName"); if(sn) sn.value = String(settings.signatureName||"");
+  const regLink = $("registerLinkFull"); if(regLink) regLink.value = buildRegisterLink();
+  const copyBtn = $("btnCopyRegisterLink"); if(copyBtn && !copyBtn.dataset.bound){ copyBtn.dataset.bound = "1"; copyBtn.onclick = copyRegisterLink; }
+  updateGarageBrand();
   applyTheme(String(settings.theme || (function(){ try{return localStorage.getItem("gpo_theme")||"light";}catch(e){return "light";} })()));
   applyDevMode(String(settings.devMode || (function(){ try{return localStorage.getItem("gpo_dev_mode")||"off";}catch(e){return "off";} })()));
 }
@@ -3874,6 +4299,7 @@ function initTheme(){
   applyTheme(saved);
 }
 initTheme();
+updateGarageBrand();
 
 /* Dev mode / console */
 function isDevMode(){
@@ -4032,7 +4458,9 @@ window.__openVehicleForm = openVehicleForm;
 window.__openVehicleView = openVehicleView;
 
 async function createCustomer(data){
-  await addDoc(colCustomers(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
+  const gid = await ensureCurrentGarageId();
+  if(!gid) throw new Error("missing-garageId");
+  await addDoc(colCustomers(), { garageId: gid, name: data.fullName || data.name || "", ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
 }
 async function updateCustomer(id, data){
   await updateDoc(doc(colCustomers(), id), { ...data, updatedAt: serverTimestamp() });
@@ -4073,9 +4501,9 @@ function openClientForm(customerId=null){
   `);
   window.__closeModal = closeModal;
 
-  $("clientForm").onsubmit = async (e)=>{
+  if ($("clientForm")) $("clientForm").onsubmit = async (e)=>{
     e.preventDefault();
-    if(currentRole !== "admin"){
+    if(!(currentRole === "admin" || currentRole === "superadmin")){
       alert("Accès refusé : seul l’admin peut créer/modifier des clients.");
       return;
     }
@@ -4096,8 +4524,8 @@ function openClientForm(customerId=null){
       closeModal();
     }catch(ex){
       const msg = (ex && ex.code === "permission-denied")
-        ? "Accès refusé (règles Firestore). Seul l’admin peut enregistrer un client."
-        : "Erreur sauvegarde client.";
+        ? "Accès refusé (règles Firestore). Vérifie le rôle admin et le garageId du compte."
+        : ((ex && String(ex.message||"").includes("missing-garageId")) ? "Garage introuvable pour ce compte. Vérifie staff/{uid}.garageId." : "Erreur sauvegarde client.");
       alert(msg);
     }
   };
@@ -4121,7 +4549,7 @@ function openClientView(customerId){
         <td class="muted">${safe(v.vin||"")}</td>
         <td class="nowrap">
           <button class="btn btn-small" onclick="window.__openVehicleView('${v.id}')">Ouvrir</button>
-          ${currentRole === 'admin' ? `<button class="btn btn-small btn-ghost" onclick="window.__openWorkorderForm('${v.id}')">+ Réparation</button>` : ``}
+          ${(currentRole === 'admin' || currentRole === 'superadmin') ? `<button class="btn btn-small btn-ghost" onclick="window.__openWorkorderForm('${v.id}')">+ Réparation</button>` : ``}
         </td>
       </tr>
     `;
@@ -4187,7 +4615,9 @@ window.__deleteCustomer = async (id)=>{
 
 /* Vehicles */
 async function createVehicle(customerId, data){
-  await addDoc(colVehicles(), { customerId, ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
+  const gid = await ensureCurrentGarageId();
+  if(!gid) throw new Error("missing-garageId");
+  await addDoc(colVehicles(), { garageId: gid, customerId, ...data, createdAt: isoNow(), createdAtTs: serverTimestamp() });
 }
 async function updateVehicle(id, data){
   await updateDoc(doc(colVehicles(), id), { ...data, updatedAt: serverTimestamp() });
@@ -4388,7 +4818,7 @@ function openVehicleForm(vehicleId=null, customerId=null){
       if(inp) inp.value = "";
     }
   };
-  $("bodyType").addEventListener("change", toggleSeats);
+  if ($("bodyType")) $("bodyType").addEventListener("change", toggleSeats);
 
   // Make/Model lists (vPIC)
   const vf = $("vehicleForm");
@@ -4416,7 +4846,7 @@ function openVehicleForm(vehicleId=null, customerId=null){
 
   toggleSeats();
 
-  $("vehicleForm").onsubmit = async (e)=>{
+  if ($("vehicleForm")) $("vehicleForm").onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const make = String(fd.get("make")||"").trim();
@@ -4548,7 +4978,7 @@ function openNewRepairChooser(){
   `);
   const qEl = $("chooseVehQ");
   const resEl = $("chooseVehRes");
-  $("btnChooseVeh").onclick = ()=>{
+  if ($("btnChooseVeh")) $("btnChooseVeh").onclick = ()=>{
     const q = (qEl.value||"").trim().toLowerCase();
     if(!q){ resEl.innerHTML = '<span class="muted">Tape une recherche.</span>'; return; }
     const rows = [];
@@ -4582,14 +5012,16 @@ function openNewRepairChooser(){
       </div>
     `;
   };
-  qEl.addEventListener("keydown", (e)=>{ if(e.key==="Enter") $("btnChooseVeh").click(); });
+  if (qEl) qEl.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && $("btnChooseVeh")) $("btnChooseVeh").click(); });
 }
 
 async function createWorkorder(data){
   if(!data.invoiceNo){
     data.invoiceNo = await nextInvoiceNo();
   }
-  await addDoc(colWorkorders(), { ...data, createdAt: isoNow(), createdAtTs: serverTimestamp(), createdBy: currentUid, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid });
+  const gid = await ensureCurrentGarageId();
+  if(!gid) throw new Error("missing-garageId");
+  await addDoc(colWorkorders(), { garageId: gid, ...data, createdAt: isoNow(), createdAtTs: serverTimestamp(), createdBy: currentUid, updatedAt: isoNow(), updatedAtTs: serverTimestamp(), updatedBy: currentUid });
   if(data.km){
     await updateDoc(doc(colVehicles(), data.vehicleId), { currentKm: data.km, updatedAt: isoNow(), updatedAtTs: serverTimestamp() });
   }
@@ -4741,10 +5173,10 @@ function openWorkorderForm(vehicleId){
     `;
   }
 
-  $("btnAddLine").onclick = ()=>addLine({});
+  if ($("btnAddLine")) $("btnAddLine").onclick = ()=>addLine({});
   for(let i=0;i<5;i++) addLine({type:"PIECE", qty:1});
 
-  $("woForm").onsubmit = async (e)=>{
+  if ($("woForm")) $("woForm").onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const status = String(fd.get("status")||"OUVERT");
@@ -5225,7 +5657,7 @@ window.__printWorkorder = async (workorderId)=>{
     <div class="sheet">
       <div class="header">
         <div class="brand">
-          <div class="logo"><img src="assets/logo.png" alt="Logo"></div>
+          <div class="logo"><img src="${safe(String(settings?.garageLogoUrl || settings?.logoUrl || "assets/logo.png"))}" alt="Logo"></div>
           <div>
             <h1>${safe(gName)}</h1>
             <div class="lines">
@@ -5241,8 +5673,8 @@ window.__printWorkorder = async (workorderId)=>{
           <div class="kv"><strong>Date:</strong> ${safe(String(wo.createdAt||"").slice(0,16))}</div>
           <div class="kv"><strong>Statut:</strong> <span class="pill">${safe(wo.status||"")}</span></div>
           <div class="kv" style="margin-top:8px; color:var(--muted)">
-            <strong>TPS/TVH:</strong> ${safe(GARAGE.tps)}<br>
-            <strong>TVQ:</strong> ${safe(GARAGE.tvq)}
+            <strong>TPS/TVH:</strong> ${safe(String(settings?.garageTpsNo || settings?.tpsNumber || GARAGE.tps || ""))}<br>
+            <strong>TVQ:</strong> ${safe(String(settings?.garageTvqNo || settings?.tvqNumber || GARAGE.tvq || ""))}
           </div>
         </div>
       </div>
@@ -5327,6 +5759,12 @@ onAuthStateChanged(auth, async (user)=>{
     // If profile is missing, loadRole() signs out.
     if(!currentUid || currentRole === "unknown") return;
 
+    const currentPage = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+    if(currentRole === "superadmin" && currentPage !== 'superadmin.html'){
+      window.location.replace('./superadmin.html');
+      return;
+    }
+
     $("viewAuth").style.display = "none";
     $("viewApp").style.display = "";
     $("navAuthed").style.display = "";
@@ -5335,7 +5773,7 @@ onAuthStateChanged(auth, async (user)=>{
     unsubProfile = onSnapshot(docStaffProfile(), (snap)=>{
       if(snap.exists()){
         const d = snap.data();
-        currentRole = (d.role === "admin") ? "admin" : "mechanic"; window.currentRole = currentRole; if(d.disabled===true){ alert("Compte désactivé."); signOut(auth); return; }
+        currentRole = normalizeRole(d.role) || "mechanic"; window.currentRole = currentRole; currentGarageId = String(d.garageId || currentGarageId || "").trim(); window.currentGarageId = currentGarageId; if(d.disabled===true){ alert("Compte désactivé."); signOut(auth); return; }
         currentUserName = d.fullName || d.name || d.email || "";
         applyRoleUI();
       }
@@ -5343,7 +5781,7 @@ onAuthStateChanged(auth, async (user)=>{
 
     // settings/meta are admin-only (rules)
     if(currentRole === "admin"){
-      if (currentRole === "admin") {
+      if (currentRole === "admin" || currentRole === "superadmin") {
         await ensureSettingsDoc();
       }
       await loadMechanics();
@@ -5356,7 +5794,7 @@ onAuthStateChanged(auth, async (user)=>{
     }else{
       go("dashboard");
     }
-    if(currentRole === "admin") renderSettings();
+    if(currentRole === "admin" || currentRole === "superadmin") renderSettings();
   }else{
     currentUid = null;
     currentRole = "unknown";
@@ -5484,6 +5922,7 @@ async function sendInvoiceEmail(){
   </div>`;
 
   await addDoc(collection(db, "mail"), {
+    garageId: currentGarageId || "garage-demo",
     to,
     message: { subject: `Facture ${ref} - ${settings.garageName||"Garage"}`, html },
     createdAt: serverTimestamp()
@@ -5581,48 +6020,111 @@ async function copyText(txt){
   try{ await navigator.clipboard.writeText(String(txt||"")); return true; }
   catch(e){ try{ window.prompt("Copier:", String(txt||"")); return true; }catch(_){ return false; } }
 }
-function buildInviteLink(code, email){
-  const base = window.location.origin + window.location.pathname;
-  return base + `#invite=${encodeURIComponent(code||"")}&email=${encodeURIComponent(email||"")}`;
+function buildInviteLink(code, email, garageId=currentGarageId){
+  const url = new URL(window.location.href);
+  url.hash = "";
+  url.searchParams.set("invite", String(code||""));
+  url.searchParams.set("email", String(email||""));
+  url.searchParams.set("garageId", String(garageId||""));
+  return url.toString();
 }
 function parseHashParams(){
-  const h = (window.location.hash||"").replace(/^#/, "");
   const out = {};
+  try{
+    const url = new URL(window.location.href);
+    const setIf = (k,v)=>{ if(v !== null && v !== undefined && String(v).trim() !== "") out[k] = String(v); };
+    setIf("invite", url.searchParams.get("invite") || url.searchParams.get("code"));
+    setIf("email", url.searchParams.get("email"));
+    setIf("garage", url.searchParams.get("garage") || url.searchParams.get("garageId") || url.searchParams.get("g"));
+  }catch(e){}
+  const h = (window.location.hash||"").replace(/^#/, "");
   h.split("&").forEach(part=>{
     const [k,v] = part.split("=");
     if(!k) return;
-    out[decodeURIComponent(k)] = decodeURIComponent(v||"");
+    const key = decodeURIComponent(k);
+    const val = decodeURIComponent(v||"");
+    if(val === "") return;
+    out[key] = val;
+    if(key === "garageId" && !out.garage) out.garage = val;
+    if(key === "code" && !out.invite) out.invite = val;
   });
   return out;
 }
 
-async function registerWithInvite(fullName, code, email, password){
+async function resolveInviteRef(code, garageId=""){
+  const cleanCode = String(code||"").trim();
+  const cleanGarageId = String(garageId||"").trim();
+  if(!cleanCode) throw new Error("Code invitation invalide");
+
+  if(cleanGarageId){
+    const directRef = garageDoc("invites", cleanCode, cleanGarageId);
+    const directSnap = await getDoc(directRef);
+    if(directSnap.exists()) return { ref: directRef, snap: directSnap, garageId: cleanGarageId };
+  }
+
+  const snap = await getDocs(query(collectionGroup(db,"invites"), where("code","==", cleanCode), limit(1)));
+  if(snap.empty) throw new Error("Code invitation invalide");
+  const found = snap.docs[0];
+  const parentGarageId = String(found.ref?.parent?.parent?.id || "").trim();
+  const gid = String(found.data()?.garageId || parentGarageId || "").trim();
+  if(!gid) throw new Error("Invitation sans garageId");
+  return { ref: found.ref, snap: found, garageId: gid };
+}
+
+async function registerWithInvite(fullName, code, email, password, garageId=""){
   email = String(email||"").trim().toLowerCase();
 
-  const invRef = doc(db,"invites",code);
-  const invSnap = await getDoc(invRef);
-  if(!invSnap.exists()) throw new Error("Code invitation invalide");
+  const resolved = await resolveInviteRef(code, garageId);
+  const invRef = resolved.ref;
+  const invSnap = resolved.snap;
+  const inviteGarageId = resolved.garageId;
+
   const inv = invSnap.data()||{};
   if(String(inv.email||"").toLowerCase() !== String(email||"").toLowerCase()) throw new Error("Invitation pour un autre email");
   if(inv.used) throw new Error("Invitation déjà utilisée");
-  const role = String(inv.role||"mechanic");
+  if(inv.active === false) throw new Error("Invitation désactivée");
+  const role = normalizeRole(inv.role||"mechanic") || "mechanic";
 
   const cred = await createUserWithEmailAndPassword(auth, email, password);
   const uid = cred.user.uid;
+  const nowTs = serverTimestamp();
 
-  // Create staff profile for this user
   await setDoc(doc(db,"staff",uid), {
+    uid,
     fullName,
     email,
     role,
+    garageId: inviteGarageId,
     inviteCode: code,
     disabled: false,
-    createdAt: serverTimestamp()
+    createdAt: nowTs,
+    updatedAt: nowTs
   });
 
-  await updateDoc(invRef, { used:true, usedBy:uid, usedAt:serverTimestamp() });
+  await setDoc(doc(db,"users",uid), {
+    uid,
+    fullName,
+    email,
+    role,
+    garageId: inviteGarageId,
+    active: true,
+    inviteCode: code,
+    createdAt: nowTs,
+    updatedAt: nowTs
+  }, { merge:true });
 
-  try{ await logEvent("account_created",{inviteCode:code, role}); }catch(e){}
+  await updateDoc(invRef, {
+    used:true,
+    usedBy:uid,
+    usedAt:serverTimestamp(),
+    acceptedEmail: email
+  });
+
+  currentGarageId = inviteGarageId;
+  window.currentGarageId = inviteGarageId;
+  try{ localStorage.setItem("garageId", inviteGarageId); }catch(e){}
+
+  try{ await logEvent("account_created",{inviteCode:code, role, garageId: inviteGarageId}); }catch(e){}
 }
 
 function wireAuthTabs(){
@@ -5642,6 +6144,7 @@ function wireAuthTabs(){
     const p = parseHashParams();
     if(p.invite) fReg.inviteCode.value = p.invite;
     if(p.email) fReg.email.value = p.email;
+    if((p.garage || p.garageId) && fReg.garageId) fReg.garageId.value = p.garage || p.garageId;
   };
 
   // default: login
@@ -5657,9 +6160,10 @@ function wireAuthTabs(){
     const code = String(fReg.inviteCode.value||"").trim();
     const email = String(fReg.email.value||"").trim().toLowerCase();
     const password = String(fReg.password.value||"").trim();
+    const garageId = String(fReg.garageId?.value||localStorage.getItem("garageId")||"").trim();
     if(password.length < 6) return alert("Mot de passe: minimum 6 caractères");
     try{
-      await registerWithInvite(fullName, code, email, password);
+      await registerWithInvite(fullName, code, email, password, garageId);
       alert("Compte créé ✅");
       // clean hash
       history.replaceState(null, "", window.location.pathname);
@@ -5675,6 +6179,7 @@ async function logEvent(type, data){
   try{
     if(!auth.currentUser) return;
     await addDoc(collection(db,"logs"), {
+      garageId: currentGarageId || "garage-demo",
       uid: auth.currentUser.uid,
       email: auth.currentUser.email || "",
       type: String(type||""),
@@ -5688,17 +6193,40 @@ async function logEvent(type, data){
 
 async function createInviteCode(email, role){
   const emailLower = String(email || "").trim().toLowerCase();
-  const code = "GP-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+  const normalizedRole = normalizeRole(role) || "mechanic";
+  const garageId = await ensureCurrentGarageId();
+  if(!garageId) throw new Error("missing-garageId");
 
-  await setDoc(doc(db,"invites",code), {
+  const garageSnap = await getDoc(doc(db, "garages", garageId));
+  const garageData = garageSnap.exists() ? (garageSnap.data() || {}) : {};
+  const garageName = String(garageData.name || garageData.garageName || garageId);
+
+  let code = "";
+  let inviteRef = null;
+  let existsAlready = true;
+  for(let i=0;i<8 && existsAlready;i++){
+    code = "GP-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+    inviteRef = garageDoc("invites", code, garageId);
+    const existingSnap = await getDoc(inviteRef);
+    existsAlready = existingSnap.exists();
+  }
+  if(existsAlready || !inviteRef) throw new Error("Impossible de générer un code invitation");
+
+  await setDoc(inviteRef, {
+    code,
+    garageId,
+    garageName,
     email: emailLower,
-    emailLower: emailLower,
-    role: String(role || "mechanic"),
+    emailLower,
+    role: normalizedRole,
     used: false,
-    createdAt: serverTimestamp()
+    active: true,
+    createdBy: auth.currentUser?.uid || "",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
   });
 
-  try{ await logEvent("invite_created",{code,email: emailLower,role}); }catch(e){}
+  try{ await logEvent("invite_created",{code,email: emailLower,role: normalizedRole, garageId}); }catch(e){}
   return code;
 }
 
@@ -5706,10 +6234,10 @@ async function createInviteCode(email, role){
 async function loadInvites(){
   const tbody = $("invitesTbody");
   if(!tbody) return;
-  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="6">Admin seulement.</td></tr>'; return; }
+  if(currentRole !== "admin" && currentRole !== "superadmin"){ tbody.innerHTML = '<tr><td class="muted" colspan="6">Admin seulement.</td></tr>'; return; }
   tbody.innerHTML = '<tr><td class="muted" colspan="6">Chargement...</td></tr>';
   try{
-    const snap = await getDocs(query(collection(db,"invites"), orderBy("createdAt","desc"), limit(100)));
+    const snap = await getDocs(query(colInvites()));
     const rows = [];
     snap.forEach(d=>{
       const x=d.data()||{};
@@ -5722,7 +6250,7 @@ async function loadInvites(){
     tbody.innerHTML = rows.map(r=>{
       const used = r.used ? "Oui" : "Non";
       const dt = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : "—";
-      const link = buildInviteLink(r.code, r.email);
+      const link = buildInviteLink(r.code, r.email, r.garageId || currentGarageId);
       return `<tr>
         <td><code>${safe(r.code)}</code></td>
         <td>${safe(r.email||"")}</td>
@@ -5755,14 +6283,16 @@ async function sendInviteEmail(code, email, role){
     <hr/>
     <small>Garage Pro One — Montréal</small>
   </div>`;
-  await addDoc(collection(db,"mail"), { to: email, message: { subject, html }, createdAt: serverTimestamp() });
+  const gid = await ensureCurrentGarageId();
+  if(!gid) throw new Error("missing-garageId");
+  await addDoc(collection(db,"mail"), { garageId: gid, to: email, message: { subject, html }, createdAt: serverTimestamp() });
   try{ await logEvent("invite_email_sent",{code,email,role,link}); }catch(e){}
 }
 
 function renderStaffRows(rows){
   const tbody = $("staffTbody");
   if(!tbody) return;
-  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="5">Admin seulement.</td></tr>'; return; }
+  if(currentRole !== "admin" && currentRole !== "superadmin"){ tbody.innerHTML = '<tr><td class="muted" colspan="5">Admin seulement.</td></tr>'; return; }
   if(!rows || rows.length===0){
     tbody.innerHTML = '<tr><td class="muted" colspan="5">Aucun employé.</td></tr>';
     return;
@@ -5788,7 +6318,7 @@ function renderStaffRows(rows){
 function renderInviteRows(rows){
   const tbody = $("invitesTbody");
   if(!tbody) return;
-  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="6">Admin seulement.</td></tr>'; return; }
+  if(currentRole !== "admin" && currentRole !== "superadmin"){ tbody.innerHTML = '<tr><td class="muted" colspan="6">Admin seulement.</td></tr>'; return; }
   if(!rows || rows.length===0){
     tbody.innerHTML = '<tr><td class="muted" colspan="6">Aucune invitation.</td></tr>';
     return;
@@ -5812,7 +6342,7 @@ function renderInviteRows(rows){
 async function loadStaffList(){
   const tbody = $("staffTbody");
   if(!tbody) return;
-  if(currentRole !== "admin"){ tbody.innerHTML = '<tr><td class="muted" colspan="5">Admin seulement.</td></tr>'; return; }
+  if(currentRole !== "admin" && currentRole !== "superadmin"){ tbody.innerHTML = '<tr><td class="muted" colspan="5">Admin seulement.</td></tr>'; return; }
   // Prefer live data when available
   if(staffLiveRows && staffLiveRows.length){
     renderStaffRows(staffLiveRows);
@@ -5820,7 +6350,7 @@ async function loadStaffList(){
   }
   tbody.innerHTML = '<tr><td class="muted" colspan="5">Chargement...</td></tr>';
   try{
-    const snap = await getDocs(query(collection(db,"staff"), orderBy("createdAt","desc"), limit(200)));
+    const snap = await getDocs(currentGarageId ? query(collection(db,"staff"), where("garageId","==", currentGarageId)) : query(collection(db,"staff")));
     const rows = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
     renderStaffRows(rows);
   }catch(e){
@@ -5831,7 +6361,7 @@ async function loadStaffList(){
 
 async function countActiveAdmins(){
   // count admins that are NOT disabled (disabled != true)
-  const snap = await getDocs(query(collection(db,"staff"), where("role","==","admin"), limit(200)));
+  const snap = await getDocs(currentGarageId ? query(collection(db,"staff"), where("role","==","admin"), where("garageId","==", currentGarageId)) : query(collection(db,"staff"), where("role","==","admin")));
   const admins = snap.docs.map(d=>({uid:d.id, ...(d.data()||{})}));
   return admins.filter(a => a.disabled !== true).length;
 }
@@ -5926,7 +6456,7 @@ function wireEmployeesUI(){
         await loadInvites();
       }catch(e){
 
-        alert("Erreur création invitation");
+        alert("Erreur création invitation : " + (e?.message || e));
       }
     };
   }

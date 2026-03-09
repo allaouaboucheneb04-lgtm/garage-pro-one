@@ -53,10 +53,10 @@
 <body>
   <div class="wrap">
     <div class="hero">
-      <img src="./assets/logo.png" alt="Garage Pro One" />
+      <img id="heroLogo" src="./assets/logo.png" alt="Garage Pro One" />
       <div>
-        <h1>Garage Pro One</h1>
-        <p>Inscription client et véhicule depuis votre téléphone</p>
+        <h1 id="heroTitle">Garage Pro One</h1>
+        <p id="heroSubtitle">Inscription client et véhicule depuis votre téléphone</p>
       </div>
     </div>
 
@@ -146,12 +146,12 @@
       <div class="status" id="formStatus"></div>
     </div>
 
-    <div class="foot">Page publique d’inscription client · Garage Pro One</div>
+    <div class="foot" id="footText">Page publique d’inscription client · Garage Pro One</div>
   </div>
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-    import { getFirestore, collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, serverTimestamp, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
     const app = initializeApp(window.FIREBASE_CONFIG);
     const db = getFirestore(app);
@@ -159,9 +159,47 @@
     const $ = (id) => document.getElementById(id);
     const statusEl = $('formStatus');
 
+    const heroTitle = $('heroTitle');
+    const heroSubtitle = $('heroSubtitle');
+    const heroLogo = $('heroLogo');
+    const footText = $('footText');
+    let garageSettings = null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const garageId = String(urlParams.get('garageId') || urlParams.get('g') || '').trim();
+    if(!garageId){
+      setTimeout(() => showStatus('info', "Lien incomplet : ajoute ?garageId=ton-garage dans l’URL."), 0);
+    }
+    function garageCol(name){
+      if(!garageId) throw new Error('missing-garageId');
+      return collection(doc(db, 'garages', garageId), name);
+    }
+
     function showStatus(type, text){
       statusEl.className = 'status ' + type;
       statusEl.textContent = text;
+    }
+
+
+    async function loadGarageBranding(){
+      if(!garageId) return;
+      try {
+        const snap = await getDoc(doc(db, 'garages', garageId, 'settings', 'main'));
+        if(!snap.exists()) return;
+        garageSettings = snap.data() || {};
+        const garageName = garageSettings.garageName || garageSettings.name || garageSettings.businessName || 'Garage Pro One';
+        const logoUrl = garageSettings.garageLogoUrl || garageSettings.logoUrl || '';
+        heroTitle.textContent = garageName;
+        heroSubtitle.textContent = `Inscription client et véhicule pour ${garageName}`;
+        footText.textContent = `Page publique d’inscription client · ${garageName}`;
+        document.title = `Inscription client | ${garageName}`;
+        if(logoUrl){
+          heroLogo.src = logoUrl;
+          heroLogo.alt = garageName;
+        }
+      } catch (err) {
+        console.error('loadGarageBranding', err);
+      }
     }
 
     function normalizeVin(v){ return (v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
@@ -272,15 +310,20 @@
       }
       try {
         showStatus('info', 'Enregistrement en cours...');
-        const customerRef = await addDoc(collection(db, 'customers'), {
+        if(!garageId) throw new Error('missing-garageId');
+        const customerRef = await addDoc(garageCol('customers'), {
+          garageId,
           name: payload.fullName,
+          fullName: payload.fullName,
           phone: payload.phone,
           email: payload.email,
           address: payload.address,
+          notes: '',
           source: 'client_self_register',
           createdAt: serverTimestamp(),
         });
-        await addDoc(collection(db, 'vehicles'), {
+        await addDoc(garageCol('vehicles'), {
+          garageId,
           customerId: customerRef.id,
           make: payload.make,
           model: payload.model,
@@ -288,24 +331,28 @@
           plate: payload.plate,
           vin: payload.vin,
           mileage: payload.mileage ? Number(payload.mileage) : null,
-          engineType: payload.engineType,
-          cylinders: payload.cylinders,
-          bodyType: payload.bodyType,
-          color: payload.color,
-          notes: payload.notes,
+          currentKm: payload.mileage ? Number(payload.mileage) : null,
+          engineType: payload.engineType || '',
+          cylinders: payload.cylinders || '',
+          bodyType: payload.bodyType || '',
+          color: payload.color || '',
+          notes: payload.notes || '',
           source: 'client_self_register',
           createdAt: serverTimestamp(),
         });
 
-        showStatus('ok', 'Inscription enregistrée avec succès.');
+        const garageName = (garageSettings && (garageSettings.garageName || garageSettings.name || garageSettings.businessName)) || 'le garage';
+        showStatus('ok', `Inscription enregistrée avec succès chez ${garageName}. Nous vous contacterons au besoin.`);
         ['fullName','phone','email','address','make','model','year','plate','vin','mileage','engineType','cylinders','bodyType','color','notes'].forEach(id => $(id).value='');
         $('vinPreview').style.display = 'none';
         $('vinPreviewGrid').innerHTML = '';
       } catch (err) {
         console.error(err);
-        showStatus('err', 'Enregistrement impossible. Vérifiez les règles Firestore et réessayez.');
+        showStatus('err', String(err?.message||'').includes('missing-garageId') ? "Lien incomplet : ajoute ?garageId=ton-garage dans l’URL." : "Enregistrement impossible. Vérifiez les règles Firestore et le garageId.");
       }
     }
+
+    loadGarageBranding();
 
     $('btnDecodeVin').addEventListener('click', decodeVin);
     $('vin').addEventListener('blur', () => { if(normalizeVin($('vin').value).length >= 11) decodeVin(); });

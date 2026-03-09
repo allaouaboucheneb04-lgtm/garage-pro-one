@@ -12,10 +12,10 @@
 <button class="icon-btn" id="btnMenu" type="button" aria-label="Menu">☰</button>
 
 <div class="brand">
-<img src="assets/logo.png" style="height:48px;margin-right:10px;border-radius:8px" />
+<img id="garageBrandLogo" src="assets/logo.png" alt="Logo garage" style="height:48px;width:48px;object-fit:cover;margin-right:10px;border-radius:8px" />
 <div class="logo">G</div>
 <div>
-<div class="name">Garage Pro One</div>
+<div id="garageBrandName" class="name">Garage Pro One</div>
 <div class="muted" style="font-size:12px">Synchro automatique (Firebase)</div>
 </div>
 <div class="top-title"><div id="pageTitle" class="page-title">Dashboard</div></div>
@@ -52,9 +52,9 @@
   <aside class="sidebar no-print" id="sidebar">
     <div class="sidebar-head">
       <div class="sidebar-brand">
-        <img src="assets/logo.png" alt="Garage Pro One" class="sidebar-logo"/>
+        <img id="sidebarGarageLogo" src="assets/logo.png" alt="Logo garage" class="sidebar-logo"/>
         <div>
-          <div class="sidebar-name">Garage Pro One</div>
+          <div id="sidebarGarageName" class="sidebar-name">Garage Pro One</div>
           <div class="sidebar-sub">Gestion &amp; facturation</div>
         </div>
       </div>
@@ -69,6 +69,7 @@
 <button class="btn btn-ghost" data-go="revenue" data-role="admin">💰 Revenus</button>
 <button class="btn btn-ghost" data-go="fiscal" data-role="admin">🧾 Info fiscaux</button>
 <button class="btn btn-ghost" data-go="partsExpenses" data-role="admin">🧩 Dépenses pièces</button>
+<button class="btn btn-ghost" data-go="suppliers" data-role="admin">🏭 Fournisseurs</button>
 <button class="btn btn-ghost" data-go="invoices" data-role="admin">📄 Factures pièces</button><button class="btn btn-ghost" data-go="settings" data-role="admin">⚙️ Paramètres</button>
 <button class="btn btn-ghost" id="btnLogout">🚪 Déconnexion</button>
 </nav>
@@ -106,10 +107,12 @@
 <input name="email" placeholder="email@exemple.com" required type="email" />
 <label>Mot de passe</label>
 <input name="password" placeholder="••••••••" required type="password" />
+<label>ID garage (optionnel si tu ouvres le lien d’invitation)</label>
+<input name="garageId" placeholder="Ex: garage-pro-one" />
 <div class="row" style="margin-top:12px">
 <button class="btn btn-primary" type="submit">Créer mon compte</button>
 </div>
-<small class="muted">Le rôle est appliqué automatiquement selon le code invitation.</small>
+<small class="muted">Le rôle est appliqué automatiquement selon le code invitation. Si tu entres le code à la main, ajoute aussi l’ID garage.</small>
 </form>
 
 <form class="form" id="formRegister" style="margin-top:12px; display:none;">
@@ -650,6 +653,7 @@
         <tr>
           <th>Date</th>
           <th>Réf</th>
+          <th>Fournisseur</th>
           <th>Client</th>
           <th>Paiement</th>
           <th style="text-align:right">Taxes</th>
@@ -739,6 +743,45 @@
   </div>
 </section>
 
+<!-- FOURNISSEURS -->
+<section class="card" id="viewSuppliers" style="display:none">
+  <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
+    <div>
+      <h2 style="margin:0 0 6px 0">Fournisseurs</h2>
+      <div class="muted">Gère la liste de tes fournisseurs pour les achats de pièces et les dépenses.</div>
+    </div>
+    <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <button class="btn btn-primary" id="btnNewSupplier" data-role="admin">+ Nouveau fournisseur</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="grid-4">
+    <div class="box"><div class="muted">Fournisseurs</div><div class="val" id="suppliersCount">0</div></div>
+    <div class="box"><div class="muted">Actifs</div><div class="val" id="suppliersActiveCount">0</div></div>
+    <div class="box"><div class="muted">Téléphones</div><div class="val" id="suppliersPhoneCount">0</div></div>
+    <div class="box"><div class="muted">Emails</div><div class="val" id="suppliersEmailCount">0</div></div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:12px">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Contact</th>
+          <th>Téléphone</th>
+          <th>Email</th>
+          <th>Ville</th>
+          <th>Note</th>
+          <th class="no-print">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="suppliersTbody"><tr><td class="muted" colspan="7">Aucun fournisseur.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
 <section class="card" id="viewInvoices" style="display:none">
   <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
     <div>
@@ -781,6 +824,12 @@
         <div>
           <label>Email client (optionnel)</label>
           <input class="input" id="invEmail" placeholder="client@email.com" />
+        </div>
+        <div>
+          <label>Fournisseur</label>
+          <select class="input" id="invSupplier">
+            <option value="">— Aucun —</option>
+          </select>
         </div>
         <div>
           <label>Date</label>
@@ -1022,7 +1071,7 @@
 
         <label>Message (email)</label>
         <textarea name="message" rows="7" placeholder="Bonjour {name},\n\nVoici notre promo..." required></textarea>
-        <div class="muted" style="font-size:12px">Astuce: tu peux utiliser <code>{name}</code> et <code>{phone}</code>.</div>
+        <div class="muted" style="font-size:12px">Astuce: tu peux utiliser <code>{name}</code>, <code>{phone}</code>, <code>{garageName}</code>, <code>{garagePhone}</code>, <code>{garageEmail}</code> et <code>{garageAddress}</code>.</div>
 
         <div class="row" style="gap:10px; flex-wrap:wrap">
           <div style="min-width:190px; flex:1">
@@ -1042,7 +1091,7 @@
 
     <div class="box">
       <h3 style="margin-top:0">Envoi</h3>
-      <div class="muted">Envoi via Firebase Cloud Functions (voir README). Tu peux aussi faire un test.</div>
+      <div class="muted">Envoi via la collection <code>mail</code>. Le message utilise automatiquement le nom, le logo et l'email du garage. Les réponses vont vers l'email du garage si ton système d'envoi prend en charge <code>replyTo</code>.</div>
       <div class="divider"></div>
       <label class="muted" style="font-size:12px">Email de test (optionnel)</label>
       <input class="input" id="promoTestEmail" type="email" placeholder="ex: toi@gmail.com" />
@@ -1101,9 +1150,57 @@
 <input id="setGaragePhone" class="input" placeholder="(514) 000-0000" />
 <label>Email</label>
 <input id="setGarageEmail" class="input" placeholder="contact@garage.com" />
+<label>Numéro TPS</label>
+<input id="setGarageTpsNo" class="input" placeholder="123456789RT0001" />
+<label>Numéro TVQ</label>
+<input id="setGarageTvqNo" class="input" placeholder="1234567890TQ0001" />
+<label>Logo URL</label>
+<input id="setGarageLogoUrl" class="input" placeholder="https://..." />
+<div class="row" style="margin-top:10px">
+  <div>
+    <label>Uploader un logo</label>
+    <input id="setGarageLogoFile" type="file" accept="image/*" class="input" />
+    <small class="muted">PNG, JPG, WEBP. Le lien se remplit automatiquement après upload.</small>
+  </div>
+  <div>
+    <label>Aperçu logo</label>
+    <div style="display:flex;align-items:center;gap:12px;min-height:54px">
+      <img id="garageLogoPreview" src="assets/logo.png" alt="Aperçu logo" style="height:54px;width:54px;object-fit:cover;border-radius:10px;border:1px solid #d9e2ec;background:#fff" />
+      <button id="btnUploadGarageLogo" type="button" class="btn btn-secondary">📤 Uploader le logo</button>
+    </div>
+  </div>
+</div>
+<small class="muted">Tu peux coller un lien direct ou envoyer une image vers Firebase Storage.</small>
 <label>Nom pour signature</label>
 <input id="setSignatureName" class="input" placeholder="Nom du responsable" />
 <small class="muted">Ces infos s’affichent sur la facture PDF + dans l’email.</small>
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Lien d'inscription</h3>
+<label>Site complet register</label>
+<div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
+  <input id="registerLinkFull" class="input" readonly placeholder="Le lien register du garage s'affiche ici" style="flex:1;min-width:260px" />
+  <button id="btnCopyRegisterLink" type="button" class="btn btn-secondary">📋 Copier</button>
+</div>
+<small class="muted">Ce lien envoie directement vers la page register du garage actuel.</small>
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Apparence</h3>
+<label>Thème</label>
+<select id="themeSelect" class="input">
+  <option value="light">Clair</option>
+  <option value="dark">Sombre</option>
+</select>
+<small class="muted">Par défaut, le thème est clair.</small>
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Développeur</h3>
+<label>Mode développeur</label>
+<select id="devModeSelect" class="input">
+  <option value="off">OFF</option>
+  <option value="on">ON</option>
+</select>
+<small class="muted">Quand il est ON, une console de debug s'affiche en bas pour voir les erreurs.</small>
 
 <div class="row">
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
@@ -1221,7 +1318,7 @@
 <div id="invPrintArea" class="print-area" style="display:none">
   <div class="print-head">
     <img id="print-logo-img" src="assets/logo.png" style="height:70px;margin-right:12px" />
-    <img src="assets/logo.png" alt="Garage Pro One" style="height:56px;width:56px;object-fit:contain;border-radius:12px;background:#111;padding:6px" />
+    <img data-garage-logo="true" src="assets/logo.png" alt="Logo garage" style="height:56px;width:56px;object-fit:contain;border-radius:12px;background:#111;padding:6px" />
     <div>
       <div style="font-size:20px;font-weight:800;line-height:1">Facture</div>
       <div class="muted" id="printGarageLine"></div>
@@ -1393,6 +1490,18 @@
 
 
 
+
+
+<div id="devConsole" class="dev-console" style="display:none">
+  <div class="dev-console-head">
+    <strong>Console debug</strong>
+    <div class="dev-console-actions">
+      <button type="button" class="btn btn-small btn-ghost" id="btnToggleDevConsole">Réduire</button>
+      <button type="button" class="btn btn-small btn-ghost" id="btnClearDevConsole">Effacer</button>
+    </div>
+  </div>
+  <div id="devConsoleBody" class="dev-console-body"></div>
+</div>
 
 </body>
 </html>

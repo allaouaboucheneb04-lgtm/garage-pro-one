@@ -3,164 +3,151 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
+    function myStaffPath() { return /databases/$(database)/documents/staff/$(request.auth.uid); }
+    function myStaffExists() { return signedIn() && exists(myStaffPath()); }
+    function myStaffData() { return myStaffExists() ? get(myStaffPath()).data : null; }
+    function myRole() { return myStaffExists() ? myStaffData().role : null; }
+    function myGarageId() { return myStaffExists() ? myStaffData().garageId : null; }
+    function isSuperAdmin() { return signedIn() && myRole() == "superadmin"; }
+    function isAdmin() { return signedIn() && myRole() == "admin"; }
+    function isMechanic() { return signedIn() && myRole() == "mechanic"; }
+    function isGarageMember(garageId) { return signedIn() && myGarageId() == garageId; }
+    function isGarageAdmin(garageId) { return isSuperAdmin() || (isAdmin() && isGarageMember(garageId)); }
+    function isGarageWorker(garageId) { return isSuperAdmin() || ((isAdmin() || isMechanic()) && isGarageMember(garageId)); }
+    function validRole(role) { return role == "superadmin" || role == "admin" || role == "mechanic"; }
 
-    // staff doc of current user (no loops)
-    function myStaffDoc() {
-      return /databases/$(database)/documents/staff/$(request.auth.uid);
+    function settingsPath(garageId) {
+      return /databases/$(database)/documents/garages/$(garageId)/settings/main;
+    }
+    function settingsExists(garageId) { return exists(settingsPath(garageId)); }
+    function pageEnabled(garageId, pageKey) {
+      return isSuperAdmin()
+        || !settingsExists(garageId)
+        || !('enabledPages' in get(settingsPath(garageId)).data)
+        || !(pageKey in get(settingsPath(garageId)).data.enabledPages)
+        || get(settingsPath(garageId)).data.enabledPages[pageKey] == true;
     }
 
-    function role() {
-      return exists(myStaffDoc()) ? get(myStaffDoc()).data.role : null;
+    match /garages/{garageId} {
+      allow get: if isSuperAdmin() || isGarageMember(garageId);
+      allow list: if isSuperAdmin();
+      allow create: if isSuperAdmin();
+      allow update: if isGarageAdmin(garageId);
+      allow delete: if isSuperAdmin();
+
+      match /settings/{docId} {
+        allow get, list: if isSuperAdmin() || isGarageMember(garageId);
+        allow create, update: if isGarageAdmin(garageId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /customers/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageMember(garageId)) && pageEnabled(garageId, "clients");
+        allow create, update: if isGarageWorker(garageId) && pageEnabled(garageId, "clients");
+        allow delete: if isGarageAdmin(garageId) && pageEnabled(garageId, "clients");
+      }
+
+      match /vehicles/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageMember(garageId)) && pageEnabled(garageId, "clients");
+        allow create, update: if isGarageWorker(garageId) && pageEnabled(garageId, "clients");
+        allow delete: if isGarageAdmin(garageId) && pageEnabled(garageId, "clients");
+      }
+
+      match /workorders/{id} {
+        allow get: if pageEnabled(garageId, "repairs") && (
+          isSuperAdmin() || (isAdmin() && isGarageMember(garageId)) ||
+          (isMechanic() && isGarageMember(garageId) && resource.data.assignedTo == request.auth.uid)
+        );
+        allow list: if pageEnabled(garageId, "repairs") && (
+          isSuperAdmin() || (isAdmin() && isGarageMember(garageId)) || (isMechanic() && isGarageMember(garageId))
+        );
+        allow create: if isGarageWorker(garageId) && pageEnabled(garageId, "repairs");
+        allow update: if pageEnabled(garageId, "repairs") && (
+          isSuperAdmin() || (isAdmin() && isGarageMember(garageId)) ||
+          (isMechanic() && isGarageMember(garageId) && resource.data.assignedTo == request.auth.uid)
+        );
+        allow delete: if isGarageAdmin(garageId) && pageEnabled(garageId, "repairs");
+      }
+
+      match /invoices/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageMember(garageId)) && pageEnabled(garageId, "invoices");
+        allow create, update: if isGarageAdmin(garageId) && pageEnabled(garageId, "invoices");
+        allow delete: if isSuperAdmin();
+      }
+
+      match /parts/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageMember(garageId)) && pageEnabled(garageId, "partsExpenses");
+        allow create, update: if isGarageWorker(garageId) && pageEnabled(garageId, "partsExpenses");
+        allow delete: if isGarageAdmin(garageId) && pageEnabled(garageId, "partsExpenses");
+      }
+
+      match /suppliers/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageMember(garageId)) && pageEnabled(garageId, "suppliers");
+        allow create, update: if isGarageAdmin(garageId) && pageEnabled(garageId, "suppliers");
+        allow delete: if isGarageAdmin(garageId) && pageEnabled(garageId, "suppliers");
+      }
+
+      match /expenses_parts/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageMember(garageId)) && pageEnabled(garageId, "partsExpenses");
+        allow create, update: if isGarageWorker(garageId) && pageEnabled(garageId, "partsExpenses");
+        allow delete: if isGarageAdmin(garageId) && pageEnabled(garageId, "partsExpenses");
+      }
+
+      match /promotions/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageMember(garageId)) && pageEnabled(garageId, "promotions");
+        allow create, update: if isGarageAdmin(garageId) && pageEnabled(garageId, "promotions");
+        allow delete: if isGarageAdmin(garageId) && pageEnabled(garageId, "promotions");
+      }
+
+      match /promotion_sends/{id} {
+        allow get, list: if (isSuperAdmin() || isGarageAdmin(garageId)) && pageEnabled(garageId, "promotions");
+        allow create: if (isSuperAdmin() || isGarageAdmin(garageId)) && pageEnabled(garageId, "promotions");
+        allow update: if false;
+        allow delete: if (isSuperAdmin() || isGarageAdmin(garageId)) && pageEnabled(garageId, "promotions");
+      }
+
+      match /invites/{inviteCode} {
+        allow get: if isSuperAdmin() || isGarageAdmin(garageId) || (resource.data.active == true && resource.data.used == false);
+        allow list: if (isSuperAdmin() || isGarageAdmin(garageId)) && pageEnabled(garageId, "notifications");
+        allow create: if (isSuperAdmin() || isGarageAdmin(garageId)) && pageEnabled(garageId, "notifications");
+        allow update: if isSuperAdmin() || (isGarageAdmin(garageId) && pageEnabled(garageId, "notifications")) || (signedIn() && resource.data.active == true && resource.data.used == false);
+        allow delete: if (isSuperAdmin() || isGarageAdmin(garageId)) && pageEnabled(garageId, "notifications");
+      }
+
+      match /logs/{id} {
+        allow get, list: if isSuperAdmin() || isGarageAdmin(garageId);
+        allow create: if isSuperAdmin() || isGarageWorker(garageId);
+        allow update: if false;
+        allow delete: if isSuperAdmin();
+      }
     }
 
-    function isAdmin() { return signedIn() && role() == "admin"; }
-    function isMech()  { return signedIn() && role() == "mechanic"; }
-
-    function inviteDoc(code) {
-      return /databases/$(database)/documents/invites/$(code);
-    }
-
-    function validInviteForStaff(code, email, roleStr) {
-      return exists(inviteDoc(code))
-        && get(inviteDoc(code)).data.used == false
-        && get(inviteDoc(code)).data.email == email
-        && get(inviteDoc(code)).data.role == roleStr;
-    }
-
-    // USERS (optional profile; minimal)
-    match /users/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid;
-      allow list: if false;
-      allow create: if signedIn() && request.auth.uid == uid;
-      allow update, delete: if isAdmin();
-    }
-
-    // STAFF (employees)
     match /staff/{uid} {
-      // Admin can read all; staff can read self
-      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
-      allow list: if isAdmin();
-
-      // Create:
-      // - Admin can create staff
-      // - Invited user can create THEIR OWN staff profile (uid == auth.uid) using a valid invite code
-      allow create: if isAdmin()
-        || (
-          signedIn()
-          && request.auth.uid == uid
-          && request.resource.data.inviteCode is string
-          && request.resource.data.email is string
-          && request.resource.data.role is string
-          && request.resource.data.disabled == false
-          && validInviteForStaff(request.resource.data.inviteCode, request.resource.data.email, request.resource.data.role)
-        );
-
-      // Admin can manage staff, but cannot delete/update THEIR OWN staff doc (anti-lockout)
-      allow update, delete: if isAdmin() && request.auth.uid != uid;
+      allow get: if (signedIn() && request.auth.uid == uid)
+        || (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "superadmin")
+        || (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "admin" && resource.data.garageId == get(myStaffPath()).data.garageId && pageEnabled(resource.data.garageId, "notifications"));
+      allow list: if signedIn() && exists(myStaffPath()) && (get(myStaffPath()).data.role == "superadmin" || (get(myStaffPath()).data.role == "admin" && pageEnabled(get(myStaffPath()).data.garageId, "notifications")));
+      allow create: if (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "superadmin" && validRole(request.resource.data.role))
+        || (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "admin" && request.resource.data.garageId == get(myStaffPath()).data.garageId && validRole(request.resource.data.role) && request.resource.data.role != "superadmin" && pageEnabled(request.resource.data.garageId, "notifications"))
+        || (signedIn() && request.auth.uid == uid && validRole(request.resource.data.role) && request.resource.data.role != "superadmin");
+      allow update: if (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "superadmin" && validRole(request.resource.data.role))
+        || (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "admin" && resource.data.garageId == get(myStaffPath()).data.garageId && request.resource.data.garageId == get(myStaffPath()).data.garageId && validRole(request.resource.data.role) && request.resource.data.role != "superadmin" && pageEnabled(resource.data.garageId, "notifications"));
+      allow delete: if (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "superadmin")
+        || (signedIn() && exists(myStaffPath()) && get(myStaffPath()).data.role == "admin" && resource.data.garageId == get(myStaffPath()).data.garageId && resource.data.role != "superadmin" && pageEnabled(resource.data.garageId, "notifications"));
     }
 
-    // INVITES
-    match /invites/{code} {
-      // allow GET without auth so invited users can validate code before creating account
-      // forbid LIST for non-admin to prevent enumeration
-      allow get: if true;
-      allow list: if isAdmin();
-
-      allow create, delete: if isAdmin();
-
-      // Update:
-      // - Admin can update any invite
-      // - Invited user can mark THEIR invite as used (one-way)
-      allow update: if isAdmin()
-        || (
-          signedIn()
-          && resource.data.used == false
-          && request.resource.data.used == true
-          && request.resource.data.usedBy == request.auth.uid
-          && request.resource.data.email == resource.data.email
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.createdAt == resource.data.createdAt
-        );
+    match /users/{uid} {
+      allow get: if isSuperAdmin() || (signedIn() && request.auth.uid == uid) || (isAdmin() && resource.data.garageId == myGarageId());
+      allow list: if isSuperAdmin() || isAdmin();
+      allow create: if signedIn();
+      allow update: if isSuperAdmin() || (signedIn() && request.auth.uid == uid) || (isAdmin() && resource.data.garageId == myGarageId());
+      allow delete: if isSuperAdmin();
     }
 
-    match /customers/{id} {
-      allow read: if signedIn();
-      allow create: if isAdmin()
-        || (
-          request.auth == null
-          && request.resource.data.keys().hasOnly(["name","phone","email","address","source","createdAt"])
-          && request.resource.data.source == "client_self_register"
-          && request.resource.data.name is string
-          && request.resource.data.phone is string
-        );
-      allow update, delete: if isAdmin();
-    }
-
-    match /vehicles/{id} {
-      allow read: if signedIn();
-      allow create: if isAdmin()
-        || (
-          request.auth == null
-          && request.resource.data.keys().hasOnly(["customerId","make","model","year","plate","vin","mileage","color","source","createdAt"])
-          && request.resource.data.source == "client_self_register"
-          && request.resource.data.customerId is string
-          && request.resource.data.make is string
-          && request.resource.data.model is string
-        );
-      allow update, delete: if isAdmin();
-    }
-
-    match /workorders/{id} {
-      allow read: if isAdmin()
-        || (isMech() && resource.data.assignedTo == request.auth.uid);
-
-      allow create: if isAdmin();
-
-      allow update: if isAdmin()
-        || (isMech()
-            && resource.data.assignedTo == request.auth.uid
-            && request.resource.data.assignedTo == resource.data.assignedTo);
-
-      allow delete: if isAdmin();
-    }
-
-    match /appointments/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /promotions/{id} {
-      allow read, create, update, delete: if isAdmin();
-    }
-
-    match /invoices/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
-    }
-
-    // DEPENSES PIECES (achats fournisseurs)
-    match /expenses_parts/{id} {
-      allow read: if signedIn() && isAdmin();
-      allow create, update, delete: if signedIn() && isAdmin();
-    }
-
-    // meta/settings/counters
-    match /meta/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
-
-    // Email queue (Trigger Email from Firestore extension)
     match /mail/{id} {
-      allow read, create, update, delete: if isAdmin();
-    }
-
-    // LOGS (optional)
-    match /logs/{id} {
-      allow get: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow list: if isAdmin();
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow get, list: if false;
+      allow create: if (isSuperAdmin() || isAdmin()) && pageEnabled(myGarageId(), "promotions");
+      allow update, delete: if false;
     }
   }
 }
