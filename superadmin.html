@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Garage Pro One — Super Admin</title>
   <script src="./assets/firebase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <style>
     :root{--bg:#f6f8fb;--card:#fff;--line:#dde3ea;--text:#102033;--muted:#5d6b7a;--primary:#2563eb;--danger:#dc2626;--ok:#166534;--radius:18px}
     *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -144,16 +145,17 @@
               <div id="qrRegisterUrl" class="code-link">-</div>
             </div>
             <div style="margin-top:12px">
-              <label for="qrClientMessage">Message client pour l'affiche A4</label>
-              <textarea id="qrClientMessage" rows="8" placeholder="Message affiché dans le PDF client"></textarea>
+              <label for="qrClientMessage">Message client pour l'affiche PDF</label>
+              <textarea id="qrClientMessage" placeholder="Scannez ce code QR pour créer votre dossier client et enregistrer votre véhicule."></textarea>
+              <div class="small" style="margin-top:6px">Ce message sera utilisé dans l'affiche A4 avec le logo du garage et son QR code.</div>
             </div>
             <div class="actions">
               <button class="primary" id="btnDownloadQr" type="button">Télécharger QR</button>
-              <button class="ghost" id="btnDownloadQrPdf" type="button">Télécharger affiche A4</button>
               <button class="ghost" id="btnCopyQrLink" type="button">Copier le lien</button>
               <button class="ghost" id="btnCopyQrImage" type="button">Copier image</button>
+              <button class="success" id="btnDownloadPosterPdf" type="button">Télécharger affiche A4 PDF</button>
             </div>
-            <div class="hint">Astuce: utilise un QR différent pour chaque garage. Le PDF client peut inclure le logo du garage, le message d'inscription et le QR code qui ouvre automatiquement la page register avec le bon <b>garageId</b>.</div>
+            <div class="hint">Astuce: utilise un QR différent pour chaque garage. Les employés scanneront puis arriveront automatiquement sur leur page register avec le bon <b>garageId</b>. Tu peux aussi générer une affiche A4 prête à imprimer pour les nouveaux clients.</div>
           </div>
         </div>
       </section>
@@ -176,7 +178,6 @@
     import { getFirestore, doc, getDoc, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
     import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
     import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
-    import { jsPDF } from 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm';
 
     const app = initializeApp(window.FIREBASE_CONFIG);
     const auth = getAuth(app);
@@ -268,225 +269,163 @@
       return url.toString();
     }
     function setQrGarageLabel(text){ const el = $('qrGarageLabel'); if(el) el.textContent = text || ''; }
-    function getSelectedGarage(){
-      return garagesCache.find(g => g.id === selectedGarageIdForQr) || null;
+    function getDefaultClientMessage(garageName){
+      const safeName = garageName || 'ce garage';
+      return `🚗 Nouveau client ?
+
+Scannez ce code QR pour créer votre dossier client chez ${safeName}.
+
+Vous pourrez entrer :
+- vos informations personnelles
+- les informations de votre véhicule
+
+Rapide, simple et sécuritaire.`;
     }
-    function buildClientQrMessage(garage){
-      const garageName = garage?.name || garage?.garageName || garage?.id || 'ce garage';
-      return [
-        `Bienvenue chez ${garageName}`,
-        '',
-        'Nouveau client ?',
-        'Scannez ce code QR pour créer votre dossier client et enregistrer votre véhicule.',
-        '',
-        'Préparez simplement :',
-        '- vos coordonnées',
-        '- les informations de votre véhicule',
-        '',
-        'Inscription rapide, simple et sécurisée.'
-      ].join('\n');
+    function setQrClientMessage(message, garageName){
+      const box = $('qrClientMessage');
+      if(box) box.value = String(message || '').trim() || getDefaultClientMessage(garageName);
     }
-    function setClientQrMessage(garage){
-      const el = $('qrClientMessage');
-      if(!el) return;
-      el.value = buildClientQrMessage(garage);
+    function getQrClientMessage(){
+      const box = $('qrClientMessage');
+      return String(box?.value || '').trim();
     }
-    function splitTextToSize(doc, text, maxWidth){
-      return doc.splitTextToSize(String(text || '').replace(/\r/g, ''), maxWidth);
+    async function persistQrClientMessage(garageId, garageName){
+      const message = getQrClientMessage() || getDefaultClientMessage(garageName);
+      try{
+        await setDoc(doc(db,'garages',garageId,'settings','main'), {
+          clientRegistrationMessage: message,
+          updatedAt: serverTimestamp(),
+          updatedBy: me?.uid || ''
+        }, { merge:true });
+        const idx = garagesCache.findIndex(g => g.id === garageId);
+        if(idx >= 0) garagesCache[idx].clientRegistrationMessage = message;
+      }catch(err){
+        console.warn('Impossible d'enregistrer le message client', err);
+      }
+      return message;
     }
-    function loadImageAsDataUrl(url){
-      return new Promise((resolve, reject) => {
-        if(!url){ reject(new Error('missing-image-url')); return; }
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || img.width;
-            canvas.height = img.naturalHeight || img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            resolve(canvas.toDataURL('image/png'));
-          } catch(err){ reject(err); }
-        };
-        img.onerror = () => reject(new Error('image-load-failed'));
-        img.src = url;
+    async function imageUrlToDataUrl(url){
+      if(!url) return null;
+      try{
+        const res = await fetch(url, { mode:'cors' });
+        if(!res.ok) throw new Error('fetch image failed');
+        const blob = await res.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }catch(err){
+        console.warn('Logo non chargé dans le PDF', err);
+        return null;
+      }
+    }
+    function splitPdfText(pdf, text, maxWidth){
+      const lines = [];
+      String(text || '').split(/\n/).forEach((paragraph) => {
+        const clean = paragraph.trim();
+        if(!clean){ lines.push(''); return; }
+        lines.push(...pdf.splitTextToSize(clean, maxWidth));
       });
+      return lines;
     }
-    async function downloadGarageQrPdf(){
-      if(!selectedGarageIdForQr){ setMsg('error', 'Sélectionne un garage pour télécharger son affiche A4.'); return; }
+    async function downloadGaragePosterPdf(){
+      if(!selectedGarageIdForQr){ setMsg('error', 'Sélectionne un garage pour générer son affiche PDF.'); return; }
       const canvas = $('garageQrCanvas');
       if(!canvas){ setMsg('error', 'QR code introuvable.'); return; }
-      const garage = getSelectedGarage();
+      const garage = garagesCache.find(g => g.id === selectedGarageIdForQr) || { id: selectedGarageIdForQr };
       const garageName = garage?.name || garage?.garageName || selectedGarageIdForQr;
+      const message = await persistQrClientMessage(selectedGarageIdForQr, garageName);
       const registerUrl = getGarageRegisterUrl(selectedGarageIdForQr);
-      const message = ($('qrClientMessage')?.value || buildClientQrMessage(garage)).trim();
-      try {
-        setMsg('hint', 'Préparation de l'affiche A4...');
-        const docPdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-        const pageW = docPdf.internal.pageSize.getWidth();
-        const pageH = docPdf.internal.pageSize.getHeight();
-        const margin = 14;
-        const contentX = margin;
-        const contentY = margin;
-        const contentW = pageW - (margin * 2);
-        const contentH = pageH - (margin * 2);
-        const brand = [15, 23, 42];
-        const brandSoft = [245, 247, 250];
-        const accent = [212, 175, 55];
-        const textMain = [25, 35, 52];
-        const textMuted = [97, 108, 125];
-        const line = [225, 229, 236];
+      const qrDataUrl = canvas.toDataURL('image/png');
+      const logoUrl = garage?.logoUrl || garage?.garageLogoUrl || 'assets/logo.png';
+      const logoDataUrl = await imageUrlToDataUrl(logoUrl);
+      const jsPDFCtor = window.jspdf?.jsPDF;
+      if(!jsPDFCtor){ setMsg('error', 'Bibliothèque PDF non chargée.'); return; }
 
-        docPdf.setFillColor(255,255,255);
-        docPdf.rect(0,0,pageW,pageH,'F');
-        docPdf.setDrawColor(...line);
-        docPdf.setLineWidth(0.6);
-        docPdf.roundedRect(contentX, contentY, contentW, contentH, 6, 6, 'S');
+      const pdf = new jsPDFCtor({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentW = pageW - margin * 2;
 
-        docPdf.setFillColor(...brand);
-        docPdf.roundedRect(contentX, contentY, contentW, 42, 6, 6, 'F');
-        docPdf.rect(contentX, contentY + 20, contentW, 22, 'F');
+      pdf.setFillColor(248,250,252);
+      pdf.rect(0,0,pageW,pageH,'F');
+      pdf.setDrawColor(221,227,234);
+      pdf.setLineWidth(0.6);
+      pdf.roundedRect(margin, margin, contentW, pageH - margin * 2, 6, 6, 'S');
 
-        let logoData = null;
-        const logoUrl = garage?.logoUrl || garage?.garageLogoUrl || '';
-        if(logoUrl){
-          try { logoData = await loadImageAsDataUrl(logoUrl); } catch(err){ console.warn('Logo non chargé pour le PDF', err); }
-        }
-
-        const logoBoxX = contentX + 10;
-        const logoBoxY = contentY + 8;
-        const logoBoxSize = 26;
-        docPdf.setFillColor(255,255,255);
-        docPdf.roundedRect(logoBoxX, logoBoxY, logoBoxSize, logoBoxSize, 6, 6, 'F');
-        if(logoData){
-          docPdf.addImage(logoData, 'PNG', logoBoxX + 2, logoBoxY + 2, logoBoxSize - 4, logoBoxSize - 4);
-        } else {
-          docPdf.setTextColor(...brand);
-          docPdf.setFont('helvetica','bold');
-          docPdf.setFontSize(14);
-          docPdf.text(String(garageName || 'G').trim().slice(0,2).toUpperCase(), logoBoxX + (logoBoxSize/2), logoBoxY + 16, { align:'center' });
-        }
-
-        docPdf.setTextColor(255,255,255);
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(20);
-        docPdf.text(garageName, logoBoxX + logoBoxSize + 8, contentY + 17);
-        docPdf.setFont('helvetica','normal');
-        docPdf.setFontSize(10.5);
-        docPdf.text('Inscription nouveau client et véhicule', logoBoxX + logoBoxSize + 8, contentY + 25);
-
-        docPdf.setFillColor(...accent);
-        docPdf.roundedRect(contentX + 10, contentY + 48, 62, 10, 5, 5, 'F');
-        docPdf.setTextColor(...brand);
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(10.5);
-        docPdf.text('AFFICHE CLIENT À SCANNER', contentX + 41, contentY + 54.5, { align:'center' });
-
-        const leftX = contentX + 10;
-        const leftY = contentY + 66;
-        const leftW = 103;
-        const rightW = 63;
-        const rightX = contentX + contentW - rightW - 10;
-        const qrFrameY = leftY;
-
-        docPdf.setTextColor(...textMain);
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(23);
-        docPdf.text('Nouveau client ?', leftX, leftY);
-        docPdf.setFontSize(16);
-        docPdf.text('Créez votre dossier en quelques secondes', leftX, leftY + 10);
-
-        docPdf.setFont('helvetica','normal');
-        docPdf.setFontSize(11.2);
-        docPdf.setTextColor(...textMuted);
-        const introLines = docPdf.splitTextToSize('Scannez le code QR pour entrer vos informations personnelles et les informations de votre véhicule avant votre visite au garage.', leftW);
-        docPdf.text(introLines, leftX, leftY + 20);
-
-        const infoBoxY = leftY + 43;
-        docPdf.setFillColor(...brandSoft);
-        docPdf.setDrawColor(...line);
-        docPdf.roundedRect(leftX, infoBoxY, leftW, 53, 5, 5, 'FD');
-        docPdf.setTextColor(...textMain);
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(12.5);
-        docPdf.text('Informations demandées', leftX + 6, infoBoxY + 10);
-        docPdf.setFont('helvetica','normal');
-        docPdf.setFontSize(10.5);
-        const bullets = [
-          'Vos coordonnées client',
-          'Les informations de votre véhicule',
-          'Une inscription simple et sécurisée'
-        ];
-        bullets.forEach((item, idx) => {
-          const yy = infoBoxY + 20 + (idx * 11);
-          docPdf.setFillColor(...accent);
-          docPdf.circle(leftX + 6, yy - 1.5, 1.2, 'F');
-          docPdf.setTextColor(...textMain);
-          docPdf.text(item, leftX + 10, yy);
-        });
-
-        const msgBoxY = infoBoxY + 61;
-        const msgBoxH = 78;
-        docPdf.setFillColor(255,255,255);
-        docPdf.setDrawColor(...line);
-        docPdf.roundedRect(leftX, msgBoxY, leftW, msgBoxH, 5, 5, 'FD');
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(12.5);
-        docPdf.setTextColor(...textMain);
-        docPdf.text('Message affiché au client', leftX + 6, msgBoxY + 10);
-        docPdf.setFont('helvetica','normal');
-        docPdf.setFontSize(10.3);
-        const messageLines = docPdf.splitTextToSize(String(message || '').replace(/\r/g, ''), leftW - 12);
-        docPdf.text(messageLines, leftX + 6, msgBoxY + 18, { baseline:'top' });
-
-        docPdf.setFillColor(...brandSoft);
-        docPdf.setDrawColor(...line);
-        docPdf.roundedRect(rightX, qrFrameY, rightW, 128, 5, 5, 'FD');
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(13);
-        docPdf.setTextColor(...textMain);
-        docPdf.text('Scannez ici', rightX + (rightW/2), qrFrameY + 12, { align:'center' });
-        docPdf.setFont('helvetica','normal');
-        docPdf.setFontSize(9.8);
-        docPdf.setTextColor(...textMuted);
-        const qrSubLines = docPdf.splitTextToSize('Ouvre directement le formulaire de ce garage.', rightW - 10);
-        docPdf.text(qrSubLines, rightX + (rightW/2), qrFrameY + 20, { align:'center' });
-
-        const qrCardX = rightX + 7;
-        const qrCardY = qrFrameY + 30;
-        const qrCardSize = rightW - 14;
-        docPdf.setFillColor(255,255,255);
-        docPdf.roundedRect(qrCardX, qrCardY, qrCardSize, qrCardSize, 4, 4, 'F');
-        docPdf.addImage(canvas.toDataURL('image/png'), 'PNG', qrCardX + 4, qrCardY + 4, qrCardSize - 8, qrCardSize - 8);
-
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(10.5);
-        docPdf.setTextColor(...brand);
-        docPdf.text('Service rapide au comptoir', rightX + (rightW/2), qrCardY + qrCardSize + 12, { align:'center' });
-
-        const bottomY = contentY + contentH - 34;
-        docPdf.setDrawColor(...line);
-        docPdf.line(contentX + 10, bottomY, contentX + contentW - 10, bottomY);
-        docPdf.setFont('helvetica','bold');
-        docPdf.setFontSize(11);
-        docPdf.setTextColor(...textMain);
-        docPdf.text('Lien direct d'inscription', leftX, bottomY + 9);
-        docPdf.setFont('helvetica','normal');
-        docPdf.setFontSize(8.8);
-        docPdf.setTextColor(...textMuted);
-        const urlLines = docPdf.splitTextToSize(registerUrl, contentW - 20);
-        docPdf.text(urlLines, leftX, bottomY + 16);
-
-        docPdf.setFontSize(8.5);
-        docPdf.text('Affiche générée depuis le Super Admin', contentX + contentW - 10, contentY + contentH - 8, { align:'right' });
-
-        docPdf.save(`${selectedGarageIdForQr}-affiche-client-a4.pdf`);
-        setMsg('ok', 'Affiche A4 téléchargée.');
-      } catch(e) {
-        console.error(e);
-        setMsg('error', e?.message || 'Erreur génération affiche A4.');
+      let y = 24;
+      if(logoDataUrl){
+        try{ pdf.addImage(logoDataUrl, 'PNG', margin + 8, y - 2, 28, 28); }catch(e){ try{ pdf.addImage(logoDataUrl, 'JPEG', margin + 8, y - 2, 28, 28); }catch(_){} }
       }
+
+      pdf.setTextColor(16,32,51);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(22);
+      pdf.text(garageName, logoDataUrl ? margin + 42 : margin + 8, y + 6);
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(11);
+      pdf.setTextColor(93,107,122);
+      pdf.text('Affiche d'inscription client — prête à imprimer', logoDataUrl ? margin + 42 : margin + 8, y + 14);
+
+      y += 40;
+      pdf.setDrawColor(37,99,235);
+      pdf.setFillColor(255,255,255);
+      pdf.roundedRect(margin + 8, y, contentW - 16, 24, 5, 5, 'FD');
+      pdf.setTextColor(37,99,235);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(20);
+      pdf.text('NOUVEAU CLIENT ?', pageW / 2, y + 15, { align:'center' });
+
+      y += 34;
+      pdf.setTextColor(16,32,51);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(12.5);
+      const messageLines = splitPdfText(pdf, message, contentW - 28);
+      const messageLineH = 7;
+      const messageBoxH = Math.max(44, (messageLines.length * messageLineH) + 14);
+      pdf.setFillColor(255,255,255);
+      pdf.setDrawColor(221,227,234);
+      pdf.roundedRect(margin + 8, y, contentW - 16, messageBoxH, 5, 5, 'FD');
+      pdf.text(messageLines, margin + 16, y + 12);
+
+      y += messageBoxH + 10;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.setTextColor(93,107,122);
+      pdf.text('Scannez ici pour ouvrir le formulaire d'inscription', pageW / 2, y, { align:'center' });
+
+      y += 6;
+      pdf.setFillColor(255,255,255);
+      pdf.setDrawColor(221,227,234);
+      pdf.roundedRect((pageW - 86) / 2, y, 86, 86, 6, 6, 'FD');
+      pdf.addImage(qrDataUrl, 'PNG', (pageW - 70) / 2, y + 8, 70, 70);
+
+      y += 95;
+      pdf.setFillColor(236,253,245);
+      pdf.setDrawColor(187,247,208);
+      pdf.roundedRect(margin + 8, y, contentW - 16, 22, 5, 5, 'FD');
+      pdf.setTextColor(22,101,52);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      pdf.text('Informations à préparer : nom, téléphone, courriel, véhicule, plaque, VIN.', pageW / 2, y + 14, { align:'center', maxWidth: contentW - 28 });
+
+      y += 32;
+      pdf.setTextColor(93,107,122);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.text('Lien direct d'inscription', pageW / 2, y, { align:'center' });
+      y += 6;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      const urlLines = pdf.splitTextToSize(registerUrl, contentW - 28);
+      pdf.text(urlLines, pageW / 2, y, { align:'center' });
+
+      pdf.save(`${selectedGarageIdForQr}-affiche-inscription-a4.pdf`);
+      setMsg('ok', 'Affiche A4 PDF téléchargée.');
     }
     async function renderGarageQr(garageId){
       selectedGarageIdForQr = garageId || '';
@@ -497,16 +436,17 @@
         if(preview) preview.innerHTML = '<div class="muted">Aucun QR code</div>';
         if(urlBox) urlBox.textContent = '-';
         if(nameBox) nameBox.textContent = 'QR code garage';
-        setClientQrMessage(null);
+        setQrClientMessage('', '');
         setQrGarageLabel('Sélectionne un garage dans la liste.');
         return;
       }
       const garage = garagesCache.find(g => g.id === selectedGarageIdForQr);
-      setClientQrMessage(garage);
+      const garageName = garage?.name || garage?.garageName || selectedGarageIdForQr;
       const url = getGarageRegisterUrl(selectedGarageIdForQr);
       if(urlBox) urlBox.textContent = url;
-      if(nameBox) nameBox.textContent = `QR code — ${garage?.name || garage?.garageName || selectedGarageIdForQr}`;
-      setQrGarageLabel(`Garage sélectionné: ${garage?.name || garage?.garageName || selectedGarageIdForQr}`);
+      if(nameBox) nameBox.textContent = `QR code — ${garageName}`;
+      setQrGarageLabel(`Garage sélectionné: ${garageName}`);
+      setQrClientMessage(garage?.clientRegistrationMessage, garageName);
       if(preview){
         preview.innerHTML = '<canvas id="garageQrCanvas" width="320" height="320"></canvas>';
         const canvas = $('garageQrCanvas');
@@ -832,7 +772,6 @@ Attention: cela supprime seulement le document principal du garage. Les sous-col
     $('btnPagesBasic').addEventListener('click', () => applyPagePreset('basic'));
     $('btnPagesPro').addEventListener('click', () => applyPagePreset('pro'));
     $('btnDownloadQr').addEventListener('click', downloadGarageQr);
-    $('btnDownloadQrPdf').addEventListener('click', downloadGarageQrPdf);
     $('btnCopyQrLink').addEventListener('click', async () => { try { await copyGarageQrLink(); } catch(e){ console.error(e); setMsg('error', e?.message || 'Erreur copie lien QR.'); } });
     $('btnCopyQrImage').addEventListener('click', async () => { try { await copyGarageQrImage(); } catch(e){ console.error(e); setMsg('error', e?.message || 'Erreur copie image QR.'); } });
     $('btnLogout').addEventListener('click', async () => {      try { await signOut(auth); window.location.replace('./index.html'); }
