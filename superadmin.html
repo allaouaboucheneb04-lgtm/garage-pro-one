@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Garage Pro One — Super Admin</title>
   <script src="./assets/firebase-config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <style>
     :root{--bg:#f6f8fb;--card:#fff;--line:#dde3ea;--text:#102033;--muted:#5d6b7a;--primary:#2563eb;--danger:#dc2626;--ok:#166534;--radius:18px}
     *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -144,18 +143,12 @@
               <label>Lien d'inscription</label>
               <div id="qrRegisterUrl" class="code-link">-</div>
             </div>
-            <div style="margin-top:12px">
-              <label for="qrClientMessage">Message client pour l'affiche PDF</label>
-              <textarea id="qrClientMessage" placeholder="Scannez ce code QR pour créer votre dossier client et enregistrer votre véhicule."></textarea>
-              <div class="small" style="margin-top:6px">Ce message sera utilisé dans l'affiche A4 avec le logo du garage et son QR code.</div>
-            </div>
             <div class="actions">
               <button class="primary" id="btnDownloadQr" type="button">Télécharger QR</button>
               <button class="ghost" id="btnCopyQrLink" type="button">Copier le lien</button>
               <button class="ghost" id="btnCopyQrImage" type="button">Copier image</button>
-              <button class="success" id="btnDownloadPosterPdf" type="button">Télécharger affiche A4 PDF</button>
             </div>
-            <div class="hint">Astuce: utilise un QR différent pour chaque garage. Les employés scanneront puis arriveront automatiquement sur leur page register avec le bon <b>garageId</b>. Tu peux aussi générer une affiche A4 prête à imprimer pour les nouveaux clients.</div>
+            <div class="hint">Astuce: utilise un QR différent pour chaque garage. Les employés scanneront puis arriveront automatiquement sur leur page register avec le bon <b>garageId</b>.</div>
           </div>
         </div>
       </section>
@@ -269,164 +262,6 @@
       return url.toString();
     }
     function setQrGarageLabel(text){ const el = $('qrGarageLabel'); if(el) el.textContent = text || ''; }
-    function getDefaultClientMessage(garageName){
-      const safeName = garageName || 'ce garage';
-      return `🚗 Nouveau client ?
-
-Scannez ce code QR pour créer votre dossier client chez ${safeName}.
-
-Vous pourrez entrer :
-- vos informations personnelles
-- les informations de votre véhicule
-
-Rapide, simple et sécuritaire.`;
-    }
-    function setQrClientMessage(message, garageName){
-      const box = $('qrClientMessage');
-      if(box) box.value = String(message || '').trim() || getDefaultClientMessage(garageName);
-    }
-    function getQrClientMessage(){
-      const box = $('qrClientMessage');
-      return String(box?.value || '').trim();
-    }
-    async function persistQrClientMessage(garageId, garageName){
-      const message = getQrClientMessage() || getDefaultClientMessage(garageName);
-      try{
-        await setDoc(doc(db,'garages',garageId,'settings','main'), {
-          clientRegistrationMessage: message,
-          updatedAt: serverTimestamp(),
-          updatedBy: me?.uid || ''
-        }, { merge:true });
-        const idx = garagesCache.findIndex(g => g.id === garageId);
-        if(idx >= 0) garagesCache[idx].clientRegistrationMessage = message;
-      }catch(err){
-        console.warn('Impossible d'enregistrer le message client', err);
-      }
-      return message;
-    }
-    async function imageUrlToDataUrl(url){
-      if(!url) return null;
-      try{
-        const res = await fetch(url, { mode:'cors' });
-        if(!res.ok) throw new Error('fetch image failed');
-        const blob = await res.blob();
-        return await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      }catch(err){
-        console.warn('Logo non chargé dans le PDF', err);
-        return null;
-      }
-    }
-    function splitPdfText(pdf, text, maxWidth){
-      const lines = [];
-      String(text || '').split(/\n/).forEach((paragraph) => {
-        const clean = paragraph.trim();
-        if(!clean){ lines.push(''); return; }
-        lines.push(...pdf.splitTextToSize(clean, maxWidth));
-      });
-      return lines;
-    }
-    async function downloadGaragePosterPdf(){
-      if(!selectedGarageIdForQr){ setMsg('error', 'Sélectionne un garage pour générer son affiche PDF.'); return; }
-      const canvas = $('garageQrCanvas');
-      if(!canvas){ setMsg('error', 'QR code introuvable.'); return; }
-      const garage = garagesCache.find(g => g.id === selectedGarageIdForQr) || { id: selectedGarageIdForQr };
-      const garageName = garage?.name || garage?.garageName || selectedGarageIdForQr;
-      const message = await persistQrClientMessage(selectedGarageIdForQr, garageName);
-      const registerUrl = getGarageRegisterUrl(selectedGarageIdForQr);
-      const qrDataUrl = canvas.toDataURL('image/png');
-      const logoUrl = garage?.logoUrl || garage?.garageLogoUrl || 'assets/logo.png';
-      const logoDataUrl = await imageUrlToDataUrl(logoUrl);
-      const jsPDFCtor = window.jspdf?.jsPDF;
-      if(!jsPDFCtor){ setMsg('error', 'Bibliothèque PDF non chargée.'); return; }
-
-      const pdf = new jsPDFCtor({ orientation:'portrait', unit:'mm', format:'a4' });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 15;
-      const contentW = pageW - margin * 2;
-
-      pdf.setFillColor(248,250,252);
-      pdf.rect(0,0,pageW,pageH,'F');
-      pdf.setDrawColor(221,227,234);
-      pdf.setLineWidth(0.6);
-      pdf.roundedRect(margin, margin, contentW, pageH - margin * 2, 6, 6, 'S');
-
-      let y = 24;
-      if(logoDataUrl){
-        try{ pdf.addImage(logoDataUrl, 'PNG', margin + 8, y - 2, 28, 28); }catch(e){ try{ pdf.addImage(logoDataUrl, 'JPEG', margin + 8, y - 2, 28, 28); }catch(_){} }
-      }
-
-      pdf.setTextColor(16,32,51);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(22);
-      pdf.text(garageName, logoDataUrl ? margin + 42 : margin + 8, y + 6);
-
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(11);
-      pdf.setTextColor(93,107,122);
-      pdf.text('Affiche d'inscription client — prête à imprimer', logoDataUrl ? margin + 42 : margin + 8, y + 14);
-
-      y += 40;
-      pdf.setDrawColor(37,99,235);
-      pdf.setFillColor(255,255,255);
-      pdf.roundedRect(margin + 8, y, contentW - 16, 24, 5, 5, 'FD');
-      pdf.setTextColor(37,99,235);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(20);
-      pdf.text('NOUVEAU CLIENT ?', pageW / 2, y + 15, { align:'center' });
-
-      y += 34;
-      pdf.setTextColor(16,32,51);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(12.5);
-      const messageLines = splitPdfText(pdf, message, contentW - 28);
-      const messageLineH = 7;
-      const messageBoxH = Math.max(44, (messageLines.length * messageLineH) + 14);
-      pdf.setFillColor(255,255,255);
-      pdf.setDrawColor(221,227,234);
-      pdf.roundedRect(margin + 8, y, contentW - 16, messageBoxH, 5, 5, 'FD');
-      pdf.text(messageLines, margin + 16, y + 12);
-
-      y += messageBoxH + 10;
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(11);
-      pdf.setTextColor(93,107,122);
-      pdf.text('Scannez ici pour ouvrir le formulaire d'inscription', pageW / 2, y, { align:'center' });
-
-      y += 6;
-      pdf.setFillColor(255,255,255);
-      pdf.setDrawColor(221,227,234);
-      pdf.roundedRect((pageW - 86) / 2, y, 86, 86, 6, 6, 'FD');
-      pdf.addImage(qrDataUrl, 'PNG', (pageW - 70) / 2, y + 8, 70, 70);
-
-      y += 95;
-      pdf.setFillColor(236,253,245);
-      pdf.setDrawColor(187,247,208);
-      pdf.roundedRect(margin + 8, y, contentW - 16, 22, 5, 5, 'FD');
-      pdf.setTextColor(22,101,52);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(12);
-      pdf.text('Informations à préparer : nom, téléphone, courriel, véhicule, plaque, VIN.', pageW / 2, y + 14, { align:'center', maxWidth: contentW - 28 });
-
-      y += 32;
-      pdf.setTextColor(93,107,122);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(10);
-      pdf.text('Lien direct d'inscription', pageW / 2, y, { align:'center' });
-      y += 6;
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      const urlLines = pdf.splitTextToSize(registerUrl, contentW - 28);
-      pdf.text(urlLines, pageW / 2, y, { align:'center' });
-
-      pdf.save(`${selectedGarageIdForQr}-affiche-inscription-a4.pdf`);
-      setMsg('ok', 'Affiche A4 PDF téléchargée.');
-    }
     async function renderGarageQr(garageId){
       selectedGarageIdForQr = garageId || '';
       const preview = $('qrPreview');
@@ -436,17 +271,14 @@ Rapide, simple et sécuritaire.`;
         if(preview) preview.innerHTML = '<div class="muted">Aucun QR code</div>';
         if(urlBox) urlBox.textContent = '-';
         if(nameBox) nameBox.textContent = 'QR code garage';
-        setQrClientMessage('', '');
         setQrGarageLabel('Sélectionne un garage dans la liste.');
         return;
       }
       const garage = garagesCache.find(g => g.id === selectedGarageIdForQr);
-      const garageName = garage?.name || garage?.garageName || selectedGarageIdForQr;
       const url = getGarageRegisterUrl(selectedGarageIdForQr);
       if(urlBox) urlBox.textContent = url;
-      if(nameBox) nameBox.textContent = `QR code — ${garageName}`;
-      setQrGarageLabel(`Garage sélectionné: ${garageName}`);
-      setQrClientMessage(garage?.clientRegistrationMessage, garageName);
+      if(nameBox) nameBox.textContent = `QR code — ${garage?.name || garage?.garageName || selectedGarageIdForQr}`;
+      setQrGarageLabel(`Garage sélectionné: ${garage?.name || garage?.garageName || selectedGarageIdForQr}`);
       if(preview){
         preview.innerHTML = '<canvas id="garageQrCanvas" width="320" height="320"></canvas>';
         const canvas = $('garageQrCanvas');
