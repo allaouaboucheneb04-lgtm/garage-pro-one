@@ -1466,7 +1466,7 @@ const suppliersCountEl = $("suppliersCount");
 const suppliersActiveCountEl = $("suppliersActiveCount");
 const suppliersPhoneCountEl = $("suppliersPhoneCount");
 const suppliersEmailCountEl = $("suppliersEmailCount");
-const suppliersTbody = $("suppliersTbody");
+const suppliersCardsEl = $("suppliersCards");
 const supSearchEl = $("supSearch");
 const supCategoryFilterEl = $("supCategoryFilter");
 const supStatusFilterEl = $("supStatusFilter");
@@ -1500,31 +1500,40 @@ function renderSuppliers(){
   if(suppliersActiveCountEl) suppliersActiveCountEl.textContent = String(allRows.filter(x=>x.active !== false).length);
   if(suppliersPhoneCountEl) suppliersPhoneCountEl.textContent = String(allRows.filter(x=>String(x.phone||'').trim()).length);
   if(suppliersEmailCountEl) suppliersEmailCountEl.textContent = String(allRows.filter(x=>String(x.email||'').trim()).length);
-  if(!suppliersTbody) return;
+  if(!suppliersCardsEl) return;
   if(rows.length===0){
-    suppliersTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucun fournisseur trouvé.</td></tr>';
+    suppliersCardsEl.innerHTML = '<div class="supplier-empty">Aucun fournisseur trouvé.</div>';
     return;
   }
-  suppliersTbody.innerHTML = rows.map(x=>`<tr>
-    <td>
-      <div class="supplier-name-cell">
-        <b>${safe(x.name||'')}</b>
-        <span class="supplier-status ${x.active === false ? 'off' : 'on'}">${x.active === false ? 'Inactif' : 'Actif'}</span>
+  suppliersCardsEl.innerHTML = rows.map(x=>{
+    const phone = String(x.phone||'').trim();
+    const email = String(x.email||'').trim();
+    const city = String(x.city||'').trim();
+    const contact = String(x.contact||'').trim();
+    const note = String(x.note||'').trim();
+    return `<article class="supplier-card-item">
+      <div class="supplier-card-top">
+        <div class="supplier-name-cell">
+          <b class="supplier-card-title">${safe(x.name||'')}</b>
+          <div class="supplier-chip-row">
+            <span class="supplier-status ${x.active === false ? 'off' : 'on'}">${x.active === false ? 'Inactif' : 'Actif'}</span>
+            <span class="supplier-category-badge">${safe(x.category||'Non classé')}</span>
+          </div>
+        </div>
       </div>
-    </td>
-    <td><span class="supplier-category-badge">${safe(x.category||'Non classé')}</span></td>
-    <td>${safe(x.contact||'')}</td>
-    <td>
-      <div>${safe(x.phone||'')}</div>
-      <div class="muted">${safe(x.email||'')}</div>
-    </td>
-    <td>${safe(x.city||'')}</td>
-    <td>${safe(x.note||'')}</td>
-    <td class="no-print" style="white-space:nowrap">
-      <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
-      <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
-    </td>
-  </tr>`).join('');
+      <div class="supplier-card-grid">
+        <div class="supplier-card-field"><span class="muted">Contact</span><strong>${safe(contact || '—')}</strong></div>
+        <div class="supplier-card-field"><span class="muted">Ville</span><strong>${safe(city || '—')}</strong></div>
+        <div class="supplier-card-field"><span class="muted">Téléphone</span>${phone ? `<a href="tel:${safe(phone)}">${safe(phone)}</a>` : '<span>—</span>'}</div>
+        <div class="supplier-card-field"><span class="muted">Email</span>${email ? `<a href="mailto:${safe(email)}">${safe(email)}</a>` : '<span>—</span>'}</div>
+        <div class="supplier-card-field supplier-card-note"><span class="muted">Note</span><span>${safe(note || '—')}</span></div>
+      </div>
+      <div class="supplier-card-actions no-print">
+        <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
+        <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
+      </div>
+    </article>`;
+  }).join('');
 }
 
 function supplierOptionsHtml(selected=''){

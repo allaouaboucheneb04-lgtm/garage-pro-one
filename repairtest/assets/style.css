@@ -703,12 +703,26 @@ body.dark .repair-sub{ color:rgba(255,255,255,0.75); }
 /* Suppliers page */
 .supplier-view{background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.98));}
 .supplier-toolbar{display:grid;grid-template-columns:2fr 1.2fr 1fr;gap:12px;margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:16px;background:rgba(15,23,42,.03);}
-.supplier-table-wrap{border-radius:16px;overflow:hidden;border:1px solid var(--line);}
-.supplier-table thead th{background:rgba(15,23,42,.04);}
-.supplier-name-cell{display:flex;flex-direction:column;gap:6px;}
+.supplier-name-cell{display:flex;flex-direction:column;gap:8px;min-width:0;}
 .supplier-status{display:inline-flex;align-items:center;gap:6px;width:max-content;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;}
 .supplier-status.on{background:rgba(34,197,94,.12);color:#15803d;}
 .supplier-status.off{background:rgba(239,68,68,.12);color:#b91c1c;}
 .supplier-category-badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(59,130,246,.10);color:#1d4ed8;font-weight:700;font-size:12px;}
 .supplier-stat{border-radius:16px;}
+.supplier-cards{display:grid;gap:14px;margin-top:14px;}
+.supplier-card-item{border:1px solid var(--line);border-radius:18px;background:#fff;padding:16px;box-shadow:0 8px 26px rgba(15,23,42,.05);}
+.supplier-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;}
+.supplier-card-title{font-size:18px;line-height:1.2;word-break:break-word;}
+.supplier-chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+.supplier-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.supplier-card-field{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:14px;background:rgba(15,23,42,.03);min-width:0;}
+.supplier-card-field a{word-break:break-word;}
+.supplier-card-note{grid-column:1 / -1;}
+.supplier-card-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+.supplier-empty{padding:18px;border:1px dashed var(--line);border-radius:16px;background:rgba(15,23,42,.02);color:var(--muted);}
 @media (max-width: 900px){.supplier-toolbar{grid-template-columns:1fr;}}
+@media (max-width: 640px){
+  .supplier-card-grid{grid-template-columns:1fr;}
+  .supplier-card-item{padding:14px;}
+  .supplier-card-actions .btn{flex:1 1 140px;justify-content:center;}
+}
