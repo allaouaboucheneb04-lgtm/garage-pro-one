@@ -2946,6 +2946,14 @@ function openPartsExpenseModal(existing){
   if(currentRole !== "admin" && currentRole !== "superadmin") return;
   const x = existing || {};
   const today = isoDate(new Date());
+  const rates = {
+    tps: Number(settings?.tpsRate ?? 0.05),
+    tvq: Number(settings?.tvqRate ?? 0.09975)
+  };
+  const splitExisting = splitTaxTotal(Number(x.taxTotal||0));
+  const existingTps = Number(x.tpsAmount != null ? x.tpsAmount : splitExisting.tps);
+  const existingTvq = Number(x.tvqAmount != null ? x.tvqAmount : splitExisting.tvq);
+  const existingTotal = Number(x.total != null ? x.total : (Number(x.subtotal||0) + existingTps + existingTvq));
   const html = `
     <form class="form" id="formPartsExpense">
       <label>Date</label>
@@ -2964,21 +2972,23 @@ function openPartsExpenseModal(existing){
       <div class="row" style="gap:10px; flex-wrap:wrap">
         <div style="flex:1; min-width:160px">
           <label>Montant HT</label>
-          <input class="input" name="subtotal" type="number" step="0.01" required value="${Number(x.subtotal||0)}" />
+          <input class="input" name="subtotal" type="number" min="0" step="0.01" required value="${Number(x.subtotal||0)}" />
         </div>
         <div style="flex:1; min-width:160px">
-          <label>TPS (5%)</label>
-          <input class="input" name="tpsAmount" type="number" step="0.01" required value="${Number(x.tpsAmount!=null?x.tpsAmount:splitTaxTotal(Number(x.taxTotal||0)).tps)}" />
+          <label>TPS (${pct(rates.tps)})</label>
+          <input class="input" name="tpsAmount" type="number" step="0.01" readonly value="${existingTps.toFixed(2)}" />
         </div>
         <div style="flex:1; min-width:160px">
-          <label>TVQ (9.975%)</label>
-          <input class="input" name="tvqAmount" type="number" step="0.01" required value="${Number(x.tvqAmount!=null?x.tvqAmount:splitTaxTotal(Number(x.taxTotal||0)).tvq)}" />
+          <label>TVQ (${pct(rates.tvq)})</label>
+          <input class="input" name="tvqAmount" type="number" step="0.01" readonly value="${existingTvq.toFixed(2)}" />
         </div>
         <div style="flex:1; min-width:160px">
           <label>Total TTC</label>
-          <input class="input" name="total" type="number" step="0.01" required value="${Number(x.total||0)}" />
+          <input class="input" name="total" type="number" step="0.01" readonly value="${existingTotal.toFixed(2)}" />
         </div>
       </div>
+
+      <small class="muted" style="display:block;margin-top:-4px">Les taxes se calculent automatiquement selon les taux du garage.</small>
 
       <label>Paiement</label>
       <select class="input" name="paymentMethod">
@@ -2993,7 +3003,6 @@ function openPartsExpenseModal(existing){
         <button class="btn btn-ghost" type="button" data-modal-close>Annuler</button>
       </div>
     </form>
-    <small class="muted">Astuce: si tu veux, je peux ajouter TPS et TVQ séparés (2 champs) pour des rapports encore plus précis.</small>
   `;
 
   showModal(existing ? "Modifier dépense" : "Nouvelle dépense", html);
@@ -3017,15 +3026,16 @@ function openPartsExpenseModal(existing){
 
   function recalcTotal(){
     const subtotal = Number(subtotalInput?.value||0);
-    const tps = Number(tpsInput?.value||0);
-    const tvq = Number(tvqInput?.value||0);
-    if(totalInput) totalInput.value = String((subtotal + tps + tvq).toFixed(2));
+    const tps = subtotal * rates.tps;
+    const tvq = subtotal * rates.tvq;
+    if(tpsInput) tpsInput.value = tps.toFixed(2);
+    if(tvqInput) tvqInput.value = tvq.toFixed(2);
+    if(totalInput) totalInput.value = (subtotal + tps + tvq).toFixed(2);
   }
 
   supplierInput?.addEventListener("change", syncSupplierCategory);
   subtotalInput?.addEventListener("input", recalcTotal);
-  tpsInput?.addEventListener("input", recalcTotal);
-  tvqInput?.addEventListener("input", recalcTotal);
+  recalcTotal();
 
   form.addEventListener("submit", async (e)=>{
     e.preventDefault();
@@ -3087,10 +3097,11 @@ function exportPartsExpensesCSV(){
       const dt = isoDate(_partsExpDateAsDate(x));
       const supplier = String(x.supplier||"").replaceAll('"','""');
       const desc = String(x.description||"").replaceAll('"','""');
+      const category = String(x.supplierCategory||"").replaceAll('"','""');
       const pm = String(invPaymentLabel(x.paymentMethod)).replaceAll('"','""');
       const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
       const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
-      lines.push([dt, `"${supplier}"`, `"${desc}"`, `"${pm}"`, Number(x.subtotal||0), tps, tvq, Number(x.taxTotal||0), Number(x.total||0)].join(","));
+      lines.push([dt, `"${supplier}"`, `"${category}"`, `"${desc}"`, `"${pm}"`, Number(x.subtotal||0), tps, tvq, Number(x.taxTotal||0), Number(x.total||0)].join(","));
     }
     downloadText("depenses_pieces.csv", lines.join("\n"));
     showToast("CSV exporté ✅");
