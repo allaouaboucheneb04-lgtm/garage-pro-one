@@ -2,68 +2,57 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#102033" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Garage Pro One" />
+  <link rel="apple-touch-icon" href="./assets/icon-192.png" />
   <title>Garage Pro One — Super Admin</title>
   <script src="./assets/firebase-config.js"></script>
   <style>
-    :root{--bg:#f6f8fb;--card:#fff;--line:#dde3ea;--text:#102033;--muted:#5d6b7a;--primary:#2563eb;--danger:#dc2626;--ok:#166534;--radius:18px}
+    :root{
+      --bg:#f6f8fb; --card:#fff; --line:#dde3ea; --text:#102033; --muted:#5d6b7a; --primary:#2563eb; --danger:#dc2626;
+      --radius:18px;
+    }
     *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{max-width:1240px;margin:0 auto;padding:20px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-    h1{margin:0;font-size:32px}.sub{color:var(--muted);margin-top:6px}.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:0 8px 24px rgba(16,32,51,.06)}
+    .wrap{max-width:1180px;margin:0 auto;padding:20px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+    h1{margin:0;font-size:32px}.sub{color:var(--muted);margin-top:6px}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:0 8px 24px rgba(16,32,51,.06)}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-    label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin:0 0 6px} input,select,textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:#fff;font-size:16px;color:var(--text)}
-    textarea{min-height:94px;resize:vertical}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px} button{border:0;border-radius:14px;padding:12px 16px;font-weight:800;font-size:15px;cursor:pointer}
-    .primary{background:var(--primary);color:#fff}.ghost{background:#eef3ff;color:#1d4ed8}.danger{background:#fee2e2;color:#991b1b}.success{background:#ecfdf5;color:var(--ok)}
-    .garage{border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px;background:#fff}.garage-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
-    .badge{display:inline-flex;padding:7px 12px;border-radius:999px;background:#eef3ff;color:#1d4ed8;font-weight:800;font-size:13px;border:1px solid #dbe7ff}.badge.off{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+    label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin:0 0 6px} input,select,textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:#fff;font-size:16px;color:var(--text)} textarea{min-height:94px;resize:vertical}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px} button{border:0;border-radius:14px;padding:12px 16px;font-weight:800;font-size:16px;cursor:pointer} .primary{background:var(--primary);color:#fff}.ghost{background:#eef3ff;color:#1d4ed8}.danger{background:#fee2e2;color:#991b1b}
+    .garage{border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px;background:#fff}.garage-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.badge{display:inline-flex;padding:7px 12px;border-radius:999px;background:#eef3ff;color:#1d4ed8;font-weight:800;font-size:13px;border:1px solid #dbe7ff}.badge.off{background:#fef2f2;color:#991b1b;border-color:#fecaca}
     .mini{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px;color:var(--muted)} .mini b{color:var(--text)}
     .hint,.error,.ok{margin-top:10px;padding:12px 14px;border-radius:14px;font-size:14px}.hint{background:#f8fafc;border:1px solid var(--line);color:var(--muted)}.error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}.ok{background:#ecfdf5;border:1px solid #bbf7d0;color:#166534}
-    .small{font-size:12px;color:var(--muted)} .muted{color:var(--muted)} .list-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.spacer{flex:1}.section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.page-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.page-toggle{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:#fff}.page-toggle input{width:auto;margin:0}.garage-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.chip{display:inline-flex;padding:6px 10px;border-radius:999px;background:#f8fafc;border:1px solid var(--line);font-size:12px;color:var(--muted);font-weight:700}.qr-box{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:start;margin-top:12px}.qr-preview{display:flex;align-items:center;justify-content:center;min-height:180px;background:#fff;border:1px dashed var(--line);border-radius:18px;padding:12px}.qr-preview canvas,.qr-preview img{max-width:100%;height:auto;display:block}.code-link{display:block;width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#f8fafc;color:var(--text);word-break:break-all;font-size:13px;line-height:1.5}.qr-title{font-size:18px;font-weight:900}.qr-sub{margin-top:6px;color:var(--muted);font-size:14px}
-    @media (max-width:900px){.grid,.row,.row3,.qr-box{grid-template-columns:1fr}.wrap{padding:14px}h1{font-size:28px}}
+    .small{font-size:12px;color:var(--muted)} .muted{color:var(--muted)}
+    @media (max-width:900px){.grid,.row,.row3{grid-template-columns:1fr}.wrap{padding:14px}h1{font-size:28px}}
   </style>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="AB Garage Pro">
-<meta name="theme-color" content="#0b1d4a">
-
 </head>
 <body>
   <div class="wrap">
     <div class="top">
       <div>
         <h1>Super Admin SaaS</h1>
-        <div class="sub">Créer, modifier et gérer les garages.</div>
+        <div class="sub">Créer et gérer les garages, sans revenus globaux ni statistiques globales.</div>
       </div>
-      <div>
-        <div id="who" class="small"></div>
-        <div id="pageStatus" class="small muted" style="margin-top:6px">Initialisation...</div>
-        <div class="actions" style="justify-content:flex-end;margin-top:10px">
-          <button class="ghost" id="btnReloadTop" type="button">Actualiser</button>
-          <button class="danger" id="btnLogout" type="button">Déconnexion</button>
-        </div>
-      </div>
+      <div><div id="who" class="small"></div><div id="pageStatus" class="small muted" style="margin-top:6px">Initialisation...</div></div>
     </div>
 
     <div class="grid">
       <section class="card">
-        <div class="section-title">
-          <h2 id="formTitle" style="margin:0">Créer un garage</h2>
-          <div id="editBadge" class="badge" style="display:none">Mode modification</div>
-        </div>
-        <input id="editingGarageId" type="hidden">
-        <div class="row" style="margin-top:12px">
+        <h2 style="margin-top:0">Créer un garage</h2>
+        <div class="row">
           <div><label>Nom du garage</label><input id="gName" placeholder="Garage Pro One Montréal"></div>
-          <div><label>Slug / ID garage</label><input id="gSlug" placeholder="garage-montreal"></div>
+          <div><label>Slug</label><input id="gSlug" placeholder="garage-montreal"></div>
         </div>
         <div class="row" style="margin-top:12px">
           <div>
             <label>Uploader un logo</label>
             <input id="gLogoFile" type="file" accept="image/*">
-            <div class="small" style="margin-top:6px">PNG, JPG, WEBP.</div>
+            <div class="small" style="margin-top:6px">PNG, JPG, WEBP. Le lien se remplit automatiquement après upload.</div>
           </div>
           <div>
             <label>Aperçu logo</label>
@@ -101,232 +90,132 @@
           <div><label>Notes</label><input id="gNotes" placeholder="Infos internes"></div>
         </div>
         <div class="actions">
-          <button class="primary" id="btnSave">Créer le garage</button>
-          <button class="ghost" id="btnCancelEdit" type="button" style="display:none">Annuler modification</button>
+          <button class="primary" id="btnCreate">Créer le garage</button>
           <button class="ghost" id="btnReload" type="button">Actualiser</button>
         </div>
-        <div class="hint">Cette page suppose que ton document <b>staff/{uid}</b> a le rôle <b>superadmin</b>. La création ajoute aussi <b>garages/{garageId}/settings/main</b> et <b>garages/{garageId}/settings/counters</b>.</div>
+        <div class="hint">Cette page suppose que ton document <b>staff/{uid}</b> a le rôle <b>superadmin</b>. La création ajoute aussi <b>garages/{garageId}/settings/main</b> et <b>garages/{garageId}/settings/counters</b>. Les champs admin initial servent d’information et ne créent pas encore un compte Firebase Auth automatiquement.</div>
         <div id="createMsg"></div>
       </section>
 
       <section class="card">
-        <div class="section-title">
-          <h2 style="margin:0">Pages activées par garage</h2>
-          <div id="pagesGarageLabel" class="small muted">Sélectionne un garage dans la liste.</div>
-        </div>
-        <div class="page-grid">
-          <label class="page-toggle"><input type="checkbox" id="pg_dashboard"> <span>Dashboard</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_clients"> <span>Clients</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_repairs"> <span>Réparations</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_notifications"> <span>Notifications</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_promotions"> <span>Promotions</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_revenue"> <span>Revenus</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_fiscal"> <span>Info fiscaux</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_partsExpenses"> <span>Dépenses pièces</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_suppliers"> <span>Fournisseurs</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_invoices"> <span>Factures pièces</span></label>
-          <label class="page-toggle"><input type="checkbox" id="pg_settings"> <span>Paramètres</span></label>
-        </div>
-        <div class="actions">
-          <button class="primary" id="btnSavePages" type="button">Enregistrer les pages</button>
-          <button class="ghost" id="btnPagesAll" type="button">Tout activer</button>
-          <button class="ghost" id="btnPagesBasic" type="button">Pack basic</button>
-          <button class="ghost" id="btnPagesPro" type="button">Pack pro</button>
-        </div>
-        <div class="hint">Choisis d'abord un garage dans la liste, puis active ou désactive les pages visibles dans l'application.</div>
-      </section>
-
-      <section class="card">
-        <div class="section-title">
-          <h2 style="margin:0">QR code inscription garage</h2>
-          <div id="qrGarageLabel" class="small muted">Sélectionne un garage dans la liste.</div>
-        </div>
-        <div class="qr-box">
-          <div id="qrPreview" class="qr-preview"><div class="muted">Aucun QR code</div></div>
-          <div>
-            <div id="qrGarageName" class="qr-title">QR code garage</div>
-            <div class="qr-sub">Ce QR code ouvre directement la page d'inscription du garage sélectionné.</div>
-            <div style="margin-top:12px">
-              <label>Lien d'inscription</label>
-              <div id="qrRegisterUrl" class="code-link">-</div>
-            </div>
-            <div class="actions">
-              <button class="primary" id="btnDownloadQr" type="button">Télécharger QR</button>
-              <button class="ghost" id="btnCopyQrLink" type="button">Copier le lien</button>
-              <button class="ghost" id="btnCopyQrImage" type="button">Copier image</button>
-            </div>
-            <div class="hint">Astuce: utilise un QR différent pour chaque garage. Les employés scanneront puis arriveront automatiquement sur leur page register avec le bon <b>garageId</b>.</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-title">
-          <h2 style="margin:0">Liste des garages</h2>
-          <div class="toolbar">
-            <button class="ghost" id="btnReloadList" type="button">Actualiser</button>
-          </div>
-        </div>
-        <div id="garagesList" class="muted" style="margin-top:12px">Chargement...</div>
+        <h2 style="margin-top:0">Liste des garages</h2>
+        <div id="garagesList" class="muted">Chargement...</div>
       </section>
     </div>
   </div>
 
   <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-    import { getAuth, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-    import { getFirestore, doc, getDoc, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
-    import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import { getFirestore, doc, getDoc, setDoc, serverTimestamp, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
 
-    const app = initializeApp(window.FIREBASE_CONFIG);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const storage = getStorage(app);
+  const $ = (id) => document.getElementById(id);
+  const slugify = (s='') => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
+  const setMsg = (type, text) => { const box = $('createMsg'); if (!box) return; box.className = type; box.textContent = text || ''; };
+  const setPageStatus = (text) => { const el = $('pageStatus'); if (el) el.textContent = text || ''; };
+  const updateSuperLogoPreview = (url) => { const img = $('gLogoPreview'); if (img) img.src = String(url || '').trim() || 'assets/logo.png'; };
 
-    let me = null;
-    let myStaff = null;
-    let garagesCache = [];
-    let selectedGarageIdForPages = "";
-    let selectedGarageIdForQr = "";
+  let app, auth, db, storage, me = null;
 
-    const $ = (id) => document.getElementById(id);
-    const slugify = (s='') => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
+  async function uploadSuperLogoFile(){
+    if(!me) throw new Error('Connecte-toi d'abord en superadmin.');
+    const input = $('gLogoFile');
+    const file = input?.files?.[0];
+    if(!file) throw new Error('Choisis une image d'abord.');
+    const safeName = String(file.name || 'logo').replace(/[^a-zA-Z0-9._-]+/g,'-');
+    const slug = slugify($('gSlug')?.value || $('gName')?.value || 'garage');
+    const path = `garage-logos/${slug || 'garage'}/${Date.now()}-${safeName}`;
+    const ref = storageRef(storage, path);
+    await uploadBytes(ref, file, { contentType: file.type || 'application/octet-stream' });
+    const url = await getDownloadURL(ref);
+    $('gLogo').value = url;
+    updateSuperLogoPreview(url);
+    return url;
+  }
 
-    function setMsg(type, text){ const box = $('createMsg'); if(!box) return; box.className = type; box.textContent = text; }
-    function setPageStatus(text){ const el=$('pageStatus'); if(el) el.textContent=text||''; }
-    function updateSuperLogoPreview(url){ const img = $('gLogoPreview'); if(img) img.src = String(url || '').trim() || 'assets/logo.png'; }
+  async function loadStaff(uid){
+    setPageStatus('Vérification du compte superadmin...');
+    const snap = await getDoc(doc(db,'staff',uid));
+    if(!snap.exists()) throw new Error('Document staff/'+uid+' introuvable.');
+    return snap.data();
+  }
 
-    const pageKeys = ['dashboard','clients','repairs','notifications','promotions','revenue','fiscal','partsExpenses','suppliers','invoices','settings'];
-    const defaultEnabledPages = {
-      dashboard:true, clients:true, repairs:true, notifications:true, promotions:true, revenue:true, fiscal:true, partsExpenses:true, suppliers:true, invoices:true, settings:true
-    };
-    function pageCheckboxId(key){ return `pg_${key}`; }
-    function setPagesFormState(enabledPages={}){
-      const merged = { ...defaultEnabledPages, ...(enabledPages || {}) };
-      pageKeys.forEach((key)=>{ const el = $(pageCheckboxId(key)); if(el) el.checked = merged[key] !== false; });
-    }
-    function getPagesFormState(){
-      const out = {};
-      pageKeys.forEach((key)=>{ const el = $(pageCheckboxId(key)); out[key] = !!el?.checked; });
-      return out;
-    }
-    function setPagesGarageLabel(text){ const el = $('pagesGarageLabel'); if(el) el.textContent = text || ''; }
-    async function loadGaragePages(garageId){
-      selectedGarageIdForPages = garageId || '';
-      if(!selectedGarageIdForPages){ setPagesFormState(defaultEnabledPages); setPagesGarageLabel('Sélectionne un garage dans la liste.'); return; }
-      setPagesGarageLabel(`Chargement des pages pour ${selectedGarageIdForPages}...`);
-      try{
-        const snap = await getDoc(doc(db,'garages',selectedGarageIdForPages,'settings','main'));
-        const data = snap.exists() ? (snap.data() || {}) : {};
-        setPagesFormState(data.enabledPages || defaultEnabledPages);
-        const garage = garagesCache.find(g => g.id === selectedGarageIdForPages);
-        setPagesGarageLabel(`Pages du garage: ${garage?.name || garage?.garageName || selectedGarageIdForPages}`);
-      }catch(e){
-        console.error(e);
-        setPagesFormState(defaultEnabledPages);
-        setPagesGarageLabel('Erreur chargement pages garage.');
-      }
-    }
-    async function saveGaragePages(){
-      if(!selectedGarageIdForPages){ setMsg('error', 'Sélectionne un garage dans la liste pour gérer ses pages.'); return; }
-      try{
-        setMsg('hint', 'Enregistrement des pages...');
-        await setDoc(doc(db,'garages',selectedGarageIdForPages,'settings','main'), {
-          garageId: selectedGarageIdForPages,
-          enabledPages: getPagesFormState(),
-          updatedAt: serverTimestamp(),
-          updatedBy: me?.uid || ''
-        }, { merge:true });
-        setMsg('ok', 'Pages du garage mises à jour.');
-        setPageStatus('Pages activées mises à jour');
-        await loadGarages();
-        await loadGaragePages(selectedGarageIdForPages);
-      }catch(e){
-        console.error(e);
-        setMsg('error', e?.message || 'Erreur enregistrement pages.');
-      }
-    }
-    function applyPagePreset(preset){
-      const packs = {
-        all: { dashboard:true, clients:true, repairs:true, notifications:true, promotions:true, revenue:true, fiscal:true, partsExpenses:true, suppliers:true, invoices:true, settings:true },
-        basic: { dashboard:true, clients:true, repairs:true, notifications:false, promotions:false, revenue:false, fiscal:false, partsExpenses:false, suppliers:false, invoices:false, settings:false },
-        pro: { dashboard:true, clients:true, repairs:true, notifications:true, promotions:true, revenue:true, fiscal:true, partsExpenses:true, suppliers:true, invoices:true, settings:true }
-      };
-      setPagesFormState(packs[preset] || defaultEnabledPages);
-    }
+  function renderGarages(garages){
+    const list = $('garagesList');
+    if(!list) return;
+    if(!garages.length){ list.innerHTML = '<div class="muted">Aucun garage trouvé.</div>'; return; }
+    garages.sort((a,b)=> String(a.name || a.garageName || a.id).localeCompare(String(b.name || b.garageName || b.id), 'fr'));
+    list.innerHTML = garages.map(g => `
+      <article class="garage">
+        <div class="garage-head">
+          <div style="display:flex;gap:12px;align-items:center">
+            <img src="${g.logoUrl || g.garageLogoUrl || 'assets/logo.png'}" alt="logo" style="width:56px;height:56px;object-fit:cover;border-radius:12px;border:1px solid var(--line);background:#fff">
+            <div>
+              <div style="font-size:22px;font-weight:800">${g.name || g.garageName || g.id}</div>
+              <div class="small">ID: ${g.id}</div>
+            </div>
+          </div>
+          <span class="badge ${g.status==='active' ? '' : 'off'}">${g.status || 'inactive'}</span>
+        </div>
+        <div class="mini">
+          <div><b>Plan</b><br>${g.plan || '-'}</div>
+          <div><b>Slug</b><br>${g.slug || '-'}</div>
+          <div><b>Email</b><br>${g.email || g.garageEmail || '-'}</div>
+          <div><b>Téléphone</b><br>${g.phone || g.garagePhone || '-'}</div>
+          <div><b>TPS / TVQ</b><br>${g.tpsNumber || g.garageTpsNo || '-'} / ${g.tvqNumber || g.garageTvqNo || '-'}</div>
+          <div><b>Main-d'œuvre</b><br>${g.laborRate ?? '-'} $/h</div>
+          <div style="grid-column:1/-1"><b>Adresse</b><br>${g.address || g.garageAddress || '-'}</div>
+        </div>
+      </article>`).join('');
+  }
 
-    function getBaseRegisterUrl(){
-      const current = new URL('./register.html', window.location.href);
-      if(current.pathname.includes('/repairtest/')){
-        current.pathname = current.pathname.replace('/repairtest/register.html', '/register.html');
-      }
-      return current.toString();
-    }
-    function getGarageRegisterUrl(garageId){
-      const url = new URL(getBaseRegisterUrl());
-      url.searchParams.set('garageId', garageId);
-      return url.toString();
-    }
-    function setQrGarageLabel(text){ const el = $('qrGarageLabel'); if(el) el.textContent = text || ''; }
-    async function renderGarageQr(garageId){
-      selectedGarageIdForQr = garageId || '';
-      const preview = $('qrPreview');
-      const urlBox = $('qrRegisterUrl');
-      const nameBox = $('qrGarageName');
-      if(!selectedGarageIdForQr){
-        if(preview) preview.innerHTML = '<div class="muted">Aucun QR code</div>';
-        if(urlBox) urlBox.textContent = '-';
-        if(nameBox) nameBox.textContent = 'QR code garage';
-        setQrGarageLabel('Sélectionne un garage dans la liste.');
-        return;
-      }
-      const garage = garagesCache.find(g => g.id === selectedGarageIdForQr);
-      const url = getGarageRegisterUrl(selectedGarageIdForQr);
-      if(urlBox) urlBox.textContent = url;
-      if(nameBox) nameBox.textContent = `QR code — ${garage?.name || garage?.garageName || selectedGarageIdForQr}`;
-      setQrGarageLabel(`Garage sélectionné: ${garage?.name || garage?.garageName || selectedGarageIdForQr}`);
-      if(preview){
-        preview.innerHTML = '<canvas id="garageQrCanvas" width="320" height="320"></canvas>';
-        const canvas = $('garageQrCanvas');
-        await QRCode.toCanvas(canvas, url, { width: 320, margin: 2, errorCorrectionLevel: 'M' });
-      }
-    }
-    async function downloadGarageQr(){
-      if(!selectedGarageIdForQr){ setMsg('error', 'Sélectionne un garage pour télécharger son QR code.'); return; }
-      const canvas = $('garageQrCanvas');
-      if(!canvas){ setMsg('error', 'QR code introuvable.'); return; }
-      const link = document.createElement('a');
-      link.href = canvas.toDataURL('image/png');
-      link.download = `${selectedGarageIdForQr}-qr-register.png`;
-      link.click();
-    }
-    async function copyGarageQrLink(){
-      if(!selectedGarageIdForQr){ setMsg('error', 'Sélectionne un garage pour copier son lien.'); return; }
-      const url = getGarageRegisterUrl(selectedGarageIdForQr);
-      await navigator.clipboard.writeText(url);
-      setMsg('ok', 'Lien du QR code copié.');
-    }
-    async function copyGarageQrImage(){
-      if(!selectedGarageIdForQr){ setMsg('error', 'Sélectionne un garage pour copier son image QR.'); return; }
-      const canvas = $('garageQrCanvas');
-      if(!canvas || !navigator.clipboard || !window.ClipboardItem){ throw new Error('Copie image non supportée sur cet appareil.'); }
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      setMsg('ok', 'Image du QR code copiée.');
-    }
+  async function loadGarages(){
+    const list = $('garagesList');
+    if(list) list.innerHTML = '<div class="muted">Chargement des garages...</div>';
+    setPageStatus('Chargement de la liste des garages...');
+    const qs = await getDocs(collection(db,'garages'));
+    const garages = await Promise.all(qs.docs.map(async (d) => {
+      const root = d.data() || {};
+      let main = {};
+      try {
+        const mainSnap = await getDoc(doc(db,'garages',d.id,'settings','main'));
+        if (mainSnap.exists()) main = mainSnap.data() || {};
+      } catch(_) {}
+      return { id:d.id, ...root, ...main };
+    }));
+    renderGarages(garages);
+    setPageStatus(`Session superadmin validée — garages: ${garages.length}`);
+  }
 
-    function formData(){
-      return {
-        garageId: $('editingGarageId').value.trim(),
-        name: $('gName').value.trim(),
-        slug: slugify($('gSlug').value.trim() || $('gName').value.trim()),
+  async function createGarage(){
+    try{
+      setMsg('hint','Création en cours...');
+      setPageStatus('Création du garage...');
+      const name = $('gName').value.trim();
+      const slugInput = $('gSlug').value.trim();
+      const garageId = slugify(slugInput || name);
+      if(!name || !garageId) throw new Error('Nom et slug obligatoires.');
+      const garageRef = doc(db,'garages',garageId);
+      const exists = await getDoc(garageRef);
+      if(exists.exists()) throw new Error('Ce garage existe déjà.');
+
+      const payload = {
+        name,
+        garageName: name,
+        slug: garageId,
         phone: $('gPhone').value.trim(),
+        garagePhone: $('gPhone').value.trim(),
         email: $('gEmail').value.trim(),
+        garageEmail: $('gEmail').value.trim(),
         address: $('gAddress').value.trim(),
+        garageAddress: $('gAddress').value.trim(),
         logoUrl: $('gLogo').value.trim(),
+        garageLogoUrl: $('gLogo').value.trim(),
         tpsNumber: $('gTpsNo').value.trim(),
         tvqNumber: $('gTvqNo').value.trim(),
+        garageTpsNo: $('gTpsNo').value.trim(),
+        garageTvqNo: $('gTvqNo').value.trim(),
         tpsRate: Number($('gTps').value || 0),
         tvqRate: Number($('gTvq').value || 0),
         laborRate: Number($('gLabor').value || 0),
@@ -337,361 +226,110 @@
         adminName: $('gAdminName').value.trim(),
         adminEmail: $('gAdminEmail').value.trim(),
         notes: $('gNotes').value.trim(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: me.uid,
+        updatedBy: me.uid
       };
+
+      await setDoc(garageRef, payload, { merge:true });
+      await setDoc(doc(db,'garages',garageId,'settings','main'), {
+        garageName: name,
+        garageId,
+        garageAddress: payload.address,
+        address: payload.address,
+        garagePhone: payload.phone,
+        phone: payload.phone,
+        garageEmail: payload.email,
+        email: payload.email,
+        logoUrl: payload.logoUrl,
+        garageLogoUrl: payload.logoUrl,
+        garageTpsNo: payload.tpsNumber,
+        garageTvqNo: payload.tvqNumber,
+        tpsNumber: payload.tpsNumber,
+        tvqNumber: payload.tvqNumber,
+        tpsRate: payload.tpsRate,
+        tvqRate: payload.tvqRate,
+        laborRate: payload.laborRate,
+        cardFeeRate: payload.cardFeeRate,
+        updatedAt: serverTimestamp(),
+        updatedBy: me.uid
+      }, { merge:true });
+      await setDoc(doc(db,'garages',garageId,'settings','counters'), {
+        garageId,
+        customerSeq: 0,
+        vehicleSeq: 0,
+        workorderSeq: 0,
+        invoiceSeq: 0,
+        partSeq: 0,
+        promotionSeq: 0,
+        updatedAt: serverTimestamp(),
+        updatedBy: me.uid
+      }, { merge:true });
+      setMsg('ok', 'Garage créé avec succès.');
+      await loadGarages();
+    }catch(e){
+      console.error(e);
+      setMsg('error', e.message || 'Erreur création garage.');
+      setPageStatus('Erreur création garage');
     }
+  }
 
-    function resetForm(){
-      $('editingGarageId').value='';
-      ['gName','gSlug','gPhone','gEmail','gAddress','gLogo','gTpsNo','gTvqNo','gAdminName','gAdminEmail','gNotes'].forEach(id=>$(id).value='');
-      $('gPlan').value='pro'; $('gStatus').value='active'; $('gTps').value='0.05'; $('gTvq').value='0.09975'; $('gLabor').value='80'; $('gCardFee').value='0.025';
-      $('formTitle').textContent='Créer un garage';
-      $('editBadge').style.display='none';
-      $('btnCancelEdit').style.display='none';
-      $('btnSave').textContent='Créer le garage';
-      $('gSlug').disabled=false;
-      updateSuperLogoPreview('');
-      setMsg('', '');
-    }
+  try {
+    if (!window.FIREBASE_CONFIG) throw new Error('FIREBASE_CONFIG manquant dans assets/firebase-config.js');
+    app = initializeApp(window.FIREBASE_CONFIG);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+    setPageStatus('Firebase initialisé, vérification de session...');
 
-    function enterEditMode(g){
-      $('editingGarageId').value = g.id || g.slug || '';
-      $('gName').value = g.name || g.garageName || '';
-      $('gSlug').value = g.id || g.slug || '';
-      $('gPhone').value = g.phone || g.garagePhone || '';
-      $('gEmail').value = g.email || g.garageEmail || '';
-      $('gAddress').value = g.address || g.garageAddress || '';
-      $('gLogo').value = g.logoUrl || g.garageLogoUrl || '';
-      $('gTpsNo').value = g.tpsNumber || g.garageTpsNo || '';
-      $('gTvqNo').value = g.tvqNumber || g.garageTvqNo || '';
-      $('gTps').value = g.tpsRate ?? 0.05;
-      $('gTvq').value = g.tvqRate ?? 0.09975;
-      $('gLabor').value = g.laborRate ?? 80;
-      $('gCardFee').value = g.cardFeeRate ?? 0.025;
-      $('gPlan').value = g.plan || 'pro';
-      $('gStatus').value = g.status || (g.active === false ? 'inactive' : 'active');
-      $('gAdminName').value = g.adminName || '';
-      $('gAdminEmail').value = g.adminEmail || '';
-      $('gNotes').value = g.notes || '';
-      $('formTitle').textContent = `Modifier le garage: ${g.name || g.garageName || g.id}`;
-      $('editBadge').style.display='inline-flex';
-      $('btnCancelEdit').style.display='inline-block';
-      $('btnSave').textContent='Enregistrer les modifications';
-      $('gSlug').disabled=true;
-      updateSuperLogoPreview(g.logoUrl || g.garageLogoUrl || '');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      setMsg('hint', 'Mode modification activé.');
-    }
-
-    async function uploadSuperLogoFile(){
-      if(!me) throw new Error('not-authenticated');
-      const file = $('gLogoFile')?.files?.[0];
-      if(!file) throw new Error("Choisis une image d'abord.");
-      const safeName = String(file.name || 'logo').replace(/[^a-zA-Z0-9._-]+/g,'-');
-      const data = formData();
-      const slug = data.garageId || data.slug || 'garage';
-      const path = `garage-logos/${slug}/${Date.now()}-${safeName}`;
-      const ref = storageRef(storage, path);
-      await uploadBytes(ref, file, { contentType: file.type || 'application/octet-stream' });
-      const url = await getDownloadURL(ref);
-      $('gLogo').value = url; updateSuperLogoPreview(url); return url;
-    }
-
-    async function loadStaff(uid){
-      const snap = await getDoc(doc(db,'staff',uid));
-      if(!snap.exists()) throw new Error('Document staff introuvable pour cet utilisateur.');
-      return snap.data();
-    }
-
-    function renderGarages(garages){
-      const list = $('garagesList');
-      if(!garages.length){ list.innerHTML = '<div class="muted">Aucun garage trouvé.</div>'; return; }
-      garages.sort((a,b)=> String(a.name || a.garageName || a.id).localeCompare(String(b.name || b.garageName || b.id), 'fr'));
-      list.innerHTML = garages.map(g => `
-        <article class="garage">
-          <div class="garage-head">
-            <div style="display:flex;gap:12px;align-items:center">
-              <img src="${g.logoUrl || g.garageLogoUrl || 'assets/logo.png'}" alt="logo" style="height:56px;width:56px;object-fit:cover;border-radius:14px;border:1px solid var(--line);background:#fff">
-              <div>
-                <div style="font-weight:900;font-size:18px">${g.name || g.garageName || g.id}</div>
-                <div class="small">ID: ${g.id}</div>
-              </div>
-            </div>
-            <span class="badge ${g.active === false || g.status === 'inactive' ? 'off' : ''}">${g.status || (g.active === false ? 'inactive' : 'active')}</span>
-          </div>
-          <div class="mini">
-            <div><b>Plan</b><br>${g.plan || '-'}</div>
-            <div><b>Slug</b><br>${g.slug || g.id || '-'}</div>
-            <div><b>Email</b><br>${g.email || g.garageEmail || '-'}</div>
-            <div><b>Téléphone</b><br>${g.phone || g.garagePhone || '-'}</div>
-            <div><b>TPS / TVQ</b><br>${g.tpsNumber || g.garageTpsNo || '-'} / ${g.tvqNumber || g.garageTvqNo || '-'}</div>
-            <div><b>Main-d'œuvre</b><br>${g.laborRate ?? '-'} $/h</div>
-            <div style="grid-column:1/-1"><b>Adresse</b><br>${g.address || g.garageAddress || '-'}</div>
-          </div>
-          <div class="garage-meta">${Object.entries({ ...defaultEnabledPages, ...((g.enabledPages)||{}) }).map(([k,v]) => `<span class="chip">${k}: ${v === false ? 'off' : 'on'}</span>`).join('')}</div>
-          <div class="list-actions">
-            <button class="ghost" data-action="edit" data-id="${g.id}">Modifier</button>
-            <button class="ghost" data-action="pages" data-id="${g.id}">Pages</button>
-            <button class="ghost" data-action="qr" data-id="${g.id}">QR code</button>
-            <button class="ghost" data-action="open" data-id="${g.id}">Ouvrir</button>
-            <button class="danger" data-action="delete" data-id="${g.id}">Supprimer</button>
-          </div>
-        </article>`).join('');
-
-      list.querySelectorAll('button[data-action]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.dataset.id;
-          const action = btn.dataset.action;
-          const garage = garagesCache.find(x => x.id === id);
-          if(action === 'edit' && garage) return enterEditMode(garage);
-          if(action === 'pages') return await loadGaragePages(id);
-          if(action === 'qr') return await renderGarageQr(id);
-          if(action === 'open') return window.location.href = `./index.html?garageId=${encodeURIComponent(id)}`;
-          if(action === 'delete') return await deleteGarage(id);
-        });
-      });
-    }
-
-    async function loadGarages(){
-      $('garagesList').innerHTML = '<div class="muted">Chargement des garages...</div>';
-      setPageStatus('Chargement de la liste des garages...');
-      try {
-        const qs = await getDocs(collection(db,'garages'));
-        garagesCache = await Promise.all(qs.docs.map(async (d) => {
-          const root = d.data() || {};
-          let main = {};
-          try {
-            const mainSnap = await getDoc(doc(db,'garages',d.id,'settings','main'));
-            if (mainSnap.exists()) main = mainSnap.data() || {};
-          } catch(err) {}
-          return { id:d.id, ...root, ...main };
-        }));
-        renderGarages(garagesCache);
-        if(selectedGarageIdForPages){ await loadGaragePages(selectedGarageIdForPages); }
-        setPageStatus(`Garages chargés: ${garagesCache.length}`);
-      } catch(e) {
-        console.error('loadGarages', e);
-        $('garagesList').innerHTML = `<div class="error">Impossible de charger les garages.<br>Erreur: ${e?.code || ''} ${e?.message || e}<br><br>Vérifie que les règles Firestore sont publiées et que ton compte a bien <b>role: "superadmin"</b> dans <b>staff/{uid}</b>.</div>`;
-        setPageStatus('Erreur chargement garages');
-      }
-    }
-
-    async function saveGarage(){
-      try{
-        const data = formData();
-        if(!data.name) throw new Error('Nom obligatoire.');
-        const garageId = data.garageId || data.slug;
-        if(!garageId) throw new Error('Slug / ID garage obligatoire.');
-        const isEdit = Boolean(data.garageId);
-        setMsg('hint', isEdit ? 'Modification en cours...' : 'Création en cours...');
-        setPageStatus(isEdit ? 'Modification du garage...' : 'Création du garage...');
-
-        const garageRef = doc(db,'garages',garageId);
-        const exists = await getDoc(garageRef);
-        if(!isEdit && exists.exists()) throw new Error('Ce garage existe déjà.');
-        if(isEdit && !exists.exists()) throw new Error('Garage introuvable.');
-
-        const payload = {
-          name: data.name,
-          garageName: data.name,
-          slug: garageId,
-          phone: data.phone,
-          garagePhone: data.phone,
-          email: data.email,
-          garageEmail: data.email,
-          address: data.address,
-          garageAddress: data.address,
-          logoUrl: data.logoUrl,
-          garageLogoUrl: data.logoUrl,
-          tpsNumber: data.tpsNumber,
-          tvqNumber: data.tvqNumber,
-          garageTpsNo: data.tpsNumber,
-          garageTvqNo: data.tvqNumber,
-          tpsRate: data.tpsRate,
-          tvqRate: data.tvqRate,
-          laborRate: data.laborRate,
-          cardFeeRate: data.cardFeeRate,
-          plan: data.plan,
-          status: data.status,
-          active: data.active,
-          adminName: data.adminName,
-          adminEmail: data.adminEmail,
-          notes: data.notes,
-          updatedAt: serverTimestamp(),
-          updatedBy: me.uid
-        };
-        if(!isEdit){ payload.createdAt = serverTimestamp(); payload.createdBy = me.uid; }
-
-        await setDoc(garageRef, payload, { merge:true });
-        await setDoc(doc(db,'garages',garageId,'settings','main'), {
-          garageName: data.name,
-          garageId,
-          garageAddress: data.address,
-          address: data.address,
-          garagePhone: data.phone,
-          phone: data.phone,
-          garageEmail: data.email,
-          email: data.email,
-          logoUrl: data.logoUrl,
-          garageLogoUrl: data.logoUrl,
-          garageTpsNo: data.tpsNumber,
-          garageTvqNo: data.tvqNumber,
-          tpsNumber: data.tpsNumber,
-          tvqNumber: data.tvqNumber,
-          tpsRate: data.tpsRate,
-          tvqRate: data.tvqRate,
-          laborRate: data.laborRate,
-          cardFeeRate: data.cardFeeRate,
-          plan: data.plan,
-          status: data.status,
-          active: data.active,
-          adminName: data.adminName,
-          adminEmail: data.adminEmail,
-          notes: data.notes,
-          enabledPages: ((garagesCache.find(x => x.id === garageId)?.enabledPages) || defaultEnabledPages),
-          updatedAt: serverTimestamp(),
-          updatedBy: me.uid
-        }, { merge:true });
-        await setDoc(doc(db,'garages',garageId,'settings','counters'), {
-          garageId,
-          invoiceNext: 1,
-          updatedAt: serverTimestamp(),
-          updatedBy: me.uid
-        }, { merge:true });
-
-        setMsg('ok', isEdit ? 'Garage modifié avec succès.' : 'Garage créé avec succès.');
-        setPageStatus(isEdit ? 'Garage modifié avec succès' : 'Garage créé avec succès');
-        await loadGarages();
-        await loadGaragePages(garageId);
-        await renderGarageQr(garageId);
-        resetForm();
-      }catch(e){
-        console.error(e);
-        setMsg('error', e?.code ? `${e.code} — ${e.message || 'Erreur.'}` : (e.message || 'Erreur.'));
-        setPageStatus('Erreur sauvegarde garage');
-      }
-    }
-
-    async function deleteGarage(garageId){
-      if(!confirm(`Supprimer le garage ${garageId} ?
-
-Attention: cela supprime seulement le document principal du garage. Les sous-collections éventuelles devront être supprimées séparément.`)) return;
-      try {
-        setPageStatus(`Suppression du garage ${garageId}...`);
-        await deleteDoc(doc(db,'garages',garageId));
-        if($('editingGarageId').value === garageId) resetForm();
-        setMsg('ok', `Garage ${garageId} supprimé.`);
-        await loadGarages();
-        setPageStatus('Garage supprimé');
-      } catch(e) {
-        console.error(e);
-        setMsg('error', e?.message || 'Erreur suppression garage.');
-        setPageStatus('Erreur suppression garage');
-      }
-    }
-
-    $('gLogoFile').addEventListener('change', async (e) => {
+    $('gLogoFile')?.addEventListener('change', async (e) => {
       const file = e.target?.files?.[0];
       if (!file) return;
       try { updateSuperLogoPreview(URL.createObjectURL(file)); } catch(_) {}
     });
-    $('btnUploadLogo').addEventListener('click', async () => {
-      try { setMsg('hint', 'Upload du logo en cours...'); await uploadSuperLogoFile(); setMsg('ok', 'Logo uploadé.'); }
-      catch(e) { console.error(e); setMsg('error', e.message || 'Erreur upload logo.'); }
+    $('btnUploadLogo')?.addEventListener('click', async () => {
+      try {
+        setMsg('hint', 'Upload du logo en cours...');
+        await uploadSuperLogoFile();
+        setMsg('ok', 'Logo uploadé. Tu peux maintenant créer le garage.');
+      } catch(e) {
+        console.error(e);
+        setMsg('error', e.message || 'Erreur upload logo.');
+      }
     });
-
-    $('btnSave').addEventListener('click', saveGarage);
-    $('btnCancelEdit').addEventListener('click', resetForm);
-    $('btnReload').addEventListener('click', loadGarages);
-    $('btnReloadTop').addEventListener('click', loadGarages);
-    $('btnReloadList').addEventListener('click', loadGarages);
-    $('gName').addEventListener('input', () => { if(!$('editingGarageId').value && !$('gSlug').value.trim()) $('gSlug').value = slugify($('gName').value); });
-    $('gLogo').addEventListener('input', (e) => updateSuperLogoPreview(e.target.value));
-    $('btnSavePages').addEventListener('click', saveGaragePages);
-    $('btnPagesAll').addEventListener('click', () => applyPagePreset('all'));
-    $('btnPagesBasic').addEventListener('click', () => applyPagePreset('basic'));
-    $('btnPagesPro').addEventListener('click', () => applyPagePreset('pro'));
-    $('btnDownloadQr').addEventListener('click', downloadGarageQr);
-    $('btnCopyQrLink').addEventListener('click', async () => { try { await copyGarageQrLink(); } catch(e){ console.error(e); setMsg('error', e?.message || 'Erreur copie lien QR.'); } });
-    $('btnCopyQrImage').addEventListener('click', async () => { try { await copyGarageQrImage(); } catch(e){ console.error(e); setMsg('error', e?.message || 'Erreur copie image QR.'); } });
-    $('btnLogout').addEventListener('click', async () => {      try { await signOut(auth); window.location.replace('./index.html'); }
-      catch(e){ console.error(e); setMsg('error', 'Erreur déconnexion.'); }
-    });
+    $('btnCreate')?.addEventListener('click', createGarage);
+    $('btnReload')?.addEventListener('click', () => loadGarages().catch((e)=>{console.error(e); setPageStatus('Erreur chargement garages'); $('garagesList').innerHTML = `<div class="error">${e.message || e}</div>`;}));
+    $('gName')?.addEventListener('input', () => { if(!$('gSlug').value.trim()) $('gSlug').value = slugify($('gName').value); });
 
     onAuthStateChanged(auth, async (user) => {
-      setPageStatus('Vérification de la session...');
-      if(!user){ window.location.replace('./index.html'); return; }
+      if(!user){
+        setPageStatus('Aucune session active — retour à l’accueil.');
+        window.location.replace('./index.html');
+        return;
+      }
       me = user;
-      try{
-        myStaff = await loadStaff(user.uid);
+      try {
+        const myStaff = await loadStaff(user.uid);
         $('who').textContent = `${myStaff.displayName || user.email} — rôle: ${myStaff.role || '-'} — garage: ${myStaff.garageId || '-'}`;
-        if(myStaff.role !== 'superadmin'){ setPageStatus('Compte non superadmin'); window.location.replace('./index.html'); return; }
-        setPageStatus('Session superadmin validée');
-        resetForm();
-        setPagesFormState(defaultEnabledPages);
-        setPagesGarageLabel('Sélectionne un garage dans la liste.');
-        await renderGarageQr('');
+        if(myStaff.role !== 'superadmin'){
+          setPageStatus('Ce compte n'est pas superadmin.');
+          window.location.replace('./index.html');
+          return;
+        }
         await loadGarages();
-      }catch(e){
+      } catch(e) {
         console.error(e);
-        $('garagesList').innerHTML = `<div class="error">${e?.code || ''} ${e.message || 'Erreur chargement staff.'}</div>`;
-        setPageStatus('Erreur lecture staff');
+        setPageStatus('Erreur initialisation superadmin');
+        $('garagesList').innerHTML = `<div class="error">${e.message || 'Erreur chargement staff.'}</div>`;
       }
     });
-  </script>
-<script>
-(function() {
-  let deferredPrompt = null;
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-
-  function ensureInstallButton() {
-    if (document.getElementById('pwaInstallBtn')) return document.getElementById('pwaInstallBtn');
-    const btn = document.createElement('button');
-    btn.id = 'pwaInstallBtn';
-    btn.type = 'button';
-    btn.textContent = 'Installer l’app';
-    btn.setAttribute('aria-label', 'Installer l’application');
-    btn.style.cssText = [
-      'position:fixed','right:16px','bottom:16px','z-index:99999','padding:12px 16px',
-      'border:none','border-radius:999px','background:#0b1d4a','color:#fff','font-weight:700',
-      'box-shadow:0 10px 30px rgba(0,0,0,.25)','cursor:pointer','display:none'
-    ].join(';');
-    btn.addEventListener('click', async function() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        try { await deferredPrompt.userChoice; } catch (e) {}
-        deferredPrompt = null;
-        btn.style.display = 'none';
-      } else {
-        alert('Sur Android: ouvre le menu du navigateur puis appuie sur Installer l’app ou Ajouter à l’écran d’accueil.');
-      }
-    });
-    document.body.appendChild(btn);
-    return btn;
+  } catch (e) {
+    console.error(e);
+    setPageStatus('Erreur de chargement JavaScript');
+    const list = $('garagesList');
+    if (list) list.innerHTML = `<div class="error">${e.message || e}</div>`;
   }
-
-  window.addEventListener('beforeinstallprompt', function(e) {
-    e.preventDefault();
-    deferredPrompt = e;
-    if (!isStandalone) ensureInstallButton().style.display = 'block';
-  });
-
-  window.addEventListener('appinstalled', function() {
-    const btn = document.getElementById('pwaInstallBtn');
-    if (btn) btn.style.display = 'none';
-  });
-
-  window.addEventListener('load', function() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('service-worker.js').catch(function(){});
-    }
-    if (!isStandalone && /Android/i.test(navigator.userAgent)) {
-      setTimeout(function() {
-        if (!deferredPrompt) ensureInstallButton().style.display = 'block';
-      }, 2500);
-    }
-  });
-})();
 </script>
-
 </body>
 </html>

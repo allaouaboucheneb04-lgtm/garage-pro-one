@@ -669,26 +669,18 @@ body.dark .promo-check-pro{
 /* Repairs - Mobile cards */
 .repair-cards{ display:flex; flex-direction:column; gap:12px; }
 .repair-card{
-  background:#ffffff;
-  border:1px solid #e5e7eb;
-  border-radius:16px;
-  padding:14px;
-  box-shadow:0 10px 24px rgba(15,23,42,0.08);
+  background: rgba(17,17,17,0.9);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 .repair-top{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
-.repair-title{ font-weight:800; font-size:15px; letter-spacing:.2px; color:#0f172a; }
-.repair-sub{ margin-top:6px; color:#475569; font-size:13px; line-height:1.35; }
+.repair-title{ font-weight:800; font-size:15px; letter-spacing:.2px; }
+.repair-sub{ margin-top:6px; color: rgba(255,255,255,0.75); font-size:13px; line-height:1.35; }
 .repair-meta{ margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
-.repair-amount{ font-weight:900; font-size:16px; color:#0f172a; }
+.repair-amount{ font-weight:900; font-size:16px; }
 .repair-actions{ margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
-body.dark .repair-card{
-  background:rgba(17,17,17,0.9);
-  border:1px solid rgba(255,255,255,0.08);
-  box-shadow:0 10px 30px rgba(0,0,0,0.35);
-}
-body.dark .repair-title,
-body.dark .repair-amount{ color:#f8fafc; }
-body.dark .repair-sub{ color:rgba(255,255,255,0.75); }
 
 /* Revenue - Mobile cards */
 .rev-cards{ display:flex; flex-direction:column; gap:12px; margin-top:14px; }
