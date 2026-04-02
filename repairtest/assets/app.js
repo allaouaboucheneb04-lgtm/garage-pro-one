@@ -1448,18 +1448,15 @@ const btnRevExport = $("btnRevExport");
 =========== */
 const btnNewPartsExpense = $("btnNewPartsExpense");
 const btnPartsExpExport = $("btnPartsExpExport");
-const pexSearchEl = $("pexSearch");
 const pexPresetEl = $("pexPreset");
 const pexFromEl = $("pexFrom");
 const pexToEl = $("pexTo");
-const pexSupplierFilterEl = $("pexSupplierFilter");
 const pexPayFilterEl = $("pexPayFilter");
 const pexSubtotalEl = $("pexSubtotal");
 const pexTaxEl = $("pexTax");
 const pexTotalEl = $("pexTotal");
 const pexCountEl = $("pexCount");
 const pexTbody = $("pexTbody");
-const pexCardsEl = $("pexCards");
 
 /* ============
    Suppliers view
@@ -1469,74 +1466,33 @@ const suppliersCountEl = $("suppliersCount");
 const suppliersActiveCountEl = $("suppliersActiveCount");
 const suppliersPhoneCountEl = $("suppliersPhoneCount");
 const suppliersEmailCountEl = $("suppliersEmailCount");
-const suppliersCardsEl = $("suppliersCards");
-const supSearchEl = $("supSearch");
-const supCategoryFilterEl = $("supCategoryFilter");
-const supStatusFilterEl = $("supStatusFilter");
-const supplierCategoryListEl = $("supplierCategoryList");
+const suppliersTbody = $("suppliersTbody");
 
 function renderSuppliers(){
   if(!$('viewSuppliers')) return;
-  const allRows = Array.isArray(suppliers) ? [...suppliers] : [];
-  const q = String(supSearchEl && supSearchEl.value || '').trim().toLowerCase();
-  const cat = String(supCategoryFilterEl && supCategoryFilterEl.value || '').trim().toLowerCase();
-  const status = String(supStatusFilterEl && supStatusFilterEl.value || '').trim().toLowerCase();
-
-  const categories = [...new Set(allRows.map(x=>String(x.category||'').trim()).filter(Boolean))]
-    .sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base'}));
-  if(supplierCategoryListEl){
-    supplierCategoryListEl.innerHTML = categories.map(x=>`<option value="${safe(x)}"></option>`).join('');
-  }
-
-  let rows = allRows.filter(x=>{
-    const hay = [x.name, x.category, x.contact, x.phone, x.email, x.city, x.note]
-      .map(v=>String(v||'').toLowerCase()).join(' ');
-    if(q && !hay.includes(q)) return false;
-    if(cat && String(x.category||'').trim().toLowerCase() !== cat) return false;
-    if(status==='active' && x.active === false) return false;
-    if(status==='inactive' && x.active !== false) return false;
-    return true;
-  });
-
+  const rows = Array.isArray(suppliers) ? [...suppliers] : [];
   rows.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''), 'fr', {sensitivity:'base'}));
-  if(suppliersCountEl) suppliersCountEl.textContent = String(allRows.length);
-  if(suppliersActiveCountEl) suppliersActiveCountEl.textContent = String(allRows.filter(x=>x.active !== false).length);
-  if(suppliersPhoneCountEl) suppliersPhoneCountEl.textContent = String(allRows.filter(x=>String(x.phone||'').trim()).length);
-  if(suppliersEmailCountEl) suppliersEmailCountEl.textContent = String(allRows.filter(x=>String(x.email||'').trim()).length);
-  if(!suppliersCardsEl) return;
+  if(suppliersCountEl) suppliersCountEl.textContent = String(rows.length);
+  if(suppliersActiveCountEl) suppliersActiveCountEl.textContent = String(rows.filter(x=>x.active !== false).length);
+  if(suppliersPhoneCountEl) suppliersPhoneCountEl.textContent = String(rows.filter(x=>String(x.phone||'').trim()).length);
+  if(suppliersEmailCountEl) suppliersEmailCountEl.textContent = String(rows.filter(x=>String(x.email||'').trim()).length);
+  if(!suppliersTbody) return;
   if(rows.length===0){
-    suppliersCardsEl.innerHTML = '<div class="supplier-empty">Aucun fournisseur trouvé.</div>';
+    suppliersTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucun fournisseur.</td></tr>';
     return;
   }
-  suppliersCardsEl.innerHTML = rows.map(x=>{
-    const phone = String(x.phone||'').trim();
-    const email = String(x.email||'').trim();
-    const city = String(x.city||'').trim();
-    const contact = String(x.contact||'').trim();
-    const note = String(x.note||'').trim();
-    return `<article class="supplier-card-item">
-      <div class="supplier-card-top">
-        <div class="supplier-name-cell">
-          <b class="supplier-card-title">${safe(x.name||'')}</b>
-          <div class="supplier-chip-row">
-            <span class="supplier-status ${x.active === false ? 'off' : 'on'}">${x.active === false ? 'Inactif' : 'Actif'}</span>
-            <span class="supplier-category-badge">${safe(x.category||'Non classé')}</span>
-          </div>
-        </div>
-      </div>
-      <div class="supplier-card-grid">
-        <div class="supplier-card-field"><span class="muted">Contact</span><strong>${safe(contact || '—')}</strong></div>
-        <div class="supplier-card-field"><span class="muted">Ville</span><strong>${safe(city || '—')}</strong></div>
-        <div class="supplier-card-field"><span class="muted">Téléphone</span>${phone ? `<a href="tel:${safe(phone)}">${safe(phone)}</a>` : '<span>—</span>'}</div>
-        <div class="supplier-card-field"><span class="muted">Email</span>${email ? `<a href="mailto:${safe(email)}">${safe(email)}</a>` : '<span>—</span>'}</div>
-        <div class="supplier-card-field supplier-card-note"><span class="muted">Note</span><span>${safe(note || '—')}</span></div>
-      </div>
-      <div class="supplier-card-actions no-print">
-        <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
-        <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
-      </div>
-    </article>`;
-  }).join('');
+  suppliersTbody.innerHTML = rows.map(x=>`<tr>
+    <td><b>${safe(x.name||'')}</b></td>
+    <td>${safe(x.contact||'')}</td>
+    <td>${safe(x.phone||'')}</td>
+    <td>${safe(x.email||'')}</td>
+    <td>${safe(x.city||'')}</td>
+    <td>${safe(x.note||'')}</td>
+    <td class="no-print" style="white-space:nowrap">
+      <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
+      <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
+    </td>
+  </tr>`).join('');
 }
 
 function supplierOptionsHtml(selected=''){
@@ -1578,9 +1534,6 @@ function openSupplierModal(existing){
         </div>
       </div>
 
-      <label>Catégorie fournisseur</label>
-      <input class="input" name="category" list="supplierCategoryList" placeholder="Ex: pièces, pneus, peinture" value="${safe(x.category||'')}" />
-
       <label>Adresse</label>
       <input class="input" name="address" placeholder="Adresse" value="${safe(x.address||'')}" />
 
@@ -1611,7 +1564,6 @@ function openSupplierModal(existing){
       city: String(fd.get('city')||'').trim(),
       address: String(fd.get('address')||'').trim(),
       note: String(fd.get('note')||'').trim(),
-      category: String(fd.get('category')||'').trim(),
       active: fd.get('active') === 'on',
       updatedAt: serverTimestamp(),
     };
@@ -2794,45 +2746,24 @@ function filterPartsExpenses(){
     to = pexToEl && pexToEl.value ? new Date(pexToEl.value+"T23:59:59") : null;
   }
   const pay = pexPayFilterEl ? String(pexPayFilterEl.value||"").toLowerCase() : "";
-  const supplier = pexSupplierFilterEl ? String(pexSupplierFilterEl.value||"").trim().toLowerCase() : "";
-  const q = pexSearchEl ? String(pexSearchEl.value||"").trim().toLowerCase() : "";
   return list.filter(x=>{
     const d = _partsExpDateAsDate(x);
     if(from && d < from) return false;
     if(to && d > to) return false;
-    if(pay && String(x.paymentMethod||"").toLowerCase() !== pay) return false;
-    if(supplier && String(x.supplier||"").trim().toLowerCase() !== supplier) return false;
-    if(q){
-      const hay = [
-        x.supplier,
-        x.description,
-        x.supplierCategory,
-        invPaymentLabel(x.paymentMethod),
-        x.date
-      ].map(v=>String(v||"").toLowerCase()).join(" ");
-      if(!hay.includes(q)) return false;
-    }
+    if(pay) return String(x.paymentMethod||"").toLowerCase() === pay;
     return true;
   });
 }
 
 function renderPartsExpenses(){
   if(!$("viewPartsExpenses")) return;
-  const canManage = currentRole === "admin" || currentRole === "superadmin";
-  if(!canManage){
-    if(pexTbody) pexTbody.innerHTML = '<tr><td class="muted" colspan="10">Accès réservé à l'administrateur.</td></tr>';
-    if(pexCardsEl) pexCardsEl.innerHTML = '<div class="parts-exp-empty">Accès réservé à l'administrateur.</div>';
+  if(currentRole !== "admin"){
+    if(pexTbody) pexTbody.innerHTML = '<tr><td class="muted" colspan="8">Accès réservé à l\'administrateur.</td></tr>';
     if(pexSubtotalEl) pexSubtotalEl.textContent = money(0);
     if(pexTaxEl) pexTaxEl.textContent = money(0);
     if(pexTotalEl) pexTotalEl.textContent = money(0);
     if(pexCountEl) pexCountEl.textContent = "0";
     return;
-  }
-
-  if(pexSupplierFilterEl){
-    const selected = String(pexSupplierFilterEl.value||"");
-    const names = [...new Set((Array.isArray(partsExpenses)?partsExpenses:[]).map(x=>String(x.supplier||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
-    pexSupplierFilterEl.innerHTML = `<option value="">Tous</option>` + names.map(n=>`<option value="${escapeHtml(n)}" ${selected===n?'selected':''}>${escapeHtml(n)}</option>`).join("");
   }
 
   const rows = filterPartsExpenses().sort((a,b)=> _partsExpDateAsDate(b) - _partsExpDateAsDate(a));
@@ -2848,88 +2779,39 @@ function renderPartsExpenses(){
   if(pexTotalEl) pexTotalEl.textContent = money(total);
   if(pexCountEl) pexCountEl.textContent = String(rows.length);
 
-  if(!rows.length){
-    if(pexTbody) pexTbody.innerHTML = '<tr><td class="muted" colspan="10">Aucune dépense.</td></tr>';
-    if(pexCardsEl) pexCardsEl.innerHTML = '<div class="parts-exp-empty">Aucune dépense trouvée.</div>';
+  if(!pexTbody) return;
+  if(rows.length===0){
+    pexTbody.innerHTML = '<tr><td class="muted" colspan="8">Aucune dépense.</td></tr>';
     return;
   }
 
-  if(pexTbody){
-    pexTbody.innerHTML = rows.map(x=>{
-      const d = _partsExpDateAsDate(x);
-      const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
-      const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
-      const taxes = (x.tpsAmount!=null || x.tvqAmount!=null)?(tps+tvq):Number(x.taxTotal||0);
-      return `<tr>
-        <td>${isoDate(d)}</td>
-        <td>${safe(x.supplier||"—")}</td>
-        <td>${safe(x.description||"—")}</td>
-        <td>${safe(invPaymentLabel(x.paymentMethod))}</td>
-        <td style="text-align:right">${money(x.subtotal||0)}</td>
-        <td style="text-align:right">${money(tps)}</td>
-        <td style="text-align:right">${money(tvq)}</td>
-        <td style="text-align:right">${money(taxes)}</td>
-        <td style="text-align:right"><b>${money(x.total||0)}</b></td>
-        <td class="no-print" style="white-space:nowrap">
-          <button class="btn btn-ghost btn-small" onclick="window.__editPartsExpense('${x.id}')">Modifier</button>
-          <button class="btn btn-ghost btn-small" onclick="window.__deletePartsExpense('${x.id}')">Supprimer</button>
-        </td>
-      </tr>`;
-    }).join("");
-  }
-
-  if(pexCardsEl){
-    pexCardsEl.innerHTML = rows.map(x=>{
-      const d = _partsExpDateAsDate(x);
-      const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
-      const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
-      const taxes = (x.tpsAmount!=null || x.tvqAmount!=null)?(tps+tvq):Number(x.taxTotal||0);
-      const pay = invPaymentLabel(x.paymentMethod);
-      const cat = x.supplierCategory || ((Array.isArray(suppliers)?suppliers:[]).find(s=>String(s.name||'').trim().toLowerCase()===String(x.supplier||'').trim().toLowerCase())||{}).category || '';
-      return `<article class="parts-exp-card">
-        <div class="parts-exp-card-top">
-          <div>
-            <div class="parts-exp-card-title">${safe(x.supplier||'Sans fournisseur')}</div>
-            <div class="parts-exp-meta">
-              <span class="parts-exp-badge">${safe(pay||'Autre')}</span>
-              ${cat ? `<span class="parts-exp-badge muted">${safe(cat)}</span>` : ''}
-            </div>
-          </div>
-          <div style="text-align:right">
-            <div class="muted">Total TTC</div>
-            <div style="font-size:20px;font-weight:800">${money(x.total||0)}</div>
-          </div>
-        </div>
-        <div class="parts-exp-card-grid">
-          <div class="parts-exp-field"><span class="muted">Date</span><strong>${isoDate(d)}</strong></div>
-          <div class="parts-exp-field"><span class="muted">Montant HT</span><strong>${money(x.subtotal||0)}</strong></div>
-          <div class="parts-exp-field"><span class="muted">TPS</span><strong>${money(tps)}</strong></div>
-          <div class="parts-exp-field"><span class="muted">TVQ</span><strong>${money(tvq)}</strong></div>
-          <div class="parts-exp-field"><span class="muted">Taxes</span><strong>${money(taxes)}</strong></div>
-          <div class="parts-exp-field"><span class="muted">Paiement</span><strong>${safe(pay)}</strong></div>
-          <div class="parts-exp-field full"><span class="muted">Description</span><strong>${safe(x.description||'—')}</strong></div>
-        </div>
-        <div class="parts-exp-actions">
-          <button class="btn btn-ghost" onclick="window.__editPartsExpense('${x.id}')">Modifier</button>
-          <button class="btn btn-ghost" onclick="window.__deletePartsExpense('${x.id}')">Supprimer</button>
-        </div>
-      </article>`;
-    }).join('');
-  }
+  pexTbody.innerHTML = rows.map(x=>{
+    const d = _partsExpDateAsDate(x);
+    const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
+    const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
+    const taxes = (x.tpsAmount!=null || x.tvqAmount!=null)?(tps+tvq):Number(x.taxTotal||0);
+    return `<tr>
+      <td>${isoDate(d)}</td>
+      <td>${safe(x.supplier||"")}</td>
+      <td>${safe(x.description||"")}</td>
+      <td>${safe(invPaymentLabel(x.paymentMethod))}</td>
+      <td style="text-align:right">${money(x.subtotal||0)}</td>
+      <td style="text-align:right">${money(tps)}</td>
+      <td style="text-align:right">${money(tvq)}</td>
+      <td style="text-align:right">${money(taxes)}</td>
+      <td style="text-align:right"><b>${money(x.total||0)}</b></td
+      <td class="no-print" style="white-space:nowrap">
+        <button class="btn btn-ghost btn-small" onclick="window.__editPartsExpense('${x.id}')">Modifier</button>
+        <button class="btn btn-ghost btn-small" onclick="window.__deletePartsExpense('${x.id}')">Supprimer</button>
+      </td>
+    </tr>`;
+  }).join("");
 }
 
 function openPartsExpenseModal(existing){
   if(currentRole !== "admin" && currentRole !== "superadmin") return;
   const x = existing || {};
   const today = isoDate(new Date());
-  const rates = {
-    tps: Number(settings?.tpsRate ?? 0.05),
-    tvq: Number(settings?.tvqRate ?? 0.09975)
-  };
-  const splitExisting = splitTaxTotal(Number(x.taxTotal||0));
-  const existingTps = Number(x.tpsAmount != null ? x.tpsAmount : splitExisting.tps);
-  const existingTvq = Number(x.tvqAmount != null ? x.tvqAmount : splitExisting.tvq);
-  const existingTotal = Number(x.total != null ? x.total : (Number(x.subtotal||0) + existingTps + existingTvq));
   const html = `
     <form class="form" id="formPartsExpense">
       <label>Date</label>
@@ -2942,29 +2824,24 @@ function openPartsExpenseModal(existing){
       <label>Description</label>
       <input class="input" name="description" placeholder="Ex: Plaquettes + disques" value="${safe(x.description||"")}" />
 
-      <label>Catégorie fournisseur</label>
-      <input class="input" name="supplierCategory" placeholder="Ex: Pièces, pneus, outils" value="${safe(x.supplierCategory||"")}" />
-
       <div class="row" style="gap:10px; flex-wrap:wrap">
         <div style="flex:1; min-width:160px">
           <label>Montant HT</label>
-          <input class="input" name="subtotal" type="number" min="0" step="0.01" required value="${Number(x.subtotal||0)}" />
+          <input class="input" name="subtotal" type="number" step="0.01" required value="${Number(x.subtotal||0)}" />
         </div>
         <div style="flex:1; min-width:160px">
-          <label>TPS (${pct(rates.tps)})</label>
-          <input class="input" name="tpsAmount" type="number" step="0.01" readonly value="${existingTps.toFixed(2)}" />
+          <label>TPS (5%)</label>
+          <input class="input" name="tpsAmount" type="number" step="0.01" required value="${Number(x.tpsAmount!=null?x.tpsAmount:splitTaxTotal(Number(x.taxTotal||0)).tps)}" />
         </div>
         <div style="flex:1; min-width:160px">
-          <label>TVQ (${pct(rates.tvq)})</label>
-          <input class="input" name="tvqAmount" type="number" step="0.01" readonly value="${existingTvq.toFixed(2)}" />
+          <label>TVQ (9.975%)</label>
+          <input class="input" name="tvqAmount" type="number" step="0.01" required value="${Number(x.tvqAmount!=null?x.tvqAmount:splitTaxTotal(Number(x.taxTotal||0)).tvq)}" />
         </div>
         <div style="flex:1; min-width:160px">
           <label>Total TTC</label>
-          <input class="input" name="total" type="number" step="0.01" readonly value="${existingTotal.toFixed(2)}" />
+          <input class="input" name="total" type="number" step="0.01" required value="${Number(x.total||0)}" />
         </div>
       </div>
-
-      <small class="muted" style="display:block;margin-top:-4px">Les taxes se calculent automatiquement selon les taux du garage.</small>
 
       <label>Paiement</label>
       <select class="input" name="paymentMethod">
@@ -2979,40 +2856,13 @@ function openPartsExpenseModal(existing){
         <button class="btn btn-ghost" type="button" data-modal-close>Annuler</button>
       </div>
     </form>
+    <small class="muted">Astuce: si tu veux, je peux ajouter TPS et TVQ séparés (2 champs) pour des rapports encore plus précis.</small>
   `;
 
   showModal(existing ? "Modifier dépense" : "Nouvelle dépense", html);
 
   const form = modalBody.querySelector("#formPartsExpense");
   if(!form) return;
-
-  const supplierInput = form.elements["supplier"];
-  const categoryInput = form.elements["supplierCategory"];
-  const subtotalInput = form.elements["subtotal"];
-  const tpsInput = form.elements["tpsAmount"];
-  const tvqInput = form.elements["tvqAmount"];
-  const totalInput = form.elements["total"];
-
-  function syncSupplierCategory(){
-    const name = String(supplierInput?.value||"").trim().toLowerCase();
-    if(!name || !categoryInput || String(categoryInput.value||"").trim()) return;
-    const found = (Array.isArray(suppliers)?suppliers:[]).find(s=>String(s.name||"").trim().toLowerCase()===name);
-    if(found?.category) categoryInput.value = found.category;
-  }
-
-  function recalcTotal(){
-    const subtotal = Number(subtotalInput?.value||0);
-    const tps = subtotal * rates.tps;
-    const tvq = subtotal * rates.tvq;
-    if(tpsInput) tpsInput.value = tps.toFixed(2);
-    if(tvqInput) tvqInput.value = tvq.toFixed(2);
-    if(totalInput) totalInput.value = (subtotal + tps + tvq).toFixed(2);
-  }
-
-  supplierInput?.addEventListener("change", syncSupplierCategory);
-  subtotalInput?.addEventListener("input", recalcTotal);
-  recalcTotal();
-
   form.addEventListener("submit", async (e)=>{
     e.preventDefault();
     const fd = new FormData(form);
@@ -3020,7 +2870,6 @@ function openPartsExpenseModal(existing){
       date: String(fd.get("date")||"").trim(),
       supplier: String(fd.get("supplier")||"").trim(),
       description: String(fd.get("description")||"").trim(),
-      supplierCategory: String(fd.get("supplierCategory")||"").trim(),
       subtotal: Number(fd.get("subtotal")||0),
       tpsAmount: Number(fd.get("tpsAmount")||0),
       tvqAmount: Number(fd.get("tvqAmount")||0),
@@ -3068,16 +2917,15 @@ function exportPartsExpensesCSV(){
     if(currentRole !== "admin" && currentRole !== "superadmin") return;
     const rows = filterPartsExpenses().sort((a,b)=> _partsExpDateAsDate(a) - _partsExpDateAsDate(b));
     const lines = [];
-    lines.push(["Date","Fournisseur","Catégorie","Description","Paiement","HT","TPS","TVQ","Taxes","TTC"].join(","));
+    lines.push(["Date","Fournisseur","Description","Paiement","HT","Taxes","TTC"].join(","));
     for(const x of rows){
       const dt = isoDate(_partsExpDateAsDate(x));
       const supplier = String(x.supplier||"").replaceAll('"','""');
       const desc = String(x.description||"").replaceAll('"','""');
-      const category = String(x.supplierCategory||"").replaceAll('"','""');
       const pm = String(invPaymentLabel(x.paymentMethod)).replaceAll('"','""');
       const tps = (x.tpsAmount!=null)?Number(x.tpsAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tps;
       const tvq = (x.tvqAmount!=null)?Number(x.tvqAmount||0):splitTaxTotal(Number(x.taxTotal||0)).tvq;
-      lines.push([dt, `"${supplier}"`, `"${category}"`, `"${desc}"`, `"${pm}"`, Number(x.subtotal||0), tps, tvq, Number(x.taxTotal||0), Number(x.total||0)].join(","));
+      lines.push([dt, `"${supplier}"`, `"${desc}"`, `"${pm}"`, Number(x.subtotal||0), tps, tvq, Number(x.taxTotal||0), Number(x.total||0)].join(","));
     }
     downloadText("depenses_pieces.csv", lines.join("\n"));
     showToast("CSV exporté ✅");
@@ -3644,8 +3492,6 @@ if(revPresetEl && revFromEl && revToEl){
     });
   }
   if(pexPayFilterEl) pexPayFilterEl.addEventListener("change", ()=>renderPartsExpenses());
-  if(pexSupplierFilterEl) pexSupplierFilterEl.addEventListener("change", ()=>renderPartsExpenses());
-  if(pexSearchEl) pexSearchEl.addEventListener("input", ()=>renderPartsExpenses());
   if(pexFromEl) pexFromEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
   if(pexToEl) pexToEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
   if(btnNewPartsExpense) btnNewPartsExpense.addEventListener("click", ()=>openPartsExpenseModal(null));
