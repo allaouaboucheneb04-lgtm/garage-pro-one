@@ -49,14 +49,21 @@
     .foot{padding:16px 2px 28px;text-align:center;color:var(--muted);font-size:13px}
     @media (max-width:760px){.grid,.preview-grid{grid-template-columns:1fr}.hero{align-items:flex-start;justify-content:flex-start}.hero h1{font-size:24px}.wrap{padding:14px}.panel{padding:16px}.section{padding:16px}.vin-row{flex-direction:column}}
   </style>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AB Garage Pro">
+<meta name="theme-color" content="#0b1d4a">
+
 </head>
 <body>
   <div class="wrap">
     <div class="hero">
-      <img src="./assets/logo.png" alt="Garage Pro One" />
+      <img id="heroLogo" src="./assets/logo.png" alt="Garage Pro One" />
       <div>
-        <h1>Garage Pro One</h1>
-        <p>Inscription client et véhicule depuis votre téléphone</p>
+        <h1 id="heroTitle">Garage Pro One</h1>
+        <p id="heroSubtitle">Inscription client et véhicule depuis votre téléphone</p>
       </div>
     </div>
 
@@ -146,20 +153,30 @@
       <div class="status" id="formStatus"></div>
     </div>
 
-    <div class="foot">Page publique d’inscription client · Garage Pro One</div>
+    <div class="foot" id="footText">Page publique d’inscription client · Garage Pro One</div>
   </div>
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-    import { getFirestore, collection, addDoc, serverTimestamp, doc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, serverTimestamp, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
     const app = initializeApp(window.FIREBASE_CONFIG);
     const db = getFirestore(app);
 
     const $ = (id) => document.getElementById(id);
     const statusEl = $('formStatus');
+
+    const heroTitle = $('heroTitle');
+    const heroSubtitle = $('heroSubtitle');
+    const heroLogo = $('heroLogo');
+    const footText = $('footText');
+    let garageSettings = null;
+
     const urlParams = new URLSearchParams(window.location.search);
     const garageId = String(urlParams.get('garageId') || urlParams.get('g') || '').trim();
+    if(!garageId){
+      setTimeout(() => showStatus('info', "Lien incomplet : ajoute ?garageId=ton-garage dans l’URL."), 0);
+    }
     function garageCol(name){
       if(!garageId) throw new Error('missing-garageId');
       return collection(doc(db, 'garages', garageId), name);
@@ -168,6 +185,28 @@
     function showStatus(type, text){
       statusEl.className = 'status ' + type;
       statusEl.textContent = text;
+    }
+
+
+    async function loadGarageBranding(){
+      if(!garageId) return;
+      try {
+        const snap = await getDoc(doc(db, 'garages', garageId, 'settings', 'main'));
+        if(!snap.exists()) return;
+        garageSettings = snap.data() || {};
+        const garageName = garageSettings.garageName || garageSettings.name || garageSettings.businessName || 'Garage Pro One';
+        const logoUrl = garageSettings.garageLogoUrl || garageSettings.logoUrl || '';
+        heroTitle.textContent = garageName;
+        heroSubtitle.textContent = `Inscription client et véhicule pour ${garageName}`;
+        footText.textContent = `Page publique d’inscription client · ${garageName}`;
+        document.title = `Inscription client | ${garageName}`;
+        if(logoUrl){
+          heroLogo.src = logoUrl;
+          heroLogo.alt = garageName;
+        }
+      } catch (err) {
+        console.error('loadGarageBranding', err);
+      }
     }
 
     function normalizeVin(v){ return (v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
@@ -309,26 +348,74 @@
           createdAt: serverTimestamp(),
         });
 
-        showStatus('ok', 'Inscription enregistrée avec succès.');
+        const garageName = (garageSettings && (garageSettings.garageName || garageSettings.name || garageSettings.businessName)) || 'le garage';
+        showStatus('ok', `Inscription enregistrée avec succès chez ${garageName}. Nous vous contacterons au besoin.`);
         ['fullName','phone','email','address','make','model','year','plate','vin','mileage','engineType','cylinders','bodyType','color','notes'].forEach(id => $(id).value='');
         $('vinPreview').style.display = 'none';
         $('vinPreviewGrid').innerHTML = '';
       } catch (err) {
         console.error(err);
-        showStatus('err', String(err?.message||'').includes('missing-garageId') ? 'Lien incomplet: ajoute ?garageId=ton-garage dans l'URL.' : 'Enregistrement impossible. Vérifiez les règles Firestore et le garageId.');
+        showStatus('err', String(err?.message||'').includes('missing-garageId') ? "Lien incomplet : ajoute ?garageId=ton-garage dans l’URL." : "Enregistrement impossible. Vérifiez les règles Firestore et le garageId.");
       }
     }
+
+    loadGarageBranding();
 
     $('btnDecodeVin').addEventListener('click', decodeVin);
     $('vin').addEventListener('blur', () => { if(normalizeVin($('vin').value).length >= 11) decodeVin(); });
     $('btnRegister').addEventListener('click', register);
   </script>
-
 <script>
-(function(){
-  if (!('serviceWorker' in navigator)) return;
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(err){ console.warn('SW registration failed', err); });
+(function() {
+  let deferredPrompt = null;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  function ensureInstallButton() {
+    if (document.getElementById('pwaInstallBtn')) return document.getElementById('pwaInstallBtn');
+    const btn = document.createElement('button');
+    btn.id = 'pwaInstallBtn';
+    btn.type = 'button';
+    btn.textContent = 'Installer l’app';
+    btn.setAttribute('aria-label', 'Installer l’application');
+    btn.style.cssText = [
+      'position:fixed','right:16px','bottom:16px','z-index:99999','padding:12px 16px',
+      'border:none','border-radius:999px','background:#0b1d4a','color:#fff','font-weight:700',
+      'box-shadow:0 10px 30px rgba(0,0,0,.25)','cursor:pointer','display:none'
+    ].join(';');
+    btn.addEventListener('click', async function() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        try { await deferredPrompt.userChoice; } catch (e) {}
+        deferredPrompt = null;
+        btn.style.display = 'none';
+      } else {
+        alert('Sur Android: ouvre le menu du navigateur puis appuie sur Installer l’app ou Ajouter à l’écran d’accueil.');
+      }
+    });
+    document.body.appendChild(btn);
+    return btn;
+  }
+
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone) ensureInstallButton().style.display = 'block';
+  });
+
+  window.addEventListener('appinstalled', function() {
+    const btn = document.getElementById('pwaInstallBtn');
+    if (btn) btn.style.display = 'none';
+  });
+
+  window.addEventListener('load', function() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js').catch(function(){});
+    }
+    if (!isStandalone && /Android/i.test(navigator.userAgent)) {
+      setTimeout(function() {
+        if (!deferredPrompt) ensureInstallButton().style.display = 'block';
+      }, 2500);
+    }
   });
 })();
 </script>

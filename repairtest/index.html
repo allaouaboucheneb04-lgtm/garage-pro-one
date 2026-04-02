@@ -3,15 +3,16 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
-<link href="./manifest.json" rel="manifest"/>
-<meta content="#102033" name="theme-color"/>
-<meta content="yes" name="apple-mobile-web-app-capable"/>
-<meta content="default" name="apple-mobile-web-app-status-bar-style"/>
-<meta content="Garage Pro One" name="apple-mobile-web-app-title"/>
-<link href="./assets/icon-192.png" rel="apple-touch-icon"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
 <title>Garage Pro One — Synchro iPhone + PC</title>
 <link href="./assets/style.css" rel="stylesheet"/>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AB Garage Pro">
+<meta name="theme-color" content="#0b1d4a">
+
 </head>
 <body>
 <header class="topbar no-print">
@@ -75,6 +76,7 @@
 <button class="btn btn-ghost" data-go="revenue" data-role="admin">💰 Revenus</button>
 <button class="btn btn-ghost" data-go="fiscal" data-role="admin">🧾 Info fiscaux</button>
 <button class="btn btn-ghost" data-go="partsExpenses" data-role="admin">🧩 Dépenses pièces</button>
+<button class="btn btn-ghost" data-go="suppliers" data-role="admin">🏭 Fournisseurs</button>
 <button class="btn btn-ghost" data-go="invoices" data-role="admin">📄 Factures pièces</button><button class="btn btn-ghost" data-go="settings" data-role="admin">⚙️ Paramètres</button>
 <button class="btn btn-ghost" id="btnLogout">🚪 Déconnexion</button>
 </nav>
@@ -112,10 +114,12 @@
 <input name="email" placeholder="email@exemple.com" required type="email" />
 <label>Mot de passe</label>
 <input name="password" placeholder="••••••••" required type="password" />
+<label>ID garage (optionnel si tu ouvres le lien d’invitation)</label>
+<input name="garageId" placeholder="Ex: garage-pro-one" />
 <div class="row" style="margin-top:12px">
 <button class="btn btn-primary" type="submit">Créer mon compte</button>
 </div>
-<small class="muted">Le rôle est appliqué automatiquement selon le code invitation.</small>
+<small class="muted">Le rôle est appliqué automatiquement selon le code invitation. Si tu entres le code à la main, ajoute aussi l’ID garage.</small>
 </form>
 
 <form class="form" id="formRegister" style="margin-top:12px; display:none;">
@@ -656,6 +660,7 @@
         <tr>
           <th>Date</th>
           <th>Réf</th>
+          <th>Fournisseur</th>
           <th>Client</th>
           <th>Paiement</th>
           <th style="text-align:right">Taxes</th>
@@ -745,6 +750,45 @@
   </div>
 </section>
 
+<!-- FOURNISSEURS -->
+<section class="card" id="viewSuppliers" style="display:none">
+  <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
+    <div>
+      <h2 style="margin:0 0 6px 0">Fournisseurs</h2>
+      <div class="muted">Gère la liste de tes fournisseurs pour les achats de pièces et les dépenses.</div>
+    </div>
+    <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <button class="btn btn-primary" id="btnNewSupplier" data-role="admin">+ Nouveau fournisseur</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="grid-4">
+    <div class="box"><div class="muted">Fournisseurs</div><div class="val" id="suppliersCount">0</div></div>
+    <div class="box"><div class="muted">Actifs</div><div class="val" id="suppliersActiveCount">0</div></div>
+    <div class="box"><div class="muted">Téléphones</div><div class="val" id="suppliersPhoneCount">0</div></div>
+    <div class="box"><div class="muted">Emails</div><div class="val" id="suppliersEmailCount">0</div></div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:12px">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Contact</th>
+          <th>Téléphone</th>
+          <th>Email</th>
+          <th>Ville</th>
+          <th>Note</th>
+          <th class="no-print">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="suppliersTbody"><tr><td class="muted" colspan="7">Aucun fournisseur.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
 <section class="card" id="viewInvoices" style="display:none">
   <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
     <div>
@@ -787,6 +831,12 @@
         <div>
           <label>Email client (optionnel)</label>
           <input class="input" id="invEmail" placeholder="client@email.com" />
+        </div>
+        <div>
+          <label>Fournisseur</label>
+          <select class="input" id="invSupplier">
+            <option value="">— Aucun —</option>
+          </select>
         </div>
         <div>
           <label>Date</label>
@@ -1028,7 +1078,7 @@
 
         <label>Message (email)</label>
         <textarea name="message" rows="7" placeholder="Bonjour {name},\n\nVoici notre promo..." required></textarea>
-        <div class="muted" style="font-size:12px">Astuce: tu peux utiliser <code>{name}</code> et <code>{phone}</code>.</div>
+        <div class="muted" style="font-size:12px">Astuce: tu peux utiliser <code>{name}</code>, <code>{phone}</code>, <code>{garageName}</code>, <code>{garagePhone}</code>, <code>{garageEmail}</code> et <code>{garageAddress}</code>.</div>
 
         <div class="row" style="gap:10px; flex-wrap:wrap">
           <div style="min-width:190px; flex:1">
@@ -1048,7 +1098,7 @@
 
     <div class="box">
       <h3 style="margin-top:0">Envoi</h3>
-      <div class="muted">Envoi via Firebase Cloud Functions (voir README). Tu peux aussi faire un test.</div>
+      <div class="muted">Envoi via la collection <code>mail</code>. Le message utilise automatiquement le nom, le logo et l'email du garage. Les réponses vont vers l'email du garage si ton système d'envoi prend en charge <code>replyTo</code>.</div>
       <div class="divider"></div>
       <label class="muted" style="font-size:12px">Email de test (optionnel)</label>
       <input class="input" id="promoTestEmail" type="email" placeholder="ex: toi@gmail.com" />
@@ -1131,6 +1181,33 @@
 <label>Nom pour signature</label>
 <input id="setSignatureName" class="input" placeholder="Nom du responsable" />
 <small class="muted">Ces infos s’affichent sur la facture PDF + dans l’email.</small>
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Lien d'inscription</h3>
+<label>Site complet register</label>
+<div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
+  <input id="registerLinkFull" class="input" readonly placeholder="Le lien register du garage s'affiche ici" style="flex:1;min-width:260px" />
+  <button id="btnCopyRegisterLink" type="button" class="btn btn-secondary">📋 Copier</button>
+</div>
+<small class="muted">Ce lien envoie directement vers la page register du garage actuel.</small>
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Apparence</h3>
+<label>Thème</label>
+<select id="themeSelect" class="input">
+  <option value="light">Clair</option>
+  <option value="dark">Sombre</option>
+</select>
+<small class="muted">Par défaut, le thème est clair.</small>
+
+<div class="divider"></div>
+<h3 style="margin-top:0">Développeur</h3>
+<label>Mode développeur</label>
+<select id="devModeSelect" class="input">
+  <option value="off">OFF</option>
+  <option value="on">ON</option>
+</select>
+<small class="muted">Quand il est ON, une console de debug s'affiche en bas pour voir les erreurs.</small>
 
 <div class="row">
 <button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
@@ -1422,11 +1499,68 @@
 
 
 
+<div id="devConsole" class="dev-console" style="display:none">
+  <div class="dev-console-head">
+    <strong>Console debug</strong>
+    <div class="dev-console-actions">
+      <button type="button" class="btn btn-small btn-ghost" id="btnToggleDevConsole">Réduire</button>
+      <button type="button" class="btn btn-small btn-ghost" id="btnClearDevConsole">Effacer</button>
+    </div>
+  </div>
+  <div id="devConsoleBody" class="dev-console-body"></div>
+</div>
+
 <script>
-(function(){
-  if (!('serviceWorker' in navigator)) return;
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(err){ console.warn('SW registration failed', err); });
+(function() {
+  let deferredPrompt = null;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  function ensureInstallButton() {
+    if (document.getElementById('pwaInstallBtn')) return document.getElementById('pwaInstallBtn');
+    const btn = document.createElement('button');
+    btn.id = 'pwaInstallBtn';
+    btn.type = 'button';
+    btn.textContent = 'Installer l’app';
+    btn.setAttribute('aria-label', 'Installer l’application');
+    btn.style.cssText = [
+      'position:fixed','right:16px','bottom:16px','z-index:99999','padding:12px 16px',
+      'border:none','border-radius:999px','background:#0b1d4a','color:#fff','font-weight:700',
+      'box-shadow:0 10px 30px rgba(0,0,0,.25)','cursor:pointer','display:none'
+    ].join(';');
+    btn.addEventListener('click', async function() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        try { await deferredPrompt.userChoice; } catch (e) {}
+        deferredPrompt = null;
+        btn.style.display = 'none';
+      } else {
+        alert('Sur Android: ouvre le menu du navigateur puis appuie sur Installer l’app ou Ajouter à l’écran d’accueil.');
+      }
+    });
+    document.body.appendChild(btn);
+    return btn;
+  }
+
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone) ensureInstallButton().style.display = 'block';
+  });
+
+  window.addEventListener('appinstalled', function() {
+    const btn = document.getElementById('pwaInstallBtn');
+    if (btn) btn.style.display = 'none';
+  });
+
+  window.addEventListener('load', function() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('../service-worker.js').catch(function(){});
+    }
+    if (!isStandalone && /Android/i.test(navigator.userAgent)) {
+      setTimeout(function() {
+        if (!deferredPrompt) ensureInstallButton().style.display = 'block';
+      }, 2500);
+    }
   });
 })();
 </script>
