@@ -751,11 +751,11 @@
 </section>
 
 <!-- FOURNISSEURS -->
-<section class="card" id="viewSuppliers" style="display:none">
+<section class="card supplier-view" id="viewSuppliers" style="display:none">
   <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
     <div>
       <h2 style="margin:0 0 6px 0">Fournisseurs</h2>
-      <div class="muted">Gère la liste de tes fournisseurs pour les achats de pièces et les dépenses.</div>
+      <div class="muted">Gère tes fournisseurs, classe-les par catégorie et retrouve-les rapidement.</div>
     </div>
     <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
       <button class="btn btn-primary" id="btnNewSupplier" data-role="admin">+ Nouveau fournisseur</button>
@@ -765,20 +765,40 @@
   <div class="divider"></div>
 
   <div class="grid-4">
-    <div class="box"><div class="muted">Fournisseurs</div><div class="val" id="suppliersCount">0</div></div>
-    <div class="box"><div class="muted">Actifs</div><div class="val" id="suppliersActiveCount">0</div></div>
-    <div class="box"><div class="muted">Téléphones</div><div class="val" id="suppliersPhoneCount">0</div></div>
-    <div class="box"><div class="muted">Emails</div><div class="val" id="suppliersEmailCount">0</div></div>
+    <div class="box supplier-stat"><div class="muted">Fournisseurs</div><div class="val" id="suppliersCount">0</div></div>
+    <div class="box supplier-stat"><div class="muted">Actifs</div><div class="val" id="suppliersActiveCount">0</div></div>
+    <div class="box supplier-stat"><div class="muted">Téléphones</div><div class="val" id="suppliersPhoneCount">0</div></div>
+    <div class="box supplier-stat"><div class="muted">Emails</div><div class="val" id="suppliersEmailCount">0</div></div>
   </div>
 
-  <div class="table-wrap" style="margin-top:12px">
-    <table class="table">
+  <div class="supplier-toolbar">
+    <div>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">Recherche rapide</div>
+      <input class="input" id="supSearch" placeholder="Nom, contact, téléphone, email, ville..." />
+    </div>
+    <div>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">Catégorie</div>
+      <input class="input" id="supCategoryFilter" list="supplierCategoryList" placeholder="Toutes les catégories" />
+      <datalist id="supplierCategoryList"></datalist>
+    </div>
+    <div>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">Statut</div>
+      <select class="input" id="supStatusFilter">
+        <option value="">Tous</option>
+        <option value="active">Actifs</option>
+        <option value="inactive">Inactifs</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-wrap supplier-table-wrap" style="margin-top:12px">
+    <table class="table supplier-table">
       <thead>
         <tr>
-          <th>Nom</th>
+          <th>Fournisseur</th>
+          <th>Catégorie</th>
           <th>Contact</th>
-          <th>Téléphone</th>
-          <th>Email</th>
+          <th>Coordonnées</th>
           <th>Ville</th>
           <th>Note</th>
           <th class="no-print">Actions</th>

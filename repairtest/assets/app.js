@@ -1467,25 +1467,57 @@ const suppliersActiveCountEl = $("suppliersActiveCount");
 const suppliersPhoneCountEl = $("suppliersPhoneCount");
 const suppliersEmailCountEl = $("suppliersEmailCount");
 const suppliersTbody = $("suppliersTbody");
+const supSearchEl = $("supSearch");
+const supCategoryFilterEl = $("supCategoryFilter");
+const supStatusFilterEl = $("supStatusFilter");
+const supplierCategoryListEl = $("supplierCategoryList");
 
 function renderSuppliers(){
   if(!$('viewSuppliers')) return;
-  const rows = Array.isArray(suppliers) ? [...suppliers] : [];
+  const allRows = Array.isArray(suppliers) ? [...suppliers] : [];
+  const q = String(supSearchEl && supSearchEl.value || '').trim().toLowerCase();
+  const cat = String(supCategoryFilterEl && supCategoryFilterEl.value || '').trim().toLowerCase();
+  const status = String(supStatusFilterEl && supStatusFilterEl.value || '').trim().toLowerCase();
+
+  const categories = [...new Set(allRows.map(x=>String(x.category||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base'}));
+  if(supplierCategoryListEl){
+    supplierCategoryListEl.innerHTML = categories.map(x=>`<option value="${safe(x)}"></option>`).join('');
+  }
+
+  let rows = allRows.filter(x=>{
+    const hay = [x.name, x.category, x.contact, x.phone, x.email, x.city, x.note]
+      .map(v=>String(v||'').toLowerCase()).join(' ');
+    if(q && !hay.includes(q)) return false;
+    if(cat && String(x.category||'').trim().toLowerCase() !== cat) return false;
+    if(status==='active' && x.active === false) return false;
+    if(status==='inactive' && x.active !== false) return false;
+    return true;
+  });
+
   rows.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''), 'fr', {sensitivity:'base'}));
-  if(suppliersCountEl) suppliersCountEl.textContent = String(rows.length);
-  if(suppliersActiveCountEl) suppliersActiveCountEl.textContent = String(rows.filter(x=>x.active !== false).length);
-  if(suppliersPhoneCountEl) suppliersPhoneCountEl.textContent = String(rows.filter(x=>String(x.phone||'').trim()).length);
-  if(suppliersEmailCountEl) suppliersEmailCountEl.textContent = String(rows.filter(x=>String(x.email||'').trim()).length);
+  if(suppliersCountEl) suppliersCountEl.textContent = String(allRows.length);
+  if(suppliersActiveCountEl) suppliersActiveCountEl.textContent = String(allRows.filter(x=>x.active !== false).length);
+  if(suppliersPhoneCountEl) suppliersPhoneCountEl.textContent = String(allRows.filter(x=>String(x.phone||'').trim()).length);
+  if(suppliersEmailCountEl) suppliersEmailCountEl.textContent = String(allRows.filter(x=>String(x.email||'').trim()).length);
   if(!suppliersTbody) return;
   if(rows.length===0){
-    suppliersTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucun fournisseur.</td></tr>';
+    suppliersTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucun fournisseur trouvé.</td></tr>';
     return;
   }
   suppliersTbody.innerHTML = rows.map(x=>`<tr>
-    <td><b>${safe(x.name||'')}</b></td>
+    <td>
+      <div class="supplier-name-cell">
+        <b>${safe(x.name||'')}</b>
+        <span class="supplier-status ${x.active === false ? 'off' : 'on'}">${x.active === false ? 'Inactif' : 'Actif'}</span>
+      </div>
+    </td>
+    <td><span class="supplier-category-badge">${safe(x.category||'Non classé')}</span></td>
     <td>${safe(x.contact||'')}</td>
-    <td>${safe(x.phone||'')}</td>
-    <td>${safe(x.email||'')}</td>
+    <td>
+      <div>${safe(x.phone||'')}</div>
+      <div class="muted">${safe(x.email||'')}</div>
+    </td>
     <td>${safe(x.city||'')}</td>
     <td>${safe(x.note||'')}</td>
     <td class="no-print" style="white-space:nowrap">
@@ -1534,6 +1566,9 @@ function openSupplierModal(existing){
         </div>
       </div>
 
+      <label>Catégorie fournisseur</label>
+      <input class="input" name="category" list="supplierCategoryList" placeholder="Ex: pièces, pneus, peinture" value="${safe(x.category||'')}" />
+
       <label>Adresse</label>
       <input class="input" name="address" placeholder="Adresse" value="${safe(x.address||'')}" />
 
@@ -1564,6 +1599,7 @@ function openSupplierModal(existing){
       city: String(fd.get('city')||'').trim(),
       address: String(fd.get('address')||'').trim(),
       note: String(fd.get('note')||'').trim(),
+      category: String(fd.get('category')||'').trim(),
       active: fd.get('active') === 'on',
       updatedAt: serverTimestamp(),
     };
