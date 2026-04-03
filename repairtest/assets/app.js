@@ -7388,3 +7388,10 @@ document.addEventListener('click', async (e)=>{
     btn.textContent = prev || 'Scanner';
   }
 });
+
+
+const btnSaveSettingsTopEl = $("btnSaveSettingsTop");
+if(btnSaveSettingsTopEl){
+  btnSaveSettingsTopEl.addEventListener("click", ()=>$("btnSaveSettings")?.click());
+}
+

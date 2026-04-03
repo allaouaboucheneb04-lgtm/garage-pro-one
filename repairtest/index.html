@@ -1131,190 +1131,234 @@
   </div>
 </section>
 <!-- SETTINGS -->
-<section class="card" id="viewSettings" style="display:none">
-<h2>Paramètres</h2>
-<p class="muted">TPS/TVQ sont enregistrées dans le cloud (pour ton compte).</p>
-<div class="divider"></div>
-<form class="form" onsubmit="return false;">
-<label>TPS (%)</label>
-<input id="setTps" inputmode="decimal" placeholder="5">
-<label>TVQ (%)</label>
-<input id="setTvq" inputmode="decimal" placeholder="9.975"/>
-<label>Frais carte (%)</label>
-<input id="setCardFee" inputmode="decimal" placeholder="2.5"/>
-<small class="muted">Appliqué seulement si paiement = Carte.</small>
-<label>Tarif main-d’œuvre ($/h)</label>
-<input id="setLaborRate" inputmode="decimal" placeholder="80"/>
-<small class="muted">Utilisé si tu mets des heures dans les factures.</small>
-
-<div class="divider"></div>
-<h3 style="margin-top:0">Infos garage (facture)</h3>
-<label>Nom du garage</label>
-<input id="setGarageName" class="input" placeholder="Garage Pro One" />
-<label>Adresse</label>
-<input id="setGarageAddress" class="input" placeholder="Montréal, QC" />
-<label>Téléphone</label>
-<input id="setGaragePhone" class="input" placeholder="(514) 000-0000" />
-<label>Email</label>
-<input id="setGarageEmail" class="input" placeholder="contact@garage.com" />
-<label>Numéro TPS</label>
-<input id="setGarageTpsNo" class="input" placeholder="123456789RT0001" />
-<label>Numéro TVQ</label>
-<input id="setGarageTvqNo" class="input" placeholder="1234567890TQ0001" />
-<label>Logo URL</label>
-<input id="setGarageLogoUrl" class="input" placeholder="https://..." />
-<div class="row" style="margin-top:10px">
-  <div>
-    <label>Uploader un logo</label>
-    <input id="setGarageLogoFile" type="file" accept="image/*" class="input" />
-    <small class="muted">PNG, JPG, WEBP. Le lien se remplit automatiquement après upload.</small>
-  </div>
-  <div>
-    <label>Aperçu logo</label>
-    <div style="display:flex;align-items:center;gap:12px;min-height:54px">
-      <img id="garageLogoPreview" src="assets/logo.png" alt="Aperçu logo" style="height:54px;width:54px;object-fit:cover;border-radius:10px;border:1px solid #d9e2ec;background:#fff" />
-      <button id="btnUploadGarageLogo" type="button" class="btn btn-secondary">📤 Uploader le logo</button>
-    </div>
-  </div>
-</div>
-<small class="muted">Tu peux coller un lien direct ou envoyer une image vers Firebase Storage.</small>
-<label>Nom pour signature</label>
-<input id="setSignatureName" class="input" placeholder="Nom du responsable" />
-<small class="muted">Ces infos s’affichent sur la facture PDF + dans l’email.</small>
-
-<div class="divider"></div>
-<h3 style="margin-top:0">Lien d'inscription</h3>
-<label>Site complet register</label>
-<div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
-  <input id="registerLinkFull" class="input" readonly placeholder="Le lien register du garage s'affiche ici" style="flex:1;min-width:260px" />
-  <button id="btnCopyRegisterLink" type="button" class="btn btn-secondary">📋 Copier</button>
-</div>
-<small class="muted">Ce lien envoie directement vers la page register du garage actuel.</small>
-
-<div class="divider"></div>
-<h3 style="margin-top:0">Apparence</h3>
-<label>Thème</label>
-<select id="themeSelect" class="input">
-  <option value="light">Clair</option>
-  <option value="dark">Sombre</option>
-</select>
-<small class="muted">Par défaut, le thème est clair.</small>
-
-<div class="divider"></div>
-<h3 style="margin-top:0">Développeur</h3>
-<label>Mode développeur</label>
-<select id="devModeSelect" class="input">
-  <option value="off">OFF</option>
-  <option value="on">ON</option>
-</select>
-<small class="muted">Quand il est ON, une console de debug s'affiche en bas pour voir les erreurs.</small>
-
-<div class="row">
-<button class="btn btn-primary" id="btnSaveSettings">Enregistrer</button>
-</div>
-</input></form>
-
-<div class="divider"></div>
-<h3>Employés</h3>
-<div class="box">
-  <div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px">
+<section class="card settings-page" id="viewSettings" style="display:none">
+  <div class="settings-hero">
     <div>
-      <label>Email employé</label>
-      <input class="input" id="inviteEmail" placeholder="mecano@email.com" type="email"/>
+      <h2>Paramètres</h2>
+      <p class="muted">Gère les taxes, le logo, les infos de facture, les employés et la sauvegarde.</p>
     </div>
-    <div>
-      <label>Rôle</label>
-      <select class="input" id="inviteRole">
-        <option value="mechanic">Mécanicien</option>
-        <option value="admin">Admin</option>
-      </select>
-    </div>
+    <button class="btn btn-primary settings-save-top" id="btnSaveSettingsTop" type="button">Enregistrer</button>
   </div>
-  <div class="row" style="margin-top:10px;gap:10px;flex-wrap:wrap">
-    <button class="btn btn-primary" id="btnCreateInvite">Créer invitation</button>
-    <button class="btn btn-ghost" id="btnCopyInviteLink" style="display:none">Copier lien</button>
-    <button class="btn btn-ghost" id="btnSendInviteEmail" style="display:none">Envoyer email</button>
-    <span class="muted" id="inviteCreatedInfo"></span>
-  </div>
-</div>
 
-<div class="box" style="margin-top:12px">
-  <h4 style="margin:0 0 8px 0">Invitations</h4>
-  <div style="overflow:auto">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Code</th><th>Email</th><th>Rôle</th><th>Utilisée</th><th>Créée</th><th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="invitesTbody">
-        <tr><td class="muted" colspan="6">Aucune invitation.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+  <div class="settings-sections">
+    <section class="settings-block">
+      <h3>Taxes et facturation</h3>
+      <div class="settings-grid two-cols">
+        <div>
+          <label>TPS (%)</label>
+          <input id="setTps" inputmode="decimal" placeholder="5" />
+        </div>
+        <div>
+          <label>TVQ (%)</label>
+          <input id="setTvq" inputmode="decimal" placeholder="9.975" />
+        </div>
+        <div>
+          <label>Frais carte (%)</label>
+          <input id="setCardFee" inputmode="decimal" placeholder="2.5" />
+          <small class="muted">Appliqué seulement si paiement = Carte.</small>
+        </div>
+        <div>
+          <label>Tarif main-d’œuvre ($/h)</label>
+          <input id="setLaborRate" inputmode="decimal" placeholder="80" />
+          <small class="muted">Utilisé si tu mets des heures dans les factures.</small>
+        </div>
+      </div>
+    </section>
 
-<div class="box" style="margin-top:12px">
-  <h4 style="margin:0 0 8px 0">Liste employés</h4>
-  <div style="overflow:auto">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Nom</th><th>Email</th><th>Rôle</th><th>Actif</th><th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="staffTbody">
-        <tr><td class="muted" colspan="5">Aucun employé.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+    <section class="settings-block">
+      <h3>Infos garage (facture)</h3>
+      <div class="settings-grid two-cols">
+        <div>
+          <label>Nom du garage</label>
+          <input id="setGarageName" class="input" placeholder="Garage Pro One" />
+        </div>
+        <div>
+          <label>Téléphone</label>
+          <input id="setGaragePhone" class="input" placeholder="(514) 000-0000" />
+        </div>
+        <div class="full">
+          <label>Adresse</label>
+          <input id="setGarageAddress" class="input" placeholder="Montréal, QC" />
+        </div>
+        <div>
+          <label>Email</label>
+          <input id="setGarageEmail" class="input" placeholder="contact@garage.com" />
+        </div>
+        <div>
+          <label>Nom pour signature</label>
+          <input id="setSignatureName" class="input" placeholder="Nom du responsable" />
+        </div>
+        <div>
+          <label>Numéro TPS</label>
+          <input id="setGarageTpsNo" class="input" placeholder="123456789RT0001" />
+        </div>
+        <div>
+          <label>Numéro TVQ</label>
+          <input id="setGarageTvqNo" class="input" placeholder="1234567890TQ0001" />
+        </div>
+      </div>
+      <small class="muted">Ces infos s’affichent sur la facture PDF et dans l’email.</small>
+    </section>
 
-<div class="box" style="margin-top:12px">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-    <h4 style="margin:0">Historique</h4>
-    <div style="display:flex;gap:8px;align-items:center">
-      <select class="input" id="logsFilterType" style="max-width:220px">
-        <option value="">Tous</option>
-        <option value="invite_created">Invitation créée</option>
-        <option value="invite_email_sent">Invitation email envoyé</option>
-        <option value="account_created">Compte créé</option>
-        <option value="staff_role_changed">Rôle changé</option>
-        <option value="staff_disabled_changed">Statut employé</option>
-        <option value="workorder_status">Statut réparation</option>
-        <option value="invoice_saved">Facture sauvegardée</option>
-      </select>
-      <button class="btn btn-ghost btn-small" id="btnRefreshLogs">Rafraîchir</button>
-    </div>
-  </div>
-  <small class="muted">Admin voit tout. Mécanicien voit seulement ses actions.</small>
-  <div style="overflow:auto;margin-top:10px">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Date</th><th>Employé</th><th>Action</th><th>Détails</th>
-        </tr>
-      </thead>
-      <tbody id="logsTbody">
-        <tr><td class="muted" colspan="4">Aucun log.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+    <section class="settings-block">
+      <h3>Logo du garage</h3>
+      <div class="settings-logo-wrap">
+        <div class="settings-logo-preview">
+          <img id="garageLogoPreview" src="assets/logo.png" alt="Aperçu logo" />
+        </div>
+        <div class="settings-logo-fields">
+          <label>Logo URL</label>
+          <input id="setGarageLogoUrl" class="input" placeholder="https://..." />
+          <label>Uploader un logo</label>
+          <input id="setGarageLogoFile" type="file" accept="image/*" class="input" />
+          <div class="row settings-logo-actions">
+            <button id="btnUploadGarageLogo" type="button" class="btn btn-secondary">📤 Uploader le logo</button>
+          </div>
+          <small class="muted">PNG, JPG, WEBP. Tu peux coller un lien direct ou envoyer une image vers Firebase Storage.</small>
+        </div>
+      </div>
+    </section>
 
-<div class="divider"></div>
-<h3>Sauvegarde</h3>
-<div class="row">
-<button class="btn btn-ghost" id="btnExport">Exporter (JSON)</button>
-<label class="btn btn-ghost" for="importFile" style="cursor:pointer">Importer (JSON)</label>
-<input accept="application/json" id="importFile" style="display:none" type="file"/>
-</div>
-<div class="divider"></div>
-<h3>Maintenance</h3>
-<div class="row">
-<button class="btn btn-danger" id="btnResetCloud">Tout supprimer (cloud)</button>
-</div>
-</section>
+    <section class="settings-block">
+      <h3>Lien d'inscription</h3>
+      <label>Site complet register</label>
+      <div class="row settings-register-row">
+        <input id="registerLinkFull" class="input" readonly placeholder="Le lien register du garage s'affiche ici" />
+        <button id="btnCopyRegisterLink" type="button" class="btn btn-secondary">📋 Copier</button>
+      </div>
+      <small class="muted">Ce lien envoie directement vers la page register du garage actuel.</small>
+    </section>
+
+    <section class="settings-block">
+      <h3>Apparence et développeur</h3>
+      <div class="settings-grid two-cols">
+        <div>
+          <label>Thème</label>
+          <select id="themeSelect" class="input">
+            <option value="light">Clair</option>
+            <option value="dark">Sombre</option>
+          </select>
+          <small class="muted">Par défaut, le thème est clair.</small>
+        </div>
+        <div>
+          <label>Mode développeur</label>
+          <select id="devModeSelect" class="input">
+            <option value="off">OFF</option>
+            <option value="on">ON</option>
+          </select>
+          <small class="muted">Quand il est ON, une console de debug s’affiche en bas pour voir les erreurs.</small>
+        </div>
+      </div>
+      <div class="row settings-bottom-actions">
+        <button class="btn btn-primary" id="btnSaveSettings" type="button">Enregistrer</button>
+      </div>
+    </section>
+
+    <section class="settings-block">
+      <h3>Employés</h3>
+      <div class="box settings-box">
+        <div class="settings-grid two-cols">
+          <div>
+            <label>Email employé</label>
+            <input class="input" id="inviteEmail" placeholder="mecano@email.com" type="email"/>
+          </div>
+          <div>
+            <label>Rôle</label>
+            <select class="input" id="inviteRole">
+              <option value="mechanic">Mécanicien</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <div class="row settings-inline-actions">
+          <button class="btn btn-primary" id="btnCreateInvite">Créer invitation</button>
+          <button class="btn btn-ghost" id="btnCopyInviteLink" style="display:none">Copier lien</button>
+          <button class="btn btn-ghost" id="btnSendInviteEmail" style="display:none">Envoyer email</button>
+          <span class="muted" id="inviteCreatedInfo"></span>
+        </div>
+      </div>
+
+      <div class="box settings-box" style="margin-top:12px">
+        <h4 style="margin:0 0 8px 0">Invitations</h4>
+        <div class="table-wrap settings-table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Code</th><th>Email</th><th>Rôle</th><th>Utilisée</th><th>Créée</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="invitesTbody">
+              <tr><td class="muted" colspan="6">Aucune invitation.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="box settings-box" style="margin-top:12px">
+        <h4 style="margin:0 0 8px 0">Liste employés</h4>
+        <div class="table-wrap settings-table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nom</th><th>Email</th><th>Rôle</th><th>Actif</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="staffTbody">
+              <tr><td class="muted" colspan="5">Aucun employé.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="box settings-box" style="margin-top:12px">
+        <div class="row-between">
+          <h4 style="margin:0">Historique</h4>
+          <div class="row settings-inline-actions">
+            <select class="input" id="logsFilterType" style="max-width:220px">
+              <option value="">Tous</option>
+              <option value="invite_created">Invitation créée</option>
+              <option value="invite_email_sent">Invitation email envoyé</option>
+              <option value="account_created">Compte créé</option>
+              <option value="staff_role_changed">Rôle changé</option>
+              <option value="staff_disabled_changed">Statut employé</option>
+              <option value="workorder_status">Statut réparation</option>
+              <option value="invoice_saved">Facture sauvegardée</option>
+            </select>
+            <button class="btn btn-ghost btn-small" id="btnRefreshLogs">Rafraîchir</button>
+          </div>
+        </div>
+        <small class="muted">Admin voit tout. Mécanicien voit seulement ses actions.</small>
+        <div class="table-wrap settings-table-wrap" style="margin-top:10px">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Date</th><th>Employé</th><th>Action</th><th>Détails</th>
+              </tr>
+            </thead>
+            <tbody id="logsTbody">
+              <tr><td class="muted" colspan="4">Aucun log.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-block">
+      <h3>Sauvegarde</h3>
+      <div class="row settings-inline-actions">
+        <button class="btn btn-ghost" id="btnExport">Exporter (JSON)</button>
+        <label class="btn btn-ghost" for="importFile" style="cursor:pointer">Importer (JSON)</label>
+        <input accept="application/json" id="importFile" style="display:none" type="file"/>
+      </div>
+    </section>
+
+    <section class="settings-block settings-block-danger">
+      <h3>Maintenance</h3>
+      <div class="row settings-inline-actions">
+        <button class="btn btn-danger" id="btnResetCloud">Tout supprimer (cloud)</button>
+      </div>
+    </section>
+  </div>
 </section>
 </main>
 <div id="toast" class="toast" style="display:none"></div>
