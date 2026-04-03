@@ -924,7 +924,6 @@ function subscribeAll(){
       (snap)=>{
         suppliers = snap.docs.map(d=>({id:d.id, ...d.data()}));
         renderSuppliers();
-        fillPartsExpenseSupplierFilter();
         fillInvoiceSuppliers(invSupplierEl?.value||"");
       },
       (err)=>{
@@ -1477,14 +1476,11 @@ const pexPresetEl = $("pexPreset");
 const pexFromEl = $("pexFrom");
 const pexToEl = $("pexTo");
 const pexPayFilterEl = $("pexPayFilter");
-const pexSupplierFilterEl = $("pexSupplierFilter");
-const pexSearchEl = $("pexSearch");
 const pexSubtotalEl = $("pexSubtotal");
 const pexTaxEl = $("pexTax");
 const pexTotalEl = $("pexTotal");
 const pexCountEl = $("pexCount");
 const pexTbody = $("pexTbody");
-const pexCards = $("pexCards");
 
 /* ============
    Suppliers view
@@ -1495,6 +1491,45 @@ const suppliersActiveCountEl = $("suppliersActiveCount");
 const suppliersPhoneCountEl = $("suppliersPhoneCount");
 const suppliersEmailCountEl = $("suppliersEmailCount");
 const suppliersTbody = $("suppliersTbody");
+const suppliersCards = $("suppliersCards");
+const supplierSearchEl = $("supplierSearch");
+const supplierCategoryFilterEl = $("supplierCategoryFilter");
+const supplierStatusFilterEl = $("supplierStatusFilter");
+
+function normalizeSupplierCategory(x){
+  return String(x.category || x.supplierCategory || '').trim();
+}
+
+function supplierMatchesFilters(x){
+  const q = String(supplierSearchEl?.value || '').trim().toLowerCase();
+  const category = String(supplierCategoryFilterEl?.value || '').trim().toLowerCase();
+  const status = String(supplierStatusFilterEl?.value || '').trim();
+  const active = x.active !== false;
+  if(status === 'active' && !active) return false;
+  if(status === 'inactive' && active) return false;
+  const cat = normalizeSupplierCategory(x).toLowerCase();
+  if(category && cat !== category) return false;
+  if(!q) return true;
+  const hay = [x.name, x.contact, x.phone, x.email, x.city, x.note, normalizeSupplierCategory(x), x.address].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+function refreshSupplierCategoryFilter(rows){
+  if(!supplierCategoryFilterEl) return;
+  const current = String(supplierCategoryFilterEl.value || '');
+  const cats = [...new Set((rows || []).map(normalizeSupplierCategory).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base'}));
+  supplierCategoryFilterEl.innerHTML = '<option value="">Toutes les catégories</option>' + cats.map(c=>`<option value="${safe(c)}">${safe(c)}</option>`).join('');
+  if(cats.some(c=>c===current)) supplierCategoryFilterEl.value = current;
+}
+
+function supplierStatusPill(active){
+  return active ? '<span class="pill pill-ok">Actif</span>' : '<span class="pill">Inactif</span>';
+}
+
+function supplierCategoryPill(x){
+  const c = normalizeSupplierCategory(x);
+  return c ? `<span class="pill pill-blue">${safe(c)}</span>` : '<span class="pill">Non classé</span>';
+}
 
 function renderSuppliers(){
   if(!$('viewSuppliers')) return;
@@ -1504,23 +1539,52 @@ function renderSuppliers(){
   if(suppliersActiveCountEl) suppliersActiveCountEl.textContent = String(rows.filter(x=>x.active !== false).length);
   if(suppliersPhoneCountEl) suppliersPhoneCountEl.textContent = String(rows.filter(x=>String(x.phone||'').trim()).length);
   if(suppliersEmailCountEl) suppliersEmailCountEl.textContent = String(rows.filter(x=>String(x.email||'').trim()).length);
-  if(!suppliersTbody) return;
-  if(rows.length===0){
-    suppliersTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucun fournisseur.</td></tr>';
-    return;
+  refreshSupplierCategoryFilter(rows);
+  const filtered = rows.filter(supplierMatchesFilters);
+  if(suppliersTbody){
+    if(filtered.length===0){
+      suppliersTbody.innerHTML = '<tr><td class="muted" colspan="7">Aucun fournisseur.</td></tr>';
+    } else {
+      suppliersTbody.innerHTML = filtered.map(x=>`<tr>
+        <td><b>${safe(x.name||'')}</b></td>
+        <td>${supplierCategoryPill(x)}</td>
+        <td>${safe(x.contact||'')}</td>
+        <td><div>${safe(x.phone||'')}</div><div class="muted">${safe(x.email||'')}</div></td>
+        <td>${safe(x.city||'')}</td>
+        <td>${supplierStatusPill(x.active !== false)}</td>
+        <td class="no-print" style="white-space:nowrap">
+          <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
+          <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
+        </td>
+      </tr>`).join('');
+    }
   }
-  suppliersTbody.innerHTML = rows.map(x=>`<tr>
-    <td><b>${safe(x.name||'')}</b></td>
-    <td>${safe(x.contact||'')}</td>
-    <td>${safe(x.phone||'')}</td>
-    <td>${safe(x.email||'')}</td>
-    <td>${safe(x.city||'')}</td>
-    <td>${safe(x.note||'')}</td>
-    <td class="no-print" style="white-space:nowrap">
-      <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
-      <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
-    </td>
-  </tr>`).join('');
+  if(suppliersCards){
+    if(filtered.length===0){
+      suppliersCards.innerHTML = '<div class="mcard"><div class="muted">Aucun fournisseur.</div></div>';
+    } else {
+      suppliersCards.innerHTML = filtered.map(x=>`<article class="mcard supplier-card">
+        <div class="top">
+          <div>
+            <div class="title">${safe(x.name||'')}</div>
+            <div class="sub">${safe(x.contact||'')}</div>
+          </div>
+          <div>${supplierStatusPill(x.active !== false)}</div>
+        </div>
+        <div class="meta">${supplierCategoryPill(x)} ${x.city ? `<span>${safe(x.city)}</span>` : ''}</div>
+        <div class="supplier-lines">
+          ${x.phone ? `<div><strong>Téléphone</strong><br>${safe(x.phone)}</div>` : ''}
+          ${x.email ? `<div><strong>Email</strong><br>${safe(x.email)}</div>` : ''}
+          ${x.address ? `<div><strong>Adresse</strong><br>${safe(x.address)}</div>` : ''}
+          ${x.note ? `<div><strong>Note</strong><br>${safe(x.note)}</div>` : ''}
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost btn-small" onclick="window.__editSupplier('${x.id}')">Modifier</button>
+          <button class="btn btn-ghost btn-small" onclick="window.__deleteSupplier('${x.id}')">Supprimer</button>
+        </div>
+      </article>`).join('');
+    }
+  }
 }
 
 function supplierOptionsHtml(selected=''){
@@ -1539,6 +1603,9 @@ function openSupplierModal(existing){
     <form class="form" id="formSupplier">
       <label>Nom du fournisseur</label>
       <input class="input" name="name" required placeholder="Ex: NAPA" value="${safe(x.name||'')}" />
+
+      <label>Catégorie</label>
+      <input class="input" name="category" placeholder="Ex: Pièces, Pneus, Électrique" value="${safe(normalizeSupplierCategory(x))}" />
 
       <div class="row" style="gap:10px; flex-wrap:wrap">
         <div style="flex:1; min-width:160px">
@@ -1586,6 +1653,8 @@ function openSupplierModal(existing){
     const fd = new FormData(form);
     const data = {
       name: String(fd.get('name')||'').trim(),
+      category: String(fd.get('category')||'').trim(),
+      supplierCategory: String(fd.get('category')||'').trim(),
       contact: String(fd.get('contact')||'').trim(),
       phone: String(fd.get('phone')||'').trim(),
       email: String(fd.get('email')||'').trim().toLowerCase(),
@@ -2763,14 +2832,6 @@ function _partsExpDateAsDate(x){
   return new Date(0);
 }
 
-function fillPartsExpenseSupplierFilter(){
-  if(!pexSupplierFilterEl) return;
-  const names = [...new Set((Array.isArray(suppliers)?suppliers:[]).map(s=>String(s.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b, 'fr'));
-  const cur = String(pexSupplierFilterEl.value||"");
-  pexSupplierFilterEl.innerHTML = ['<option value="">Tous</option>'].concat(names.map(n=>`<option value="${safe(n)}">${safe(n)}</option>`)).join('');
-  if(names.includes(cur)) pexSupplierFilterEl.value = cur;
-}
-
 function filterPartsExpenses(){
   const list = Array.isArray(partsExpenses) ? partsExpenses : [];
   const preset = (pexPresetEl && pexPresetEl.value) ? String(pexPresetEl.value) : "month";
@@ -2782,18 +2843,11 @@ function filterPartsExpenses(){
     to = pexToEl && pexToEl.value ? new Date(pexToEl.value+"T23:59:59") : null;
   }
   const pay = pexPayFilterEl ? String(pexPayFilterEl.value||"").toLowerCase() : "";
-  const supplier = pexSupplierFilterEl ? String(pexSupplierFilterEl.value||"").trim().toLowerCase() : "";
-  const q = pexSearchEl ? String(pexSearchEl.value||"").trim().toLowerCase() : "";
   return list.filter(x=>{
     const d = _partsExpDateAsDate(x);
     if(from && d < from) return false;
     if(to && d > to) return false;
-    if(pay && String(x.paymentMethod||"").toLowerCase() !== pay) return false;
-    if(supplier && String(x.supplier||"").trim().toLowerCase() !== supplier) return false;
-    if(q){
-      const hay = [x.supplier, x.description, invPaymentLabel(x.paymentMethod)].map(v=>String(v||"").toLowerCase()).join(' ');
-      if(!hay.includes(q)) return false;
-    }
+    if(pay) return String(x.paymentMethod||"").toLowerCase() === pay;
     return true;
   });
 }
@@ -2855,8 +2909,6 @@ function openPartsExpenseModal(existing){
   if(currentRole !== "admin" && currentRole !== "superadmin") return;
   const x = existing || {};
   const today = isoDate(new Date());
-  const tpsRate = Number(settings.tpsRate||0);
-  const tvqRate = Number(settings.tvqRate||0);
   const html = `
     <form class="form" id="formPartsExpense">
       <label>Date</label>
@@ -2872,19 +2924,19 @@ function openPartsExpenseModal(existing){
       <div class="row" style="gap:10px; flex-wrap:wrap">
         <div style="flex:1; min-width:160px">
           <label>Montant HT</label>
-          <input class="input" name="subtotal" id="pexModalSubtotal" type="number" step="0.01" min="0" required value="${Number(x.subtotal||0)}" />
+          <input class="input" name="subtotal" type="number" step="0.01" required value="${Number(x.subtotal||0)}" />
         </div>
         <div style="flex:1; min-width:160px">
-          <label>TPS (${pct(tpsRate)})</label>
-          <input class="input" name="tpsAmount" id="pexModalTps" type="number" step="0.01" readonly value="${Number(x.tpsAmount!=null?x.tpsAmount:splitTaxTotal(Number(x.taxTotal||0)).tps).toFixed(2)}" />
+          <label>TPS (5%)</label>
+          <input class="input" name="tpsAmount" type="number" step="0.01" required value="${Number(x.tpsAmount!=null?x.tpsAmount:splitTaxTotal(Number(x.taxTotal||0)).tps)}" />
         </div>
         <div style="flex:1; min-width:160px">
-          <label>TVQ (${pct(tvqRate)})</label>
-          <input class="input" name="tvqAmount" id="pexModalTvq" type="number" step="0.01" readonly value="${Number(x.tvqAmount!=null?x.tvqAmount:splitTaxTotal(Number(x.taxTotal||0)).tvq).toFixed(2)}" />
+          <label>TVQ (9.975%)</label>
+          <input class="input" name="tvqAmount" type="number" step="0.01" required value="${Number(x.tvqAmount!=null?x.tvqAmount:splitTaxTotal(Number(x.taxTotal||0)).tvq)}" />
         </div>
         <div style="flex:1; min-width:160px">
           <label>Total TTC</label>
-          <input class="input" name="total" id="pexModalTotal" type="number" step="0.01" readonly value="${Number(x.total||0).toFixed(2)}" />
+          <input class="input" name="total" type="number" step="0.01" required value="${Number(x.total||0)}" />
         </div>
       </div>
 
@@ -2901,28 +2953,13 @@ function openPartsExpenseModal(existing){
         <button class="btn btn-ghost" type="button" data-modal-close>Annuler</button>
       </div>
     </form>
-    <small class="muted">Les taxes sont calculées automatiquement selon les taux TPS/TVQ du garage.</small>
+    <small class="muted">Astuce: si tu veux, je peux ajouter TPS et TVQ séparés (2 champs) pour des rapports encore plus précis.</small>
   `;
 
   showModal(existing ? "Modifier dépense" : "Nouvelle dépense", html);
 
   const form = modalBody.querySelector("#formPartsExpense");
   if(!form) return;
-  const subtotalEl = modalBody.querySelector('#pexModalSubtotal');
-  const tpsEl = modalBody.querySelector('#pexModalTps');
-  const tvqEl = modalBody.querySelector('#pexModalTvq');
-  const totalEl = modalBody.querySelector('#pexModalTotal');
-  function recalcPartsExpenseModal(){
-    const sub = Number(subtotalEl?.value || 0);
-    const tps = +(sub * Number(settings.tpsRate||0)).toFixed(2);
-    const tvq = +(sub * Number(settings.tvqRate||0)).toFixed(2);
-    const total = +(sub + tps + tvq).toFixed(2);
-    if(tpsEl) tpsEl.value = tps.toFixed(2);
-    if(tvqEl) tvqEl.value = tvq.toFixed(2);
-    if(totalEl) totalEl.value = total.toFixed(2);
-  }
-  recalcPartsExpenseModal();
-  if(subtotalEl) subtotalEl.addEventListener('input', recalcPartsExpenseModal);
   form.addEventListener("submit", async (e)=>{
     e.preventDefault();
     const fd = new FormData(form);
@@ -2977,7 +3014,7 @@ function exportPartsExpensesCSV(){
     if(currentRole !== "admin" && currentRole !== "superadmin") return;
     const rows = filterPartsExpenses().sort((a,b)=> _partsExpDateAsDate(a) - _partsExpDateAsDate(b));
     const lines = [];
-    lines.push(["Date","Fournisseur","Description","Paiement","HT","TPS","TVQ","Taxes","TTC"].join(","));
+    lines.push(["Date","Fournisseur","Description","Paiement","HT","Taxes","TTC"].join(","));
     for(const x of rows){
       const dt = isoDate(_partsExpDateAsDate(x));
       const supplier = String(x.supplier||"").replaceAll('"','""');
@@ -3554,11 +3591,11 @@ if(revPresetEl && revFromEl && revToEl){
   if(pexPayFilterEl) pexPayFilterEl.addEventListener("change", ()=>renderPartsExpenses());
   if(pexFromEl) pexFromEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
   if(pexToEl) pexToEl.addEventListener("change", ()=>{ if(pexPresetEl) pexPresetEl.value="custom"; renderPartsExpenses(); });
-  if(pexPayFilterEl) pexPayFilterEl.addEventListener("change", renderPartsExpenses);
-  if(pexSupplierFilterEl) pexSupplierFilterEl.addEventListener("change", renderPartsExpenses);
-  if(pexSearchEl) pexSearchEl.addEventListener("input", renderPartsExpenses);
   if(btnNewPartsExpense) btnNewPartsExpense.addEventListener("click", ()=>openPartsExpenseModal(null));
   if(btnNewSupplier) btnNewSupplier.addEventListener("click", ()=>openSupplierModal(null));
+  if(supplierSearchEl) supplierSearchEl.addEventListener("input", renderSuppliers);
+  if(supplierCategoryFilterEl) supplierCategoryFilterEl.addEventListener("change", renderSuppliers);
+  if(supplierStatusFilterEl) supplierStatusFilterEl.addEventListener("change", renderSuppliers);
   if(btnPartsExpExport) btnPartsExpExport.addEventListener("click", ()=>exportPartsExpensesCSV());
 }
 

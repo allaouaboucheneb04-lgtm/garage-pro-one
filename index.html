@@ -721,16 +721,6 @@
         <option value="other">Autre</option>
       </select>
     </div>
-    <div>
-      <div class="muted" style="font-size:12px;margin-bottom:4px">Fournisseur</div>
-      <select class="input" id="pexSupplierFilter" style="min-width:170px">
-        <option value="">Tous</option>
-      </select>
-    </div>
-    <div style="flex:1;min-width:220px">
-      <div class="muted" style="font-size:12px;margin-bottom:4px">Recherche rapide</div>
-      <input class="input" id="pexSearch" type="search" placeholder="Fournisseur ou description"/>
-    </div>
   </div>
 
   <div class="grid-4" style="margin-top:14px">
@@ -740,7 +730,7 @@
     <div class="box"><div class="muted">Nombre</div><div class="val" id="pexCount">0</div></div>
   </div>
 
-  <div class="table-wrap desktop-only" style="margin-top:12px">
+  <div class="table-wrap" style="margin-top:12px">
     <table class="table">
       <thead>
         <tr>
@@ -756,15 +746,13 @@
           <th class="no-print">Actions</th>
         </tr>
       </thead>
-      <tbody id="pexTbody"><tr><td class="muted" colspan="10">Aucune dépense.</td></tr></tbody>
+      <tbody id="pexTbody"><tr><td class="muted" colspan="8">Aucune dépense.</td></tr></tbody>
     </table>
   </div>
-
-  <div class="mobile-only cards-list" id="pexCards"></div>
 </section>
 
 <!-- FOURNISSEURS -->
-<section class="card" id="viewSuppliers" style="display:none">
+<section class="card suppliers-view" id="viewSuppliers" style="display:none">
   <div class="row-between" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
     <div>
       <h2 style="margin:0 0 6px 0">Fournisseurs</h2>
@@ -777,23 +765,46 @@
 
   <div class="divider"></div>
 
-  <div class="grid-4">
-    <div class="box"><div class="muted">Fournisseurs</div><div class="val" id="suppliersCount">0</div></div>
-    <div class="box"><div class="muted">Actifs</div><div class="val" id="suppliersActiveCount">0</div></div>
-    <div class="box"><div class="muted">Téléphones</div><div class="val" id="suppliersPhoneCount">0</div></div>
-    <div class="box"><div class="muted">Emails</div><div class="val" id="suppliersEmailCount">0</div></div>
+  <div class="suppliers-stats-grid" style="margin-top:14px">
+    <div class="box suppliers-stat-box"><div class="muted">Fournisseurs</div><div class="val" id="suppliersCount">0</div></div>
+    <div class="box suppliers-stat-box"><div class="muted">Actifs</div><div class="val" id="suppliersActiveCount">0</div></div>
+    <div class="box suppliers-stat-box"><div class="muted">Téléphones</div><div class="val" id="suppliersPhoneCount">0</div></div>
+    <div class="box suppliers-stat-box"><div class="muted">Emails</div><div class="val" id="suppliersEmailCount">0</div></div>
   </div>
 
-  <div class="table-wrap" style="margin-top:12px">
+  <div class="suppliers-filters-card" style="margin-top:14px">
+    <div class="muted" style="font-size:12px; margin-bottom:8px">Recherche rapide</div>
+    <input class="input" id="supplierSearch" placeholder="Nom, contact, téléphone, email, ville, note..." />
+    <div class="suppliers-filters-grid" style="margin-top:10px">
+      <div>
+        <label class="muted" style="display:block;font-size:12px;margin-bottom:6px">Catégorie</label>
+        <select class="input" id="supplierCategoryFilter">
+          <option value="">Toutes les catégories</option>
+        </select>
+      </div>
+      <div>
+        <label class="muted" style="display:block;font-size:12px;margin-bottom:6px">Statut</label>
+        <select class="input" id="supplierStatusFilter">
+          <option value="">Tous</option>
+          <option value="active">Actifs</option>
+          <option value="inactive">Inactifs</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards-list suppliers-cards mobile-only" id="suppliersCards"></div>
+
+  <div class="table-wrap desktop-only" style="margin-top:12px">
     <table class="table">
       <thead>
         <tr>
           <th>Nom</th>
+          <th>Catégorie</th>
           <th>Contact</th>
-          <th>Téléphone</th>
-          <th>Email</th>
+          <th>Coordonnées</th>
           <th>Ville</th>
-          <th>Note</th>
+          <th>Statut</th>
           <th class="no-print">Actions</th>
         </tr>
       </thead>
