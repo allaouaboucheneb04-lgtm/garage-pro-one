@@ -1561,17 +1561,17 @@ function renderSuppliers(){
   }
   if(suppliersCards){
     if(filtered.length===0){
-      suppliersCards.innerHTML = '<div class="mcard"><div class="muted">Aucun fournisseur.</div></div>';
+      suppliersCards.innerHTML = '<article class="supplier-card"><div class="muted">Aucun fournisseur.</div></article>';
     } else {
-      suppliersCards.innerHTML = filtered.map(x=>`<article class="mcard supplier-card">
+      suppliersCards.innerHTML = filtered.map(x=>`<article class="supplier-card">
         <div class="top">
           <div>
             <div class="title">${safe(x.name||'')}</div>
-            <div class="sub">${safe(x.contact||'')}</div>
+            ${x.contact ? `<div class="sub">${safe(x.contact)}</div>` : ''}
           </div>
           <div>${supplierStatusPill(x.active !== false)}</div>
         </div>
-        <div class="meta">${supplierCategoryPill(x)} ${x.city ? `<span>${safe(x.city)}</span>` : ''}</div>
+        <div class="meta">${supplierCategoryPill(x)}${x.city ? `<span class="pill">${safe(x.city)}</span>` : ''}</div>
         <div class="supplier-lines">
           ${x.phone ? `<div><strong>Téléphone</strong><br>${safe(x.phone)}</div>` : ''}
           ${x.email ? `<div><strong>Email</strong><br>${safe(x.email)}</div>` : ''}
